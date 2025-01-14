@@ -1,0 +1,113 @@
+{
+	"WS_Port": 1884,
+	"publish": {
+		"events": true,
+		"detections": false,
+		"tracker": false,
+		"path": true,
+		"status": true
+	},
+	"scene": {
+		"confidence": 30,
+		"rotation": 0,
+		"cog": 1
+	},
+	"detectionsFilter": {
+		"minWidth": 10,
+		"minHeight": 10,
+		"maxWidth": 800,
+		"maxHeight": 800,
+		"confidence": 30,
+		"aoi": {
+			"x1": 0,
+			"y1": 0,
+			"x2": 1000,
+			"y2": 1000
+		},
+		"ignoreArea": {
+			"x1": 475,
+			"x2": 525,
+			"y1": 475,
+			"y2": 525
+		},
+		"ignoreClass": []
+	},
+	"eventTopics": [
+		{
+			"name": "ACAP",
+			"topic": "acap/",
+			"enabled": true
+		},
+		{
+			"name": "Media Streaming",
+			"topic": "VideoSource/LiveStreamAccessed",
+			"enabled": false
+		},
+		{
+			"name": "Day/Night",
+			"topic": "VideoSource/DayNightVision",
+			"enabled": false
+		},
+		{
+			"name": "Digital Input",
+			"topic": "Device/Trigger/DigitalInput",
+			"enabled": false
+		},
+		{
+			"name": "Digital Input",
+			"topic": "Device/Trigger/DigitalInput",
+			"enabled": false
+		},
+		{
+			"name": "Digital Port",
+			"topic": "Device/IO/Port",
+			"enabled": false
+		},
+		{
+			"name": "Light",
+			"topic": "Device/Light/Status",
+			"enabled": false
+		},
+		{
+			"name": "Virtual Input",
+			"topic": "Device/IO/VirtualInput",
+			"enabled": false
+		},
+		{
+			"name": "Virtual Port",
+			"topic": "Device/IO/VirtualPort",
+			"enabled": false
+		},
+		{
+			"name": "Device Temperature",
+			"topic": "Device/Sensor/Temperature/",
+			"enabled": false
+		},
+		{
+			"name": "Sensor Temperature",
+			"topic": "Device/Status/Temperature/",
+			"enabled": false
+		},
+		{
+			"name": "Heater",
+			"topic": "Device/Heater/Status",
+			"enabled": false
+		},
+		{
+			"name": "SD Card",
+			"topic": "Storage/",
+			"enabled": false
+		},
+		{
+			"name": "PTZ",
+			"topic": "ptz/",
+			"enabled": false
+		},
+		{
+			"name": "Casing open",
+			"topic": "Device/Casing/Open",
+			"enabled": false
+		}
+	],
+	"userTopics": []
+}

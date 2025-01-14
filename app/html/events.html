@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title></title>
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/app.css">
+    <style>
+        .message-row {
+            cursor: pointer;
+        }
+        .message-row:hover {
+            background-color: rgba(0,0,0,.075);
+        }
+    </style>
+    <script src="js/jquery-3.7.1.min.js"></script>
+    <script src="js/bootstrap.bundle.min.js"></script>
+    <script src="js/paho-mqtt-min.js"></script>	
+</head>
+<body>
+<div class="d-flex" id="wrapper">
+    <div class="bg-light border-right" id="sidebar-wrapper">
+        <div class="sidebar-heading">&nbsp;</div>
+        <div class="list-group list-group-flush">
+            <a href="index.html" class="list-group-item list-group-item-action">Publish</a>
+            <a href="events.html" class="list-group-item list-group-item-action active">Events</a>
+            <a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
+            <a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
+            <a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
+            <a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
+            <a href="about.html" class="list-group-item list-group-item-action">About</a>
+        </div>
+    </div>
+    
+    <div id="page-content-wrapper" class="p-0">
+        <div class="container-fluid">
+            <div class="row mt-3">
+                <!-- Topics Card -->
+				<div class="col-6">
+					<div class="card">
+						<div class="card-header">
+							<h5 class="card-title mb-0">Topics to be published</h5>
+						</div>
+						<div class="alert alert-warning alert-dismissible fade d-none" id="liveDataAlert" role="alert">
+							<small id="liveDataMessage"></small>
+							<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+						</div>
+						
+						<div class="card-body">
+							<table class="table table-hover">
+								<thead>
+									<tr>
+										<th width="40px"></th>
+										<th>Event</th>
+										<th>Subscription topic</th>
+									</tr>
+								</thead>
+								<tbody id="topicsList">
+								</tbody>
+							</table>
+						</div>
+					</div>
+				</div>
+                
+                <!-- Messages Card -->
+                <div class="col-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Message monitor (click to view payload)</h5>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>Topic</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="messagesList">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="toast-container position-fixed top-0 end-0 p-3">
+    </div>
+</div>
+
+<!-- Modal for JSON payload -->
+<div class="modal fade" id="payloadModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><span id="messageTopic">Message Payload</span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <pre id="payloadContent"></pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let MQTT_Client = 0;
+var app = null;
+let messages = [];
+
+$(document).ready(function() {
+    let App = 0;
+    // Main AJAX call
+    $.ajax({
+        type: "GET",
+        url: 'app',
+        dataType: 'json',
+        cache: false,
+        success: function(data) {
+            app = data;
+            document.title = app.manifest.acapPackageConf.setup.friendlyName;
+            $('.sidebar-heading').text(app.manifest.acapPackageConf.setup.friendlyName);
+            populateTopics();
+			
+			if( app.settings.publish.events === false )
+				showLiveDataMessage("Live data visualization is unavailable - Events publishing is disabled.");
+			
+            if( app.status.mqtt.connected ) {
+                ConnectWebSocketClient();
+            } else {
+                setTimeout(() => {
+                    showToast("DataQ is not connected to a broker.  Please go to MQTT Settings");
+                }, 100);
+            }
+        },
+        error: function(response) {
+            showToast("The application is not running",'danger');
+        }
+    });
+
+	function showLiveDataMessage(message) {
+		const alert = document.getElementById('liveDataAlert');
+		const messageElement = document.getElementById('liveDataMessage');
+		
+		messageElement.textContent = message;
+		alert.classList.remove('d-none');
+		alert.classList.add('show');
+	}
+
+
+    function ConnectWebSocketClient() {
+        const clientID = "WS-" + app.manifest.acapPackageConf.setup.appName + "-" + app.device.serial;
+        if( MQTT_Client )
+            delete MQTT_Client;
+        MQTT_Client = new Paho.MQTT.Client(app.mqtt.address,app.settings.WS_Port,clientID);
+        MQTT_Client.onConnectionLost = onConnectionLost;
+        MQTT_Client.onMessageArrived = onMessageArrived;
+        var connectionOptions = {
+            useSSL: false,
+            timeout: 3,
+            onSuccess:onConnect,
+            onFailure: onFailure
+        };
+        if( app.mqtt.user && app.mqtt.user.length )
+            connectionOptions.userName = app.mqtt.user;
+        if( app.mqtt.password && app.mqtt.password.length )
+            connectionOptions.password = app.mqtt.password;
+        MQTT_Client.connect(connectionOptions);
+    }
+
+    function onConnect() {
+        var topic = app.mqtt.preTopic + "/event/" + app.device.serial + "/#";
+        MQTT_Client.subscribe(topic);
+        showToast("Web page connected to broker","success");
+    }
+
+	function onFailure(message) {
+		console.log("onFailure");
+		showLiveDataMessage("Live data visualization is temporarily unavailable - Web client is not connected to broker.");
+		showToast("Web page not connect. " + message.errorMessage + "Check WebSocket connection in MQTT Settings","warning");
+	}
+
+	function onConnectionLost(responseObject) {
+	  if (responseObject.errorCode !== 0) {
+		showLiveDataMessage("Live data visualization is temporarily unavailable - Web client is not connected to broker.");
+		showToast("Web page lost connection. " + responseObject.errorMessage,"warning");
+	  }
+	}
+});
+
+
+document.getElementById('topicsList').addEventListener('change', function(event) {
+    if (event.target.type === 'checkbox') {
+        const topicValue = event.target.value;
+        const isChecked = event.target.checked;
+        
+        // Find and update the corresponding topic in app.settings.eventTopics
+        const topicIndex = app.settings.eventTopics.findIndex(topic => 
+            topic.topic === topicValue
+        );
+        
+        if (topicIndex !== -1) {
+            app.settings.eventTopics[topicIndex].enabled = isChecked;
+            var payload = {
+				eventTopics: app.settings.eventTopics
+			}
+			var url = 'settings?json=' + encodeURI(JSON.stringify(payload));
+			$.ajax({type: "GET",
+				url: url,
+				success: function(response) {
+					showToast("Filter updated",'info');
+				},
+				error: function(xhr, status, error) {
+					showToast("Filter updated failed",'danger');
+				}
+			});
+        }
+    }
+});
+
+function populateTopics() {
+    const topicsList = document.getElementById('topicsList');
+    topicsList.innerHTML = app.settings.eventTopics.map(topic => 
+        '<tr>' +
+            '<td>' +
+                '<div class="form-check">' +
+                    '<input class="form-check-input" type="checkbox" ' +
+                    (topic.enabled ? 'checked ' : '') +
+                    'value="' + topic.topic + '" ' +
+                    'id="topic_' + topic.topic + '">' +
+                '</div>' +
+            '</td>' +
+            '<td>' + topic.name + '</td>' +
+            '<td>' + app.mqtt.preTopic + '/event/' + app.device.serial + '/' + topic.topic + (topic.topic.endsWith('/') ? '#' : '') + '</td>' +
+        '</tr>'
+    ).join('');
+}
+
+function onMessageArrived(message) {
+    const topic = message.destinationName;
+    const payload = message.payloadString;
+    
+    messages.unshift({
+        timestamp: new Date().toLocaleTimeString(),
+        topic: topic,
+        payload: payload
+    });
+    
+    if (messages.length > 20) {
+        messages.pop();
+    }
+    
+    updateMessagesList();
+}
+
+function updateMessagesList() {
+    const messagesList = document.getElementById('messagesList');
+    messagesList.innerHTML = messages.map((msg, index) => 
+        '<tr class="message-row" data-index="' + index + '">' +
+            '<td>' + msg.timestamp + '</td>' +
+            '<td>' + msg.topic + '</td>' +
+        '</tr>'
+    ).join('');
+}
+
+// Event delegation for message row clicks
+document.addEventListener('click', (e) => {
+    const row = e.target.closest('.message-row');
+    if (row) {
+        const index = row.dataset.index;
+        const payload = messages[index].payload;
+        $("#messageTopic").text(messages[index].topic);
+        document.getElementById('payloadContent').textContent = 
+            JSON.stringify(JSON.parse(payload), null, 2);
+        
+        new bootstrap.Modal(document.getElementById('payloadModal')).show();
+    }
+});
+
+function showToast(message, type = 'danger') {
+    const toastContainer = document.querySelector('.toast-container');
+    
+    // Determine text color class based on type
+    const textColorClass = type === 'warning' ? 'text-dark' : 'text-white';
+    
+    // Create the toast HTML structure
+    var toastHtml = '';
+    toastHtml += '<div class="toast align-items-center ' + textColorClass + ' bg-' + type + ' border-0" role="alert" aria-live="assertive" aria-atomic="true">';
+    toastHtml += '   <div class="d-flex">';
+    toastHtml += '     <div class="toast-body">' + message + '</div>';
+    toastHtml += '     <button type="button" class="btn-close' + (type === 'warning' ? '' : ' btn-close-white') + ' me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>';
+    toastHtml += '   </div>';
+    toastHtml += '</div>';
+    
+    toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+    const toastElement = toastContainer.lastElementChild;
+    const toast = new bootstrap.Toast(toastElement, {
+        autohide: true,
+        delay: 4000
+    });
+    toast.show();
+    toastElement.addEventListener('hidden.bs.toast', function() {
+        this.remove();
+    });
+}
+</script>
+</body>
+</html>

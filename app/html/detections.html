@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title></title>
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/app.css">
+    <link rel="stylesheet" href="css/imgareaselect-default.css">
+    <script src="js/jquery-3.7.1.min.js"></script>
+    <script src="js/bootstrap.bundle.min.js"></script>
+    <script src="js/media-stream-player.min.js"></script>
+    <script src="js/paho-mqtt-min.js"></script>
+    <script src="js/jquery.imgareaselect.js"></script>
+</head>
+<body>
+<div class="d-flex" id="wrapper">
+    <div class="bg-light border-right" id="sidebar-wrapper">
+        <div class="sidebar-heading">&nbsp;</div>
+        <div class="list-group list-group-flush">
+			<a href="index.html" class="list-group-item list-group-item-action">Overview</a>
+			<a href="events.html" class="list-group-item list-group-item-action">Events</a>
+			<a href="detections.html" class="list-group-item list-group-item-action active">Detections</a>
+			<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
+			<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
+			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
+			<a href="about.html" class="list-group-item list-group-item-action">About</a>
+        </div>
+    </div>
+    
+    <div id="page-content-wrapper" class="p-0">
+        <div class="container-fluid">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Detections</h5>
+                    </div>
+					<div class="alert alert-warning alert-dismissible fade d-none" id="liveDataAlert" role="alert">
+						<small id="liveDataMessage"></small>
+						<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+					</div>
+					
+                    <div class="card-body" id="settings-form">
+                        <div class="row">
+                            <!-- Left column for video -->
+                            <div class="col-8" style="min-width: 800px">
+                                <div id="video-view" style="display: inline-block">
+                                    <div style="width:100%; height:100%; position:relative">
+                                        <div id="video" style="width:100%; height:100%; position:absolute; top:0; left:0;"></div>
+                                        <canvas id="detection-canvas" width="1000" height="1000" style="width:100%; height:100%; position:absolute; top:0px; left:0px;"></canvas>
+                                        <canvas id="settings-canvas" width="1000" height="1000" style="width:100%; height:100%; position:absolute; top:0px; left:0px;"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Right column for table -->
+                            <div class="col" style="min-width: 300px">
+                                <div class="table-responsive">
+                                    <table class="table table-striped table-hover table-sm">
+                                        <thead>
+                                            <tr>
+												<th style="width: 20%">Class</th>
+												<th style="width: 20%">Confidence</th>
+												<th style="width: 20%">Age</th>
+												<th style="width: 20%">Color</th>
+												<th style="width: 20%">Color2</th>												
+                                            </tr>
+                                        </thead>
+                                        <tbody id="detections-table">
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-3">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">Size & Area filter</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="d-grid gap-2">
+                                        <button type="button" class="btn btn-outline-primary" id="btn-area">Set Area of Interest</button>
+                                        <button type="button" class="btn btn-outline-primary" id="btn-min-size">Set minimum size (w and h)</button>
+                                        <button type="button" class="btn btn-outline-primary" id="btn-max-size">Set maximum size (w and h)</button>
+                                        <button type="button" class="btn btn-success" id="btn-save">Save</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-5">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">Class filter</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <!-- Column 1 -->
+                                        <div class="col-4">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" value="Human" id="class-human">
+                                                <label class="form-check-label" for="class-human">Human</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" value="Head" id="class-head">
+                                                <label class="form-check-label" for="class-head">Head</label>
+                                            </div>
+                                        </div>
+                                        <!-- Column 2 -->
+                                        <div class="col-4">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" value="Car" id="class-car">
+                                                <label class="form-check-label" for="class-car">Car</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" value="Truck" id="class-truck">
+                                                <label class="form-check-label" for="class-truck">Truck</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" value="Bus" id="class-bus">
+                                                <label class="form-check-label" for="class-bus">Bus</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" value="Vehicle" id="class-vehicle">
+                                                <label class="form-check-label" for="class-vehicle">Vehicle</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" value="Bike" id="class-bike">
+                                                <label class="form-check-label" for="class-bike">Bike</label>
+                                            </div>
+                                        </div>
+                                        <!-- Column 3 -->
+                                        <div class="col-4">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" value="Animal" id="class-animal">
+                                                <label class="form-check-label" for="class-animal">Animal</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" value="LicensePlate" id="class-license">
+                                                <label class="form-check-label" for="class-license">License Plate</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" value="Bag" id="class-bag">
+                                                <label class="form-check-label" for="class-bag">Bag</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" value="Backpack" id="class-backpack">
+                                                <label class="form-check-label" for="class-backpack">Backpack</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" value="Suitcase" id="class-suitcase">
+                                                <label class="form-check-label" for="class-suitcase">Suitcase</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">Scene</h5>
+                                </div>
+                                <div class="card-body">
+									<div class="form-group mb-3">
+										<label for="confidence" class="form-label">Confidence</label>
+										<select class="form-select" id="scene-confidence">
+											<option value="0">0</option>
+											<option value="10">10</option>
+											<option value="20">20</option>
+											<option value="30">30</option>
+											<option value="40">40</option>
+											<option value="50">50</option>
+											<option value="60">60</option>
+											<option value="70">70</option>
+											<option value="80">80</option>
+											<option value="97">85</option>
+											<option value="97">90</option>
+											<option value="97">95</option>
+										</select>
+									</div>
+									<div class="form-group mb-3">
+										<label for="rotation" class="form-label">Rotation</label>
+										<select class="form-select" id="scene-rotation">
+											<option value="0">0</option>
+											<option value="90">90</option>
+											<option value="180">180</option>
+											<option value="270">270</option>
+										</select>
+									</div>
+									<div class="form-group mb-3">
+										<label for="cog" class="form-label">COG</label>
+										<select class="form-select" id="scene-cog">
+											<option value="0">Center of the object</option>
+											<option value="1">Bottom-center (feet/wheels)</option>
+										</select>
+									</div>
+									<div class="d-grid mt-3">
+										<button type="button" class="btn btn-success" id="btn-scene-save">Save</button>
+									</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="toast-container position-fixed top-0 end-0 p-3">
+    </div>
+</div>
+<script>
+let MQTT_Client = 0;
+var app = null;
+var width = 800;
+var height = 450;
+var areaHandler = 0;
+var areaMode = null;
+
+$(document).ready(function() {
+	
+	$.ajax({
+		type: "GET",
+		url: 'app',
+		dataType: 'json',
+		cache: false,
+		success: function(data) {
+			app = data;
+			document.title = app.manifest.acapPackageConf.setup.friendlyName;
+			$('.sidebar-heading').text(app.manifest.acapPackageConf.setup.friendlyName);
+			const aspectRatio = app.device.aspect || '16:9';
+			const [aspectWidth, aspectHeight] = aspectRatio.split(':').map(Number);
+			const paddingPercentage = (aspectHeight / aspectWidth) * 100;
+
+			$("#scene-confidence").val(app.settings.scene.confidence);
+			$("#scene-rotation").val(app.settings.scene.rotation);
+			$("#scene-cog").val(app.settings.scene.cog);
+
+			initializeClassFilters();
+
+			if( app.settings.publish.detections === false )
+				showLiveDataMessage("Live data visualization is unavailable - Detections publishing is disabled.");
+
+			if( app.status.mqtt.connected ) {
+				ConnectWebSocketClient();
+			} else {
+				setTimeout(() => {
+					showLiveDataMessage("Live data visualization in unavailable. Check MQTT Settings");
+					showToast("DataQ is not connected to a broker.  Please go to MQTT Settings");
+				}, 100);
+			}
+
+			$('.video-panel').css('padding-top', `${paddingPercentage}%`);
+			PlayVideo(aspectRatio, app.settings.scene.rotation );
+		},
+        error: function(response) {
+			showToast("The application is not running",'danger');
+        }
+	});
+
+	function showLiveDataMessage(message) {
+		const alert = document.getElementById('liveDataAlert');
+		const messageElement = document.getElementById('liveDataMessage');
+		
+		messageElement.textContent = message;
+		alert.classList.remove('d-none');
+		alert.classList.add('show');
+	}
+
+	function initializeClassFilters() {
+		// Initialize checkboxes based on ignoreClass array
+		$('.form-check-input').each(function() {
+			const className = $(this).val();
+			const isIgnored = app.settings.detectionsFilter.ignoreClass.includes(className);
+			$(this).prop('checked', !isIgnored);
+		});
+
+		// Add change event handler for all checkboxes
+		$('.form-check-input').change(function() {
+			const className = $(this).val();
+			const isChecked = $(this).prop('checked');
+			
+			if (isChecked) {
+				// Remove from ignoreClass array if unchecked
+				const index = app.settings.detectionsFilter.ignoreClass.indexOf(className);
+				if (index > -1) {
+					app.settings.detectionsFilter.ignoreClass.splice(index, 1);
+				}
+			} else {
+				// Add to ignoreClass array if checked
+				if (!app.settings.detectionsFilter.ignoreClass.includes(className)) {
+					app.settings.detectionsFilter.ignoreClass.push(className);
+				}
+			}
+			saveFilter();
+		});
+	}
+
+	function ConnectWebSocketClient() {
+		const clientID = "WS-" + app.manifest.acapPackageConf.setup.appName + "-" + app.device.serial;
+		if( MQTT_Client )
+			delete MQTT_Client;
+		MQTT_Client = new Paho.MQTT.Client(app.mqtt.address,app.settings.WS_Port,clientID);
+		MQTT_Client.onConnectionLost = onConnectionLost;
+		MQTT_Client.onMessageArrived = onMessageArrived;
+		
+		var connectionOptions = {
+			useSSL: false,
+			timeout: 3,
+			onSuccess:onConnect,
+			onFailure: onFailure
+		};
+		if( app.mqtt.user && app.mqtt.user.length )
+			connectionOptions.userName = app.mqtt.user;
+		if( app.mqtt.password && app.mqtt.password.length )
+			connectionOptions.password = app.mqtt.password;
+		MQTT_Client.connect(connectionOptions);
+	}
+
+	function onConnect() {
+		var topic = app.mqtt.preTopic + "/detections/" + app.device.serial;
+		MQTT_Client.subscribe(topic);
+		console.log("onConnect");
+		showToast("Web page connected to broker","success");
+	}
+
+	function onFailure(message) {
+		console.log("onFailure");
+		showLiveDataMessage("Live data visualization is temporarily unavailable - Web client is not connected to broker.");
+		showToast("Web page not connect. " + message.errorMessage + "Check WebSocket connection in MQTT Settings","warning");
+	}
+
+	function onConnectionLost(responseObject) {
+	  if (responseObject.errorCode !== 0) {
+		showLiveDataMessage("Live data visualization is temporarily unavailable - Web client is not connected to broker.");
+		showToast("Web page lost connection. " + responseObject.errorMessage,"warning");
+	  }
+	}
+
+	function onMessageArrived(message) {
+		var payload = JSON.parse(message.payloadString);
+		if( !payload )
+			return;
+		detections = payload.list;
+		// Update canvas
+		var ctx = document.getElementById('detection-canvas').getContext("2d");
+		if (!ctx)
+			return;
+			
+		ctx.beginPath();
+		ctx.clearRect(0, 0, 1000, 1000);
+		ctx.stroke();
+
+		ctx.lineWidth = 3;
+		ctx.strokeStyle = '#FFFF00';
+		ctx.font = "30px Arial";
+		ctx.fillStyle = '#FFFF00';
+
+		// Clear existing table rows
+		const tableBody = document.getElementById('detections-table');
+		tableBody.innerHTML = '';
+		
+		ctx.beginPath();
+		detections.forEach(function(detection) {
+			// Skip invalid detections
+			if (typeof detection !== 'object' || detection === null) return;
+			
+			// Draw on canvas
+			ctx.rect(detection.x, detection.y, detection.w, detection.h);
+			var text = detection.class || "Undefined";
+			if (detection.hasOwnProperty("confidence"))
+				text += " " + detection.confidence;
+				
+			var age = "";
+			if (detection.hasOwnProperty("age")) {
+				age = detection.age.toFixed(1) + "s";
+				if (detection.age > 60)
+					age = parseInt(detection.age/60) + "m";
+				if (detection.age > 3600)
+					age = parseInt(detection.age/3600) + "h";
+				text += " " + age;
+			}
+			ctx.fillText(text, detection.x, detection.y-10);
+			
+			// Add table row
+			const row = document.createElement('tr');
+			row.innerHTML = '';
+			row.innerHTML += '<td>' + (detection.class || '-') + '</td>';
+			row.innerHTML += '<td>' + (detection.confidence || '-') + '</td>';
+			row.innerHTML += '<td>' + (age || '-') + '</td>';
+			row.innerHTML += '<td>' + (detection.color || '-') + '</td>';
+			row.innerHTML += '<td>' + (detection.color2 || '-') + '</td>';
+			tableBody.appendChild(row);
+		});
+		ctx.stroke();
+	}
+
+	function PlayVideo(aspect, rotation) {
+		switch (aspect) {
+			case '4:3': width = 800; height = 600; videoWidth = 800; videoHeight = 600;break;
+			case '1:1': width = 640; height = 640; videoWidth = 640; videoHeight = 640;break;
+			case '16:10': width = 800; height = 500; videoWidth = 800; videoHeight = 500;break;
+			default: width = 800; height = 500; videoWidth = 800; videoHeight = 500;break;
+		}
+
+		if( rotation === 90 || rotation === 270 ) {
+			var temp = width;
+			width = height;
+			height = temp;
+		}
+
+		$("#video-view").css("width", width + "px");
+		$("#video-view").css("height", height + "px");
+
+		var secureConnection = "";
+		if (location.protocol === 'https:')
+			secureConnection = " secure=true"
+		var player = '<media-stream-player hostname="' + window.location.hostname + '"'	+ secureConnection
+					+ ' format="RTP_H264" compression="40" audio="0"'
+					+ ' resolution="' + videoWidth + 'x' + videoHeight + '"'
+					+ ' variant="basic" autoplay></media-stream-player>';
+		$("#video").append(player);
+
+		if( areaHandler )
+			delete areaHandler;
+
+		areaHandler = $("#video").imgAreaSelect({
+			x1: 0, y1: 0, x2: width, y2: height,
+			handles: true, enable:true, movable:true, resizable:true, show:false,
+			instance: true,
+			onSelectEnd: function(img, selection) {
+				updateArea( areaMode, selection );
+			}
+		});
+		areaHandler.setOptions({hide:true});
+	}
+
+	function selectArea( area ) {
+		if( area === "aoi") {
+			var x1 = parseInt( app.settings.detectionsFilter.aoi.x1 / 1000 * width);
+			var y1 = parseInt( app.settings.detectionsFilter.aoi.y1 / 1000 * height);
+			var x2 = parseInt( app.settings.detectionsFilter.aoi.x2 / 1000 * width);
+			var y2 = parseInt( app.settings.detectionsFilter.aoi.y2 / 1000 * height);
+		}
+		if( area === "minSize") {
+			var x1 = parseInt( (1000 - app.settings.detectionsFilter.minWidth) / 2000 * width);
+			var y1 = parseInt( (1000 - app.settings.detectionsFilter.minHeight) / 2000 * height);
+			var x2 = x1 + parseInt( app.settings.detectionsFilter.minWidth / 1000 * width);
+			var y2 = y1 + parseInt( app.settings.detectionsFilter.minHeight / 1000 * height);
+		}
+		if( area === "maxSize") {
+			var x1 = parseInt( (1000 - app.settings.detectionsFilter.maxWidth) / 2000 * width);
+			var y1 = parseInt( (1000 - app.settings.detectionsFilter.maxHeight) / 2000 * height);
+			var x2 = x1 + parseInt( app.settings.detectionsFilter.maxWidth / 1000 * width);
+			var y2 = y1 + parseInt( app.settings.detectionsFilter.maxHeight / 1000 * height);
+		}
+		areaHandler.setSelection(x1, y1, x2, y2, 0);				
+		areaHandler.setOptions({show:true});
+		areaMode = area;
+	}
+
+	function updateArea( area, selection ) {
+		if( area === "aoi") {
+			app.settings.detectionsFilter.aoi.x1 = Math.round(selection.x1 * 1000 / width);
+			app.settings.detectionsFilter.aoi.x2 = Math.round(selection.x2 * 1000 / width);
+			app.settings.detectionsFilter.aoi.y1 = Math.round(selection.y1 * 1000 / height);
+			app.settings.detectionsFilter.aoi.y2 = Math.round(selection.y2 * 1000 / height);
+		}
+		if( area === "minSize") {
+			app.settings.detectionsFilter.minWidth = Math.round(selection.x2 * 1000 / width) - Math.round(selection.x1 * 1000 / width);
+			app.settings.detectionsFilter.minHeight = Math.round(selection.y2 * 1000 / height) - Math.round(selection.y1 * 1000 / height);
+		}
+		if( area === "maxSize") {
+			app.settings.detectionsFilter.maxWidth = Math.round(selection.x2 * 1000 / width) - Math.round(selection.x1 * 1000 / width);
+			app.settings.detectionsFilter.maxHeight = Math.round(selection.y2 * 1000 / height) - Math.round(selection.y1 * 1000 / height);
+		}
+	}
+
+	function setActiveMode(mode, button) {
+		$('.btn-outline-primary').removeClass('active');
+		if (areaMode === mode) {
+			// If clicking the same button, deactivate it
+			areaMode = null;
+		} else {
+			// Activate the new mode
+			currentMode = mode;
+			$(button).addClass('active');
+		}
+	}
+
+    $('#btn-area').click(function() {
+        setActiveMode('aoi', this);
+		selectArea("aoi");
+    });
+    
+    $('#btn-min-size').click(function() {
+        setActiveMode('min-size', this);
+		selectArea("minSize");
+    });
+    
+    $('#btn-max-size').click(function() {
+        setActiveMode('max-size', this);
+		selectArea("maxSize");
+    });
+    
+    $('#btn-save').click(function() {
+		$('.btn-outline-primary').removeClass('active');
+        saveFilter();
+		areaHandler.setOptions({hide:true});
+    });
+	
+    $('#btn-scene-save').click(function() {
+		app.settings.scene = {
+			confidence: parseInt($("#scene-confidence").val()),
+			rotation: parseInt($("#scene-rotation").val()),
+			cog: parseInt($("#scene-cog").val())
+		}
+		var payload = {
+			scene: app.settings.scene
+		}
+		var url = 'settings?json=' + encodeURI(JSON.stringify(payload));
+		$.ajax({type: "GET",
+			url: url,
+			success: function(response) {
+				showToast("Filter updated",'info');
+				location.reload();
+			},
+			error: function(xhr, status, error) {
+				showToast("Filter updated failed",'danger');
+			}
+		});
+    });
+
+    function saveFilter() {
+		var payload = { detectionsFilter: app.settings.detectionsFilter };
+		var url = 'settings?json=' + encodeURI(JSON.stringify(payload));
+		$.ajax({type: "GET",
+			url: url,
+			success: function(response) {
+				showToast("Filter updated",'info');
+			},
+			error: function(xhr, status, error) {
+				showToast("Filter updated failed",'danger');
+			}
+		});
+    }
+});
+
+function showToast(message, type = 'danger') {
+    const toastContainer = document.querySelector('.toast-container');
+    
+    // Determine text color class based on type
+    const textColorClass = type === 'warning' ? 'text-dark' : 'text-white';
+    
+    // Create the toast HTML structure
+    var toastHtml = '';
+    toastHtml += '<div class="toast align-items-center ' + textColorClass + ' bg-' + type + ' border-0" role="alert" aria-live="assertive" aria-atomic="true">';
+    toastHtml += '   <div class="d-flex">';
+    toastHtml += '     <div class="toast-body">' + message + '</div>';
+    toastHtml += '     <button type="button" class="btn-close' + (type === 'warning' ? '' : ' btn-close-white') + ' me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>';
+    toastHtml += '   </div>';
+    toastHtml += '</div>';
+    
+    // Rest of the function remains the same
+    toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+    const toastElement = toastContainer.lastElementChild;
+    const toast = new bootstrap.Toast(toastElement, {
+        autohide: true,
+        delay: 4000
+    });
+    toast.show();
+    toastElement.addEventListener('hidden.bs.toast', function() {
+        this.remove();
+    });
+}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title></title>
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/app.css">
+    <script src="js/jquery-3.7.1.min.js"></script>
+    <script src="js/bootstrap.bundle.min.js"></script>
+    <script src="js/paho-mqtt-min.js"></script>
+</head>
+<body>
+<div class="d-flex" id="wrapper">
+	<div class="bg-light border-right" id="sidebar-wrapper">
+        <div class="sidebar-heading">&nbsp;</div>
+		<div class="list-group list-group-flush">
+			<a href="index.html" class="list-group-item list-group-item-action active">Publish</a>
+			<a href="events.html" class="list-group-item list-group-item-action">Events</a>
+			<a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
+			<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
+			<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
+			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
+			<a href="about.html" class="list-group-item list-group-item-action">About</a>
+		</div>
+	</div>
+	
+	<div id="page-content-wrapper" class="p-0">
+		<div class="container-fluid">
+			<div class="col-6">
+				<div class="card mt-3">
+					<div class="card-header">
+						<h5 class="card-title mb-0">Data to be published on MQTT</h5>
+					</div>
+					<div class="alert alert-warning alert-dismissible fade d-none" id="liveDataAlert" role="alert">
+						<small id="liveDataMessage"></small>
+						<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+					</div>
+					<div class="card-body">
+						<table class="table">
+							<thead>
+								<tr>
+									<th width="50px"><input type="checkbox" id="selectAll" class="form-check-input"></th>
+									<th>Name</th>
+									<th>Subscription topic</th>
+								</tr>
+							</thead>
+							<tbody id="publishTable">
+								<tr>
+									<td><input type="checkbox" class="form-check-input publish-check" data-type="events"></td>
+									<td>Events</td>
+									<td><span id="EventTopic"></span></td>
+								</tr>
+								<tr>
+									<td><input type="checkbox" class="form-check-input publish-check" data-type="detections"></td>
+									<td>Detections</td>
+									<td><span id="DetectionsTopic"></span></td>
+								</tr>
+								<tr>
+									<td><input type="checkbox" class="form-check-input publish-check" data-type="tracker"></td>
+									<td>Trackers</td>
+									<td><span id="TrackerTopic"></span></td>
+								</tr>
+								<tr>
+									<td><input type="checkbox" class="form-check-input publish-check" data-type="path"></td>
+									<td>Paths</td>
+									<td><span id="PathsTopic"></span></td>
+								</tr>
+								<tr>
+									<td><input type="checkbox" class="form-check-input publish-check" data-type="status"></td>
+									<td>Status</td>
+									<td><span id="StatusTopic"></span></td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	
+    <div class="toast-container position-fixed top-0 end-0 p-3">
+    </div>
+	
+</div>
+<script>
+
+let MQTT_Client = 0;
+var app = null;
+
+$(document).ready(function() {
+
+	let App = 0;
+	// Main AJAX call
+	$.ajax({
+		type: "GET",
+		url: 'app',
+		dataType: 'json',
+		cache: false,
+		success: function(data) {
+			app = data;
+			document.title = app.manifest.acapPackageConf.setup.friendlyName;
+			$('.sidebar-heading').text(app.manifest.acapPackageConf.setup.friendlyName);
+
+			if( app.status.mqtt.connected ) {
+				ConnectWebSocketClient();
+			} else {
+				setTimeout(() => {
+					showLiveDataMessage("Live data visualization in unavailable. Check MQTT Settings");
+					showToast("DataQ is not connected to a broker.  Please go to MQTT Settings");
+				}, 100);
+			}
+
+			var pretopic = app.mqtt.preTopic;
+			var serial = app.device.serial;
+
+			$('#EventTopic').text(pretopic + '/events/' + serial + '/#');
+			$('#DetectionsTopic').text(pretopic + '/detections/' + serial);
+			$('#TrackerTopic').text(pretopic + '/tracker/' + serial);
+			$('#PathsTopic').text(pretopic + '/path/' + serial);
+			$('#StatusTopic').text(pretopic + '/status/' + serial);
+
+			// Change these lines in the AJAX success callback
+			$('.publish-check[data-type="events"]').prop('checked', app.settings.publish.events);
+			$('.publish-check[data-type="detections"]').prop('checked', app.settings.publish.detections);
+			$('.publish-check[data-type="tracker"]').prop('checked', app.settings.publish.tracker);
+			$('.publish-check[data-type="path"]').prop('checked', app.settings.publish.path);
+			$('.publish-check[data-type="status"]').prop('checked', app.settings.publish.status);
+		},
+        error: function(response) {
+			showToast("The application is not running",'danger');
+		}
+	});
+
+	function showLiveDataMessage(message) {
+		const alert = document.getElementById('liveDataAlert');
+		const messageElement = document.getElementById('liveDataMessage');
+		
+		messageElement.textContent = message;
+		alert.classList.remove('d-none');
+		alert.classList.add('show');
+	}
+
+
+	$('.publish-check').on('change', function() {
+		const checkboxType = $(this).data('type');
+		const isChecked = $(this).is(':checked');
+		app.settings.publish[checkboxType] = isChecked;
+
+		var payload = {
+			publish: app.settings.publish
+		}
+		var url = 'settings?json=' + encodeURI(JSON.stringify(payload));
+		$.ajax({type: "GET",
+			url: url,
+			success: function(response) {
+				showToast("Filter updated",'info');
+			},
+			error: function(xhr, status, error) {
+				showToast("Filter updated failed",'danger');
+			}
+		});
+		
+		updateSelectAllCheckbox();
+		
+	});
+
+	$('#selectAll').on('change', function() {
+		const isChecked = $(this).is(':checked');
+		$('.publish-check').prop('checked', isChecked).trigger('change');
+	});
+
+	// Update select all checkbox state based on individual checkboxes
+	function updateSelectAllCheckbox() {
+		const totalCheckboxes = $('.publish-check').length;
+		const checkedCheckboxes = $('.publish-check:checked').length;
+		$('#selectAll').prop('checked', totalCheckboxes === checkedCheckboxes);
+	}
+
+	// Call initially to set the select all checkbox state
+	updateSelectAllCheckbox();
+
+	function ConnectWebSocketClient() {
+		const clientID = "WS-" + app.manifest.acapPackageConf.setup.appName + "-" + app.device.serial;
+		if( MQTT_Client )
+			delete MQTT_Client;
+		MQTT_Client = new Paho.MQTT.Client(app.mqtt.address,app.settings.WS_Port,clientID);
+		MQTT_Client.onConnectionLost = onConnectionLost;
+		var connectionOptions = {
+			useSSL: false,
+			timeout: 3,
+			onSuccess:onConnect,
+			onFailure: onFailure
+		};
+		if( app.mqtt.user && app.mqtt.user.length )
+			connectionOptions.userName = app.mqtt.user;
+		if( app.mqtt.password && app.mqtt.password.length )
+			connectionOptions.password = app.mqtt.password;
+		MQTT_Client.connect(connectionOptions);
+	}
+	
+	function onConnect() {
+		showToast("Web page connected to broker","success");
+	}
+
+	function onFailure(message) {
+		console.log("onFailure");
+		showLiveDataMessage("Live data visualization is temporarily unavailable - Web client is not connected to broker.");
+		showToast("Web page not connect. " + message.errorMessage + "Check WebSocket connection in MQTT Settings","warning");
+	}
+
+	function onConnectionLost(responseObject) {
+	  if (responseObject.errorCode !== 0) {
+		showLiveDataMessage("Live data visualization is temporarily unavailable - Web client is not connected to broker.");
+		showToast("Web page lost connection. " + responseObject.errorMessage,"warning");
+	  }
+	}
+});
+
+function showToast(message, type = 'danger') {
+    const toastContainer = document.querySelector('.toast-container');
+    
+    // Determine text color class based on type
+    const textColorClass = type === 'warning' ? 'text-dark' : 'text-white';
+    
+    // Create the toast HTML structure
+    var toastHtml = '';
+    toastHtml += '<div class="toast align-items-center ' + textColorClass + ' bg-' + type + ' border-0" role="alert" aria-live="assertive" aria-atomic="true">';
+    toastHtml += '   <div class="d-flex">';
+    toastHtml += '     <div class="toast-body">' + message + '</div>';
+    toastHtml += '     <button type="button" class="btn-close' + (type === 'warning' ? '' : ' btn-close-white') + ' me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>';
+    toastHtml += '   </div>';
+    toastHtml += '</div>';
+    
+    // Rest of the function remains the same
+    toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+    const toastElement = toastContainer.lastElementChild;
+    const toast = new bootstrap.Toast(toastElement, {
+        autohide: true,
+        delay: 4000
+    });
+    toast.show();
+    toastElement.addEventListener('hidden.bs.toast', function() {
+        this.remove();
+    });
+}
+
+
+</script>
+</body>
+</html>

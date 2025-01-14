@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title></title>
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/app.css">
+    <link rel="stylesheet" href="css/imgareaselect-default.css">
+    <script src="js/jquery-3.7.1.min.js"></script>
+    <script src="js/bootstrap.bundle.min.js"></script>
+    <script src="js/media-stream-player.min.js"></script>
+    <script src="js/paho-mqtt-min.js"></script>
+    <script src="js/jquery.imgareaselect.js"></script>
+</head>
+<body>
+<div class="d-flex" id="wrapper">
+    <div class="bg-light border-right" id="sidebar-wrapper">
+        <div class="sidebar-heading">&nbsp;</div>
+        <div class="list-group list-group-flush">
+			<a href="index.html" class="list-group-item list-group-item-action">Publish</a>
+			<a href="events.html" class="list-group-item list-group-item-action">Events</a>
+			<a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
+			<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
+			<a href="paths.html" class="list-group-item list-group-item-action active">Paths</a>
+			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
+			<a href="about.html" class="list-group-item list-group-item-action">About</a>
+        </div>
+    </div>
+    
+    <div id="page-content-wrapper" class="p-0">
+        <div class="container-fluid">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Trackers</h5>
+                    </div>
+					<div class="alert alert-warning alert-dismissible fade d-none" id="liveDataAlert" role="alert">
+						<small id="liveDataMessage"></small>
+						<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+					</div>
+                    <div class="card-body" id="settings-form">
+                        <div class="row">
+                            <!-- Left column for video -->
+                            <div class="col-8" style="min-width: 800px">
+                                <div id="video-view" style="display: inline-block">
+                                    <div style="width:100%; height:100%; position:relative">
+                                        <div id="video" style="width:100%; height:100%; position:absolute; top:0; left:0;"></div>
+                                        <canvas id="detection-canvas" width="1000" height="1000" style="width:100%; height:100%; position:absolute; top:0px; left:0px;"></canvas>
+                                        <canvas id="settings-canvas" width="1000" height="1000" style="width:100%; height:100%; position:absolute; top:0px; left:0px;"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Right column for table -->
+                            <div class="col" style="min-width: 400px">
+                                <div class="table-responsive">
+                                    <table class="table table-striped table-hover table-sm">
+                                        <thead>
+                                            <tr>
+												<th style="width: 20%">Class</th>
+												<th style="width: 20%">Confidence</th>
+												<th style="width: 20%">Age</th>
+												<th style="width: 20%">Distance</th>
+												<th style="width: 20%">Color</th>
+												<th style="width: 20%">Color2</th>												
+                                            </tr>
+                                        </thead>
+                                        <tbody id="detections-table">
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="toast-container position-fixed top-0 end-0 p-3">
+    </div>
+</div>
+<script>
+let MQTT_Client = 0;
+var app = null;
+var width = 800;
+var height = 450;
+var areaHandler = 0;
+var areaMode = null;
+
+$(document).ready(function() {
+	
+	$.ajax({
+		type: "GET",
+		url: 'app',
+		dataType: 'json',
+		cache: false,
+		success: function(data) {
+			app = data;
+			document.title = app.manifest.acapPackageConf.setup.friendlyName;
+			$('.sidebar-heading').text(app.manifest.acapPackageConf.setup.friendlyName);
+			const aspectRatio = app.device.aspect || '16:9';
+			const [aspectWidth, aspectHeight] = aspectRatio.split(':').map(Number);
+			const paddingPercentage = (aspectHeight / aspectWidth) * 100;
+
+			if( app.settings.publish.path === false )
+				showLiveDataMessage("Live data visualization is unavailable - Path publishing is disabled.");
+
+			if( app.status.mqtt.connected ) {
+				ConnectWebSocketClient();
+			} else {
+				setTimeout(() => {
+					showLiveDataMessage("Live data visualization in unavailable. Check MQTT Settings");
+					showToast("DataQ is not connected to a broker.  Please go to MQTT Settings");
+				}, 100);
+			}
+
+			$('.video-panel').css('padding-top', `${paddingPercentage}%`);
+			PlayVideo(aspectRatio, app.settings.scene.rotation );
+		},
+        error: function(response) {
+			showToast("The application is not running",'danger');
+        }
+	});
+
+	function showLiveDataMessage(message) {
+		const alert = document.getElementById('liveDataAlert');
+		const messageElement = document.getElementById('liveDataMessage');
+		
+		messageElement.textContent = message;
+		alert.classList.remove('d-none');
+		alert.classList.add('show');
+	}
+
+	function ConnectWebSocketClient() {
+		const clientID = "WS-" + app.manifest.acapPackageConf.setup.appName + "-" + app.device.serial;
+		if( MQTT_Client )
+			delete MQTT_Client;
+		MQTT_Client = new Paho.MQTT.Client(app.mqtt.address,app.settings.WS_Port,clientID);
+		MQTT_Client.onConnectionLost = onConnectionLost;
+		MQTT_Client.onMessageArrived = onMessageArrived;
+		
+		var connectionOptions = {
+			useSSL: false,
+			timeout: 3,
+			onSuccess:onConnect,
+			onFailure: onFailure
+		};
+		if( app.mqtt.user && app.mqtt.user.length )
+			connectionOptions.userName = app.mqtt.user;
+		if( app.mqtt.password && app.mqtt.password.length )
+			connectionOptions.password = app.mqtt.password;
+		MQTT_Client.connect(connectionOptions);
+	}
+
+	function onConnect() {
+		var topic = app.mqtt.preTopic + "/path/" + app.device.serial;
+		MQTT_Client.subscribe(topic);
+		console.log("onConnect");
+		showToast("Web page connected to broker","success");
+	}
+
+	function onFailure(message) {
+		console.log("onFailure");
+		showLiveDataMessage("Live data visualization is temporarily unavailable - Web client is not connected to broker.");
+		showToast("Web page not connect. " + message.errorMessage + "Check WebSocket connection in MQTT Settings","warning");
+	}
+
+	function onConnectionLost(responseObject) {
+	  if (responseObject.errorCode !== 0) {
+		showLiveDataMessage("Live data visualization is temporarily unavailable - Web client is not connected to broker.");
+		showToast("Web page lost connection. " + responseObject.errorMessage,"warning");
+	  }
+	}
+
+	var paths = [];
+
+	function onMessageArrived(message) {
+		var path = JSON.parse(message.payloadString);
+		paths.push(path);
+		while( paths.length > 15 )
+			paths.shift();
+
+		var ctx = document.getElementById('detection-canvas').getContext("2d");
+		if (!ctx)
+			return;
+			
+		ctx.beginPath();
+		ctx.clearRect(0, 0, 1000, 1000);
+		ctx.stroke();
+
+		ctx.lineWidth = 3;
+		ctx.strokeStyle = '#FFFF00';
+		ctx.font = "30px Arial";
+		ctx.fillStyle = '#FFFF00';
+
+		// Clear existing table rows
+		const tableBody = document.getElementById('detections-table');
+		tableBody.innerHTML = '';
+		
+		
+		paths.forEach( function( item ) {
+			var first = item.path[0];
+			var last = item.path[item.path.length-1];
+			ctx.strokeStyle = '#00FF00';
+
+			ctx.beginPath();
+			ctx.moveTo(first.x, first.y );
+			ctx.arc(first.x, first.y, 3, 0, 2 * Math.PI);
+			// ctx.fillText(data.class, first.x, first.y - 10 );
+			ctx.stroke();
+
+			ctx.beginPath();
+			ctx.strokeStyle = '#FFFF00';
+			ctx.moveTo(item.path[0].x, item.path[0].y );
+			for( var i = 1; i < item.path.length; i++ )
+				ctx.lineTo(item.path[i].x,item.path[i].y );
+			ctx.lineTo(last.x,last.y );
+			ctx.stroke();
+			
+			ctx.beginPath();
+			ctx.strokeStyle='#FF0000';
+			ctx.moveTo(last.x, last.y );
+			ctx.arc(last.x, last.y, 3, 0, 2 * Math.PI); ctx.stroke();
+			ctx.stroke();
+
+			var age = "";
+			if (item.hasOwnProperty("age")) {
+				age = item.age.toFixed(1) + "s";
+				if (item.age > 60)
+					age = parseInt(item.age/60) + "m";
+				if (item.age > 3600)
+					age = parseInt(item.age/3600) + "h";
+			}
+		
+			// Add table row
+			const row = document.createElement('tr');
+			row.innerHTML = '';
+			row.innerHTML += '<td>' + (item.class || '-') + '</td>';
+			row.innerHTML += '<td>' + (item.confidence || '-') + '</td>';
+			row.innerHTML += '<td>' + (age || '-') + '</td>';
+			row.innerHTML += '<td>' + (item.distance || '-') + '</td>';
+			row.innerHTML += '<td>' + (item.color || '-') + '</td>';
+			row.innerHTML += '<td>' + (item.color2 || '-') + '</td>';
+			tableBody.appendChild(row);
+			
+		});
+	}
+
+	function PlayVideo(aspect, rotation) {
+		switch (aspect) {
+			case '4:3': width = 800; height = 600; videoWidth = 800; videoHeight = 600;break;
+			case '1:1': width = 640; height = 640; videoWidth = 640; videoHeight = 640;break;
+			case '16:10': width = 800; height = 500; videoWidth = 800; videoHeight = 500;break;
+			default: width = 800; height = 500; videoWidth = 800; videoHeight = 500;break;
+		}
+
+		if( rotation === 90 || rotation === 270 ) {
+			var temp = width;
+			width = height;
+			height = temp;
+		}
+
+		$("#video-view").css("width", width + "px");
+		$("#video-view").css("height", height + "px");
+
+		var secureConnection = "";
+		if (location.protocol === 'https:')
+			secureConnection = " secure=true"
+		var player = '<media-stream-player hostname="' + window.location.hostname + '"'	+ secureConnection
+					+ ' format="RTP_H264" compression="40" audio="0"'
+					+ ' resolution="' + videoWidth + 'x' + videoHeight + '"'
+					+ ' variant="basic" autoplay></media-stream-player>';
+		$("#video").append(player);
+
+		if( areaHandler )
+			delete areaHandler;
+
+		areaHandler = $("#video").imgAreaSelect({
+			x1: 0, y1: 0, x2: width, y2: height,
+			handles: true, enable:true, movable:true, resizable:true, show:false,
+			instance: true,
+			onSelectEnd: function(img, selection) {
+				updateArea( areaMode, selection );
+			}
+		});
+		areaHandler.setOptions({hide:true});
+	}
+});
+
+function showToast(message, type = 'danger') {
+    const toastContainer = document.querySelector('.toast-container');
+    
+    // Determine text color class based on type
+    const textColorClass = type === 'warning' ? 'text-dark' : 'text-white';
+    
+    // Create the toast HTML structure
+    var toastHtml = '';
+    toastHtml += '<div class="toast align-items-center ' + textColorClass + ' bg-' + type + ' border-0" role="alert" aria-live="assertive" aria-atomic="true">';
+    toastHtml += '   <div class="d-flex">';
+    toastHtml += '     <div class="toast-body">' + message + '</div>';
+    toastHtml += '     <button type="button" class="btn-close' + (type === 'warning' ? '' : ' btn-close-white') + ' me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>';
+    toastHtml += '   </div>';
+    toastHtml += '</div>';
+    
+    // Rest of the function remains the same
+    toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+    const toastElement = toastContainer.lastElementChild;
+    const toast = new bootstrap.Toast(toastElement, {
+        autohide: true,
+        delay: 4000
+    });
+    toast.show();
+    toastElement.addEventListener('hidden.bs.toast', function() {
+        this.remove();
+    });
+}
+
+</script>
+</body>
+</html>

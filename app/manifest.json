@@ -1,0 +1,29 @@
+{
+    "schemaVersion": "1.3",
+    "acapPackageConf": {
+        "setup": {
+            "friendlyName": "DataQ",
+            "appName": "DataQ",
+            "vendor": "Fred Juhlin",
+            "embeddedSdkVersion": "3.0",
+            "vendorUrl": "https://pandosme.github.io",
+            "runMode": "respawn",
+            "version": "1.0.2",
+            "user": {
+                "group": "sdk",
+                "username": "sdk"
+            }
+        },
+        "configuration": {
+			"settingPage": "index.html",
+			"httpConfig": [
+				{"name": "app","access": "admin","type": "transferCgi"},
+				{"name": "settings","access": "admin","type": "transferCgi"},
+				{"name": "status","access": "admin","type": "transferCgi"},
+				{"name": "mqtt","access": "admin","type": "transferCgi"},
+				{"name": "certs","access": "admin","type": "transferCgi"},
+				{"name": "objectdetections","access": "admin","type": "transferCgi"}
+			]
+		}
+    }
+}

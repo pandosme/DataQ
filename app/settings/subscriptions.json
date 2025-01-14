@@ -1,0 +1,46 @@
+[
+	{
+		"name": "ACAP",
+		"topic0": {"tnsaxis":"CameraApplicationPlatform"},
+		"active": true
+	},
+	{
+		"name": "Device",
+		"topic0": {"tns1":"Device"},
+		"active": true
+	},
+	{
+		"name": "Storage",
+		"topic0": {"tnsaxis":"Storage"},
+		"active": true
+	},
+	{
+		"name": "Radar",
+		"topic0": {"tnsaxis":"RadarSource"},
+		"active": true
+	},
+	{
+		"name": "PTZ Preset",
+		"topic0": {"tns1":"PTZController"},
+		"topic1": {"tnsaxis":"PTZPresets"},
+		"active": true
+	},
+	{
+		"name": "PTZ Moving",
+		"topic0": {"tns1":"PTZController"},
+		"topic1": {"tnsaxis":"Move"},
+		"active": true
+	},
+	{
+		"name": "Day And Night",
+		"topic0": {"tns1":"VideoSource"},
+		"topic1": {"tnsaxis":"DayNightVision"},
+		"active": true
+	},
+	{
+		"name": "Video Streamming",
+		"topic0": {"tns1":"VideoSource"},
+		"topic1": {"tnsaxis":"LiveStreamAccessed"},
+		"active": true
+	}
+]
