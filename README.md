@@ -48,23 +48,26 @@ Event-based triggers for actions, offering streamlined MQTT message publishing c
 
 **Path Data**
 - Ideal for post-processing applications
-- Support for:
   - Flow heatmaps
   - Dwell analysis
   - Forensic searching
   - Object counting
-- Minimal bandwidth consumption
+- Minimal bandwidth consumption and post processing needs
 
 **Occupancy Data**
-- How many and what objects are currently in the scene
-- 
+- Provides updates when number of detected objects in the scene changes
+	- Que management
+	- Loitering
+
+### Monitoring Data
 
 **Status Data**
+MQTT Heartbeat published every 15 minutes
 - Network load monitoring
 - CPU usage tracking
 - Uptime statistics
 
-## Technical Specifications
+## Integration Specifications
 
 ### Coordinate System
 - Relative coordinates: [0,0] to [1000,1000]
