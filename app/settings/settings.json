@@ -5,24 +5,28 @@
 		"detections": false,
 		"tracker": false,
 		"path": true,
+		"occupancy": true,
 		"status": true
 	},
 	"scene": {
 		"confidence": 30,
 		"rotation": 0,
-		"cog": 1
+		"cog": 1,
+		"maxAge": 86400
 	},
+	"vehicleAttributeType": 8,
 	"detectionsFilter": {
 		"minWidth": 10,
 		"minHeight": 10,
 		"maxWidth": 800,
 		"maxHeight": 800,
 		"confidence": 30,
+		"trackOutside": false,
 		"aoi": {
-			"x1": 0,
-			"y1": 0,
-			"x2": 1000,
-			"y2": 1000
+			"x1": 25,
+			"y1": 25,
+			"x2": 975,
+			"y2": 975
 		},
 		"ignoreArea": {
 			"x1": 475,
@@ -32,6 +36,15 @@
 		},
 		"ignoreClass": []
 	},
+	"trackerFilter": {
+		"aoi": {
+			"x1": 0,
+			"y1": 0,
+			"x2": 1000,
+			"y2": 1000
+		}
+	},
+	"occupancyIntegration": 20,
 	"eventTopics": [
 		{
 			"name": "ACAP",

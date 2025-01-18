@@ -23,6 +23,7 @@
 			<a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
 			<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
 			<a href="paths.html" class="list-group-item list-group-item-action active">Paths</a>
+			<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
 			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
 			<a href="about.html" class="list-group-item list-group-item-action">About</a>
         </div>
@@ -247,12 +248,18 @@ $(document).ready(function() {
 	}
 
 	function PlayVideo(aspect, rotation) {
+		width = 800;
+		height = 450;
+		var videoWidth = 1280;
+		var videoHeight = 720;
+
 		switch (aspect) {
 			case '4:3': width = 800; height = 600; videoWidth = 800; videoHeight = 600;break;
 			case '1:1': width = 640; height = 640; videoWidth = 640; videoHeight = 640;break;
 			case '16:10': width = 800; height = 500; videoWidth = 800; videoHeight = 500;break;
-			default: width = 800; height = 500; videoWidth = 800; videoHeight = 500;break;
+			default: width = 800; height = 450; videoWidth = 1280; videoHeight = 720;break;
 		}
+
 
 		if( rotation === 90 || rotation === 270 ) {
 			var temp = width;

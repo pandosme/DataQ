@@ -20,6 +20,7 @@
 			<a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
 			<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
 			<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
+			<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
 			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
 			<a href="about.html" class="list-group-item list-group-item-action">About</a>
 		</div>
@@ -50,6 +51,11 @@
 									<td><input type="checkbox" class="form-check-input publish-check" data-type="events"></td>
 									<td>Events</td>
 									<td><span id="EventTopic"></span></td>
+								</tr>
+								<tr>
+									<td><input type="checkbox" class="form-check-input publish-check" data-type="occupancy"></td>
+									<td>Occupancy</td>
+									<td><span id="OccupancyTopic"></span></td>
 								</tr>
 								<tr>
 									<td><input type="checkbox" class="form-check-input publish-check" data-type="detections"></td>
@@ -115,6 +121,7 @@ $(document).ready(function() {
 			var serial = app.device.serial;
 
 			$('#EventTopic').text(pretopic + '/events/' + serial + '/#');
+			$('#OccupancyTopic').text(pretopic + '/occupancy/' + serial);
 			$('#DetectionsTopic').text(pretopic + '/detections/' + serial);
 			$('#TrackerTopic').text(pretopic + '/tracker/' + serial);
 			$('#PathsTopic').text(pretopic + '/path/' + serial);
@@ -122,6 +129,7 @@ $(document).ready(function() {
 
 			// Change these lines in the AJAX success callback
 			$('.publish-check[data-type="events"]').prop('checked', app.settings.publish.events);
+			$('.publish-check[data-type="occupancy"]').prop('checked', app.settings.publish.occupancy || false);
 			$('.publish-check[data-type="detections"]').prop('checked', app.settings.publish.detections);
 			$('.publish-check[data-type="tracker"]').prop('checked', app.settings.publish.tracker);
 			$('.publish-check[data-type="path"]').prop('checked', app.settings.publish.path);

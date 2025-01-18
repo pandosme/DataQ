@@ -105,8 +105,17 @@ cJSON* ACAP(const char* package, ACAP_Config_Update callback) {
         cJSON* prop = savedSettings->child;
         while (prop) {
             if (cJSON_GetObjectItem(settings, prop->string)) {
-                cJSON_ReplaceItemInObject(settings, prop->string, 
-                                        cJSON_Duplicate(prop, 1));
+				if( prop->type == cJSON_Object ) {
+					cJSON* settingsProp = cJSON_GetObjectItem(settings,prop->string);
+					cJSON* subprop = prop->child;
+					while( subprop ) {
+						if( cJSON_GetObjectItem( settingsProp, subprop->string ) )
+							cJSON_ReplaceItemInObject(settingsProp, subprop->string, cJSON_Duplicate(subprop, 1));
+						subprop = subprop->next;
+					}
+				} else {
+					cJSON_ReplaceItemInObject(settings, prop->string, cJSON_Duplicate(prop, 1));
+				}
             }
             prop = prop->next;
         }
@@ -149,26 +158,25 @@ ACAP_ENDPOINT_app(const ACAP_HTTP_Response response, const ACAP_HTTP_Request req
 
 static void
 ACAP_ENDPOINT_settings(const ACAP_HTTP_Response response, const ACAP_HTTP_Request request) {
-
 	const char* json = ACAP_HTTP_Request_Param(request, "json");
 	if(!json)
 		json = ACAP_HTTP_Request_Param(request, "set");
-
 	if( !json ) {
         ACAP_HTTP_Respond_JSON(response, cJSON_GetObjectItem(app, "settings"));
         return;
 	}
-
 	cJSON *params = cJSON_Parse(json);
-
 	if (!params) {
-       ACAP_HTTP_Respond_Error(response, 400, "Invalid JSON data");
-       return;
+		ACAP_HTTP_Respond_Error(response, 400, "Invalid JSON data");
+		return;
     }
-
-LOG("%s: %s\n",__func__,json);
-
 	cJSON* settings = cJSON_GetObjectItem(app, "settings");
+	if(!settings) {
+		ACAP_HTTP_Respond_Error(response, 400, "Settings is null");
+		LOG_WARN("%s: Settings is NULL\n",__func__);
+		return;
+	}
+
 	cJSON* param = params->child;
 	while (param) {
 		if (cJSON_GetObjectItem(settings, param->string)) {
@@ -178,10 +186,8 @@ LOG("%s: %s\n",__func__,json);
 		}
 		param = param->next;
 	}
-
 	cJSON_Delete(params);
 	ACAP_FILE_Write("localdata/settings.json", settings);
-
     ACAP_HTTP_Respond_Text(response, "Settings updated successfully");
 }
 

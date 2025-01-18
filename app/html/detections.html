@@ -23,6 +23,7 @@
 			<a href="detections.html" class="list-group-item list-group-item-action active">Detections</a>
 			<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
 			<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
+			<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
 			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
 			<a href="about.html" class="list-group-item list-group-item-action">About</a>
         </div>
@@ -156,14 +157,14 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-4">
+                        <div class="col-3">
                             <div class="card">
                                 <div class="card-header">
                                     <h5 class="card-title mb-0">Scene</h5>
                                 </div>
                                 <div class="card-body">
 									<div class="form-group mb-3">
-										<label for="confidence" class="form-label">Confidence</label>
+										<label for="scene-confidence" class="form-label">Confidence</label>
 										<select class="form-select" id="scene-confidence">
 											<option value="0">0</option>
 											<option value="10">10</option>
@@ -180,19 +181,43 @@
 										</select>
 									</div>
 									<div class="form-group mb-3">
-										<label for="rotation" class="form-label">Rotation</label>
+										<label for="scene-cog" class="form-label">COG</label>
+										<select class="form-select" id="scene-cog">
+											<option value="0">Center of the object</option>
+											<option value="1">Bottom-center (feet/wheels)</option>
+										</select>
+									</div>
+									<div class="form-group mb-3">
+										<label for="scene-maxage" class="form-label">Max age</label>
+										<select class="form-select" id="scene-maxage">
+											<option value="86400">None</option>
+											<option value="5">5 seconds</option>
+											<option value="10">10 seconds</option>
+											<option value="20">20 seconds</option>
+											<option value="30">30 seconds</option>
+											<option value="60">1 minute</option>
+											<option value="120">2 minutes</option>
+											<option value="180">3 minutes</option>
+											<option value="240">4 minutes</option>
+											<option value="300">5 minutes</option>
+											<option value="600">10 minutes</option>
+											<option value="900">15 minutes</option>
+											<option value="1200">20 minutes</option>
+											<option value="1800">30 minutes</option>
+											<option value="2700">45 minutes</option>
+											<option value="3600">1 hour</option>
+											<option value="7200">2 hours</option>
+											<option value="10800">3 hours</option>
+											<option value="14400">4 hours</option>
+										</select>
+									</div>
+									<div class="form-group mb-3">
+										<label for="scene-rotation" class="form-label">Rotation</label>
 										<select class="form-select" id="scene-rotation">
 											<option value="0">0</option>
 											<option value="90">90</option>
 											<option value="180">180</option>
 											<option value="270">270</option>
-										</select>
-									</div>
-									<div class="form-group mb-3">
-										<label for="cog" class="form-label">COG</label>
-										<select class="form-select" id="scene-cog">
-											<option value="0">Center of the object</option>
-											<option value="1">Bottom-center (feet/wheels)</option>
 										</select>
 									</div>
 									<div class="d-grid mt-3">
@@ -235,6 +260,7 @@ $(document).ready(function() {
 			$("#scene-confidence").val(app.settings.scene.confidence);
 			$("#scene-rotation").val(app.settings.scene.rotation);
 			$("#scene-cog").val(app.settings.scene.cog);
+			$("#scene-maxage").val(app.settings.scene.maxAge);
 
 			initializeClassFilters();
 
@@ -396,11 +422,16 @@ $(document).ready(function() {
 	}
 
 	function PlayVideo(aspect, rotation) {
+		width = 800;
+		height = 450;
+		var videoWidth = 1280;
+		var videoHeight = 720;
+
 		switch (aspect) {
 			case '4:3': width = 800; height = 600; videoWidth = 800; videoHeight = 600;break;
 			case '1:1': width = 640; height = 640; videoWidth = 640; videoHeight = 640;break;
 			case '16:10': width = 800; height = 500; videoWidth = 800; videoHeight = 500;break;
-			default: width = 800; height = 500; videoWidth = 800; videoHeight = 500;break;
+			default: width = 800; height = 450; videoWidth = 1280; videoHeight = 720;break;
 		}
 
 		if( rotation === 90 || rotation === 270 ) {
@@ -513,7 +544,8 @@ $(document).ready(function() {
 		app.settings.scene = {
 			confidence: parseInt($("#scene-confidence").val()),
 			rotation: parseInt($("#scene-rotation").val()),
-			cog: parseInt($("#scene-cog").val())
+			cog: parseInt($("#scene-cog").val()),
+			maxAge: parseInt($("#scene-maxage").val()),
 		}
 		var payload = {
 			scene: app.settings.scene

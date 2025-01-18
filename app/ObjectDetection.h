@@ -11,6 +11,6 @@ typedef void (*ObjectDetection_Callback)( cJSON *detections  );
 //Consumer needs delete list;
 
 int		ObjectDetection_Init( ObjectDetection_Callback callback );
-void	ObjectDetection_Set( int confidence, int rotation, int cog );
+void	ObjectDetection_Set( int confidence, int rotation, int cog, int maxAgeInSeconds );
 
 #endif

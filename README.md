@@ -55,6 +55,10 @@ Event-based triggers for actions, offering streamlined MQTT message publishing c
   - Object counting
 - Minimal bandwidth consumption
 
+**Occupancy Data**
+- How many and what objects are currently in the scene
+- 
+
 **Status Data**
 - Network load monitoring
 - CPU usage tracking
@@ -101,6 +105,11 @@ Event-based triggers for actions, offering streamlined MQTT message publishing c
 > **Note**: Use DataQ only when standard Axis device data formats don't meet your requirements. This tool deprecates and replaces SIMQTT, ObjectTracker, and ObjectPath.
 
 # History
+
+### 1.1.0	January 18, 2025
+- Objects are now only tracked withing Area-Of-Intrest
+- Added Scene Max Age (Detections) that defines how old an object needs to be before being ignored.  Typically used to Occupancy.
+- Added Occupancy
 
 ### 1.0.2	January 14, 2025
 - Initial commit

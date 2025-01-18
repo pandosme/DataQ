@@ -24,9 +24,12 @@ static video_object_detection_subscriber_t *ObjectDetection_Handler = NULL;
 ObjectDetection_Callback ObjectDetection_UserCallback = NULL;
 video_object_detection_subscriber_class_t **classifications;
 cJSON* ObjectDetections = 0;
+cJSON* IgnoreObjects = 0;
 int minimumConfidence = 30;
 int centerOfGravity = 0;
 int dataRotation = 0;
+int maxAge = 86400;
+int lastDetectionWasEmpty = 0;
 
 static void
 ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, void *user_data) {
@@ -37,6 +40,8 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 
 	if(!ObjectDetections)
 		ObjectDetections = cJSON_CreateObject();
+	if(!IgnoreObjects)
+		IgnoreObjects = cJSON_CreateObject();
 
 	LOG_TRACE("%s:\n",__func__);
 
@@ -114,7 +119,6 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 			cJSON_ReplaceItemInObject(detection,"timestamp",cJSON_CreateNumber(timestamp));
 			double age = (timestamp - cJSON_GetObjectItem(detection,"birth")->valuedouble)/1000.0;
 			age = round(age * 10)/10;
-			cJSON_GetObjectItem(detection,"active")->type = cJSON_True;
 			if( classID != cJSON_GetObjectItem(detection,"type")->valueint ) {
 				cJSON_ReplaceItemInObject(detection,"class",cJSON_CreateString(video_object_detection_subscriber_det_class_name(classifications[classID])));
 				cJSON_ReplaceItemInObject(detection,"type",cJSON_CreateNumber(classID));
@@ -151,7 +155,7 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 			if( confidence > minimumConfidence )
 				cJSON_AddNumberToObject(detection,"confidence",confidence);
 			else
-			cJSON_AddFalseToObject(detection,"confidence");
+				cJSON_AddFalseToObject(detection,"confidence");
 			cJSON_AddNumberToObject(detection,"timestamp",timestamp);
 			cJSON_AddNumberToObject(detection,"x",x);
 			cJSON_AddNumberToObject(detection,"y",y);
@@ -219,12 +223,15 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 			continue;
 		if( recv_event->action == 0 ) {
 			cJSON_GetObjectItem(detection,"active")->type = cJSON_False;
-		} else {
+		} 
+/*		
+		  else {
 			cJSON* operations = cJSON_GetObjectItem(detection,"operations");
 			if(!operations ) {
 				operations = cJSON_CreateArray();
 				cJSON_AddItemToObject(detection,"operations",operations);
 			}
+			
 			cJSON* operation = cJSON_CreateObject();
 			cJSON* objects = cJSON_CreateArray();
 			cJSON_AddNumberToObject(operation,"type",recv_event->action);
@@ -232,6 +239,7 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 			for( i = 0; i < recv_event->n_object_ids; i++ )
 				cJSON_AddItemToArray(objects,cJSON_CreateNumber(recv_event->object_ids[i]));
 		}
+*/		
 	}
 	
     vod__scene__free_unpacked(recv_scene, NULL);
@@ -239,13 +247,26 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 	cJSON* list = cJSON_CreateArray();
 	detection = ObjectDetections->child;
 	while(detection) {
-		if( cJSON_GetObjectItem(detection,"confidence")->type == cJSON_Number )
-			cJSON_AddItemReferenceToArray(list,detection);
+		if( cJSON_GetObjectItem(detection,"active")->type != cJSON_NULL ) {
+			if( cJSON_GetObjectItem(detection,"confidence")->type == cJSON_Number ) {
+				if( cJSON_GetObjectItem( detection,"age")->valueint > maxAge && cJSON_GetObjectItem(detection,"active")->type == cJSON_True )
+					cJSON_GetObjectItem( detection,"active")->type = cJSON_NULL;
+				cJSON_AddItemReferenceToArray(list,detection);
+			}
+		}
 		detection = detection->next;
 	}
 
-	if( ObjectDetection_UserCallback && cJSON_GetArraySize(list) > 0 )
-		ObjectDetection_UserCallback( list );
+	if( ObjectDetection_UserCallback ) {
+		if( cJSON_GetArraySize( list ) > 0 ) {
+			lastDetectionWasEmpty = 0;
+			ObjectDetection_UserCallback( list );
+		} else {
+			if( lastDetectionWasEmpty == 0 )
+				ObjectDetection_UserCallback( list );
+			lastDetectionWasEmpty = 1;
+		}
+	}
 	cJSON_Delete(list);
 
 	detection = ObjectDetections->child;
@@ -260,10 +281,11 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 void *ObjectDetection_some_user_data;
 
 void
-ObjectDetection_Set( int confidence, int rotation, int cog ) {
+ObjectDetection_Set( int confidence, int rotation, int cog, int maxAgeInSeconds ) {
 	minimumConfidence = confidence;
 	centerOfGravity = cog;
 	dataRotation = rotation;
+	maxAge = maxAgeInSeconds;
 }
 
 int
