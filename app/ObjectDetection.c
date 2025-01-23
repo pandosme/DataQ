@@ -110,15 +110,14 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 
 		int confidence = (unsigned)(recv_det->score);
 		int classID = (int)recv_det->det_class;
-		
 		sprintf(idString,"%d",objectID);
 		detection = cJSON_GetObjectItem(ObjectDetections,idString);
-
-		
 		if( detection ) {
 			cJSON_ReplaceItemInObject(detection,"timestamp",cJSON_CreateNumber(timestamp));
 			double age = (timestamp - cJSON_GetObjectItem(detection,"birth")->valuedouble)/1000.0;
 			age = round(age * 10)/10;
+			if( age > maxAge && cJSON_GetObjectItem(detection,"ignore")->type == cJSON_False )
+				cJSON_GetObjectItem(detection,"ignore")->type = cJSON_NULL;
 			if( classID != cJSON_GetObjectItem(detection,"type")->valueint ) {
 				cJSON_ReplaceItemInObject(detection,"class",cJSON_CreateString(video_object_detection_subscriber_det_class_name(classifications[classID])));
 				cJSON_ReplaceItemInObject(detection,"type",cJSON_CreateNumber(classID));
@@ -134,45 +133,38 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 			double dy = cy - cJSON_GetObjectItem(detection,"by")->valueint;
 			cJSON_ReplaceItemInObject(detection,"dx",cJSON_CreateNumber((int)dx));
 			cJSON_ReplaceItemInObject(detection,"dy",cJSON_CreateNumber((int)dy));
-			
-			if( cJSON_GetObjectItem(detection,"confidence")->type == cJSON_False ) {
-				if( confidence > minimumConfidence )
-					cJSON_ReplaceItemInObject(detection,"confidence",cJSON_CreateNumber(confidence));
-			} else {
-				if( confidence > cJSON_GetObjectItem(detection,"confidence")->valueint )
-					cJSON_ReplaceItemInObject(detection,"confidence",cJSON_CreateNumber(confidence));
-			}
+			cJSON_ReplaceItemInObject(detection,"confidence",cJSON_CreateNumber(confidence));
 		} else {
-			detection = cJSON_CreateObject();
-			cJSON_AddStringToObject(detection,"id",idString);
-			cJSON_AddNumberToObject(detection,"type",classID);
-			cJSON_AddStringToObject(detection,"class",video_object_detection_subscriber_det_class_name(classifications[classID]));
-			cJSON_AddTrueToObject(detection,"active");
-			cJSON_AddNumberToObject(detection,"birth",timestamp);
-			cJSON_AddNumberToObject(detection,"age",0);				
-			cJSON_AddNumberToObject(detection,"bx",cx);
-			cJSON_AddNumberToObject(detection,"by",cy);
-			if( confidence > minimumConfidence )
+			if( confidence > minimumConfidence ) {
+				detection = cJSON_CreateObject();
+				cJSON_AddStringToObject(detection,"id",idString);
+				cJSON_AddNumberToObject(detection,"type",classID);
+				cJSON_AddStringToObject(detection,"class",video_object_detection_subscriber_det_class_name(classifications[classID]));
+				cJSON_AddNumberToObject(detection,"birth",timestamp);
+				cJSON_AddNumberToObject(detection,"age",0);				
+				cJSON_AddNumberToObject(detection,"bx",cx);
+				cJSON_AddNumberToObject(detection,"by",cy);
 				cJSON_AddNumberToObject(detection,"confidence",confidence);
-			else
-				cJSON_AddFalseToObject(detection,"confidence");
-			cJSON_AddNumberToObject(detection,"timestamp",timestamp);
-			cJSON_AddNumberToObject(detection,"x",x);
-			cJSON_AddNumberToObject(detection,"y",y);
-			cJSON_AddNumberToObject(detection,"w",w);
-			cJSON_AddNumberToObject(detection,"h",h);
-			cJSON_AddNumberToObject(detection,"cx",cx);
-			cJSON_AddNumberToObject(detection,"cy",cy);
-			cJSON_AddNumberToObject(detection,"dx",0);
-			cJSON_AddNumberToObject(detection,"dy",0);
-			cJSON_AddNumberToObject(detection,"distance",0);
-			cJSON_AddNumberToObject(detection,"topVelocity",0);
-			cJSON_AddStringToObject(detection,"color","");
-			cJSON_AddStringToObject(detection,"color2","");
-			cJSON_AddFalseToObject(detection,"hat");
-			cJSON_AddFalseToObject(detection,"face");
-			cJSON_AddItemToObject(detection,"attributes",cJSON_CreateArray());
-			cJSON_AddItemToObject( ObjectDetections, idString, detection);
+				cJSON_AddTrueToObject(detection,"active");
+				cJSON_AddFalseToObject(detection,"ignore");
+				cJSON_AddNumberToObject(detection,"timestamp",timestamp);
+				cJSON_AddNumberToObject(detection,"x",x);
+				cJSON_AddNumberToObject(detection,"y",y);
+				cJSON_AddNumberToObject(detection,"w",w);
+				cJSON_AddNumberToObject(detection,"h",h);
+				cJSON_AddNumberToObject(detection,"cx",cx);
+				cJSON_AddNumberToObject(detection,"cy",cy);
+				cJSON_AddNumberToObject(detection,"dx",0);
+				cJSON_AddNumberToObject(detection,"dy",0);
+				cJSON_AddNumberToObject(detection,"distance",0);
+				cJSON_AddNumberToObject(detection,"topVelocity",0);
+				cJSON_AddStringToObject(detection,"color","");
+				cJSON_AddStringToObject(detection,"color2","");
+				cJSON_AddFalseToObject(detection,"hat");
+				cJSON_AddFalseToObject(detection,"face");
+				cJSON_AddItemToObject(detection,"attributes",cJSON_CreateArray());
+				cJSON_AddItemToObject( ObjectDetections, idString, detection);
+			}
 		}
 		if( detection ) {
 			int c;
@@ -223,15 +215,13 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 			continue;
 		if( recv_event->action == 0 ) {
 			cJSON_GetObjectItem(detection,"active")->type = cJSON_False;
-		} 
-/*		
-		  else {
+			cJSON_GetObjectItem(detection,"ignore")->type = cJSON_False;
+		} else {
 			cJSON* operations = cJSON_GetObjectItem(detection,"operations");
 			if(!operations ) {
 				operations = cJSON_CreateArray();
 				cJSON_AddItemToObject(detection,"operations",operations);
 			}
-			
 			cJSON* operation = cJSON_CreateObject();
 			cJSON* objects = cJSON_CreateArray();
 			cJSON_AddNumberToObject(operation,"type",recv_event->action);
@@ -239,7 +229,6 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 			for( i = 0; i < recv_event->n_object_ids; i++ )
 				cJSON_AddItemToArray(objects,cJSON_CreateNumber(recv_event->object_ids[i]));
 		}
-*/		
 	}
 	
     vod__scene__free_unpacked(recv_scene, NULL);
@@ -247,12 +236,14 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 	cJSON* list = cJSON_CreateArray();
 	detection = ObjectDetections->child;
 	while(detection) {
-		if( cJSON_GetObjectItem(detection,"active")->type != cJSON_NULL ) {
-			if( cJSON_GetObjectItem(detection,"confidence")->type == cJSON_Number ) {
-				if( cJSON_GetObjectItem( detection,"age")->valueint > maxAge && cJSON_GetObjectItem(detection,"active")->type == cJSON_True )
-					cJSON_GetObjectItem( detection,"active")->type = cJSON_NULL;
-				cJSON_AddItemReferenceToArray(list,detection);
-			}
+		if( cJSON_GetObjectItem(detection,"ignore")->type == cJSON_NULL ) {
+			//The object turned idle and inactive and shall be ignore from now on
+			cJSON_GetObjectItem(detection,"active")->type = cJSON_False;
+			cJSON_GetObjectItem(detection,"ignore")->type = cJSON_True;
+			cJSON_AddItemReferenceToArray(list,detection);
+		}
+		if( cJSON_GetObjectItem(detection,"ignore")->type == cJSON_False ) {
+			cJSON_AddItemReferenceToArray(list,detection);
 		}
 		detection = detection->next;
 	}
@@ -272,7 +263,7 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 	detection = ObjectDetections->child;
 	while(detection) {
 		cJSON* nextObject = detection->next;
-		if( cJSON_GetObjectItem(detection,"active")->type == cJSON_False )
+		if( cJSON_GetObjectItem(detection,"active")->type == cJSON_False && cJSON_GetObjectItem(detection,"ignore")->type == cJSON_False )
 			cJSON_DeleteItemFromObject(ObjectDetections,cJSON_GetObjectItem(detection,"id")->valuestring );
 		detection = nextObject;
 	}

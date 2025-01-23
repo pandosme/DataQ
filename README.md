@@ -109,6 +109,9 @@ MQTT Heartbeat published every 15 minutes
 
 # History
 
+### 1.1.1	January 23, 2025
+- Corrected Object Detection post-processeing 
+
 ### 1.1.0	January 18, 2025
 - Objects are now only tracked withing Area-Of-Intrest
 - Added Scene Max Age (Detections) that defines how old an object needs to be before being ignored.  Typically used to Occupancy.
