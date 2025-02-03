@@ -105,9 +105,16 @@ MQTT Heartbeat published every 15 minutes
 - WebSocket support for visualization
 - Topics and payload specifications (Documentation pending)
 
-> **Note**: Use DataQ only when standard Axis device data formats don't meet your requirements. This tool deprecates and replaces SIMQTT, ObjectTracker, and ObjectPath.
+> **Note**: This tool deprecates and replaces SIMQTT, ObjectTracker, ObjectPath and Occupancy
+> **Note**: Use DataQ only when standard Axis device data formats don't meet your requirements.
 
 # History
+
+### 1.2.0	February 3, 2025
+- Fixed "hanging-objects" due to changes in Axis OS12
+- Detcions imapcts Occupancy but not Trackers & Paths
+- Tracker impacts Paths and their filters has be separated from Detections
+- Fixed a memory leak (event processing);
 
 ### 1.1.1	January 23, 2025
 - Corrected Object Detection post-processeing 

@@ -720,7 +720,7 @@ MQTT_Unsubscribe( const char *topic ) {
 
 void
 MQTT_Disconnected(void *context, char *cause) {
-	LOG_WARN("MQTT client disconnected from broker");
+	LOG_WARN("MQTT client disconnected from broker: %s", cause?cause:"Unknown");
 	ACAP_STATUS_SetString("mqtt","status", "Reconnecting" );
 	ACAP_STATUS_SetBool("mqtt","connected", FALSE );
 }

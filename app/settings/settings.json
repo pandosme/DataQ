@@ -3,7 +3,7 @@
 	"publish": {
 		"events": true,
 		"detections": false,
-		"tracker": false,
+		"tracker": true,
 		"path": true,
 		"occupancy": true,
 		"status": true
@@ -23,10 +23,10 @@
 		"confidence": 30,
 		"trackOutside": false,
 		"aoi": {
-			"x1": 25,
-			"y1": 25,
-			"x2": 975,
-			"y2": 975
+			"x1": 100,
+			"y1": 100,
+			"x2": 900,
+			"y2": 900
 		},
 		"ignoreArea": {
 			"x1": 475,
@@ -37,12 +37,26 @@
 		"ignoreClass": []
 	},
 	"trackerFilter": {
+		"distance": 5,
+		"age": 0,
 		"aoi": {
 			"x1": 0,
 			"y1": 0,
 			"x2": 1000,
 			"y2": 1000
-		}
+		},
+		"ignoreClass": []
+	},
+	"pathFilter": {
+		"distance": 15,
+		"age": 1,
+		"aoi": {
+			"x1": 0,
+			"y1": 0,
+			"x2": 1000,
+			"y2": 1000
+		},
+		"ignoreClass": []
 	},
 	"occupancyIntegration": 20,
 	"eventTopics": [

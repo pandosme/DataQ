@@ -19,7 +19,6 @@
 //#define LOG_TRACE(fmt, args...)    { syslog(LOG_INFO, fmt, ## args); printf(fmt, ## args); }
 #define LOG_TRACE(fmt, args...)    {}
 
-cJSON* attributes = 0;
 cJSON* detectionsPassed = 0;
 cJSON* lastPublishedTracker = 0;
 cJSON* pathsCache = 0;
@@ -28,213 +27,51 @@ cJSON* occupancyDetectionCounter = 0;
 cJSON* classCounterArrays = 0;
 cJSON* previousOccupancy = 0;
 
+
 cJSON*
 ProcessDetections( cJSON* list ) {
-	if( !attributes )
-		return list;
-	
-	cJSON* settings = ACAP_Get_Config("settings");
-	if( !settings )	{
-		return list;
-	};
-	
-	cJSON* humanColors = cJSON_GetObjectItem(attributes,"humanColors");
-	if( !humanColors ) {
-		LOG_TRACE("%s:Invalid humanColors",__func__);
-		return list;
-	}
-
-	cJSON* vehicleColors = cJSON_GetObjectItem(attributes,"vehicleColors");
-	cJSON* vehicles = cJSON_GetObjectItem(attributes,"vehicles");
-	cJSON* bags = cJSON_GetObjectItem(attributes,"bags");
-	cJSON* hats = cJSON_GetObjectItem(attributes,"hats");
-	cJSON* names = cJSON_GetObjectItem(attributes,"names");
-
-	//Process detections
-	cJSON* item = list->child;
-	cJSON* lookup = 0;
-	while(item) {
-		cJSON* attribute = cJSON_GetObjectItem(item,"attributes")?cJSON_GetObjectItem(item,"attributes")->child:0;
-		if( !cJSON_GetObjectItem(item,"color") )
-			cJSON_AddStringToObject(item,"color","");
-		if( !cJSON_GetObjectItem(item,"color") )
-			cJSON_AddStringToObject(item,"color2","");
-		if( !cJSON_GetObjectItem(item,"hat") )
-			cJSON_AddFalseToObject(item,"hat");
-		if( !cJSON_GetObjectItem(item,"face") )
-			cJSON_AddFalseToObject(item,"face");
-		while( attribute ) {
-			int type = cJSON_GetObjectItem(attribute,"type")?cJSON_GetObjectItem(attribute,"type")->valueint: 0;
-			int value = cJSON_GetObjectItem(attribute,"value")?cJSON_GetObjectItem(attribute,"value")->valueint: 0;
-			int score = cJSON_GetObjectItem(attribute,"value")?cJSON_GetObjectItem(attribute,"value")->valueint: 0;
-			switch( type ) {
-				case 0:  //Undefined type
-					if( cJSON_GetObjectItem(settings,"vehicleAttributeType")->valueint == 0 ) {
-						lookup = cJSON_GetArrayItem(vehicles,value);
-						if( lookup )
-							cJSON_ReplaceItemInObject( item,"class", cJSON_CreateString(lookup->valuestring));
-					}
-					break;
-				case 1:  //Undefined type
-					if( cJSON_GetObjectItem(settings,"vehicleAttributeType")->valueint == 1 ) {
-						lookup = cJSON_GetArrayItem(vehicles,value);
-						if( lookup )
-							cJSON_ReplaceItemInObject( item,"class", cJSON_CreateString(lookup->valuestring));
-					}
-					break;
-				case 2: //Vehicle color
-					lookup = cJSON_GetArrayItem(vehicleColors,value);
-					if( lookup ) {
-						if( cJSON_GetObjectItem(item,"color") ) {
-							cJSON_ReplaceItemInObject(item,"color",cJSON_CreateString( lookup->valuestring) );
-						} else {
-							cJSON_AddStringToObject(item,"color",lookup->valuestring);
-						}
-					}
-					break;
-				case 3: //Upper color;
-					lookup = cJSON_GetArrayItem(humanColors,value);
-					if( lookup ) {
-						if( cJSON_GetObjectItem(item,"color") ) {
-							cJSON_ReplaceItemInObject(item,"color",cJSON_CreateString( lookup->valuestring) );
-						} else {
-							cJSON_AddStringToObject(item,"color",lookup->valuestring);
-						}
-					}
-					break;
-				case 4: //Lower color;
-					lookup = cJSON_GetArrayItem(humanColors,value);
-					if( lookup ) {
-						if( cJSON_GetObjectItem(item,"color") ) {
-							cJSON_ReplaceItemInObject(item,"color",cJSON_CreateString( lookup->valuestring) );
-						} else {
-							cJSON_AddStringToObject(item,"color",lookup->valuestring);
-						}
-					}
-					break;
-				case 5: //Bag type
-					lookup = cJSON_GetArrayItem(bags,value);
-					if( lookup )
-						cJSON_ReplaceItemInObject( item,"class", cJSON_CreateString(lookup->valuestring));
-					break;
-				case 6: //Hat type 
-					lookup = cJSON_GetArrayItem(hats,value);
-					cJSON* hat = cJSON_GetObjectItem(item,"hat");
-					if( lookup && hat )
-						cJSON_ReplaceItemInObject( item, "hat", cJSON_CreateString(lookup->valuestring));
-					if( lookup && !hat )
-						cJSON_AddStringToObject( item, "hat", lookup->valuestring);
-					break;
-					case 7: //human_face_visibility
-					if( cJSON_GetObjectItem(item,"face") ) {
-						if( value = 0 )
-							cJSON_GetObjectItem(item,"face")->type = cJSON_False;
-						else
-							cJSON_GetObjectItem(item,"face")->type = cJSON_True;
-					} else {
-						if( value = 0 )
-							cJSON_AddFalseToObject(item,"face");
-						else
-							cJSON_AddTrueToObject(item,"face");
-					}
-					break;
-				case 8:
-					if( cJSON_GetObjectItem(settings,"vehicleAttributeType")->valueint == 8 ) {
-						lookup = cJSON_GetArrayItem(vehicles,value);
-						if( lookup )
-							cJSON_ReplaceItemInObject( item,"class", cJSON_CreateString(lookup->valuestring));
-					}
-					break;
-				case 9:
-					break;
-				case 10:
-					break;
-					
-			}
-			attribute = attribute->next;
-		}
-		lookup = cJSON_GetObjectItem(names, cJSON_GetObjectItem(item,"class")->valuestring);
-		if( lookup )
-			cJSON_ReplaceItemInObject( item,"class", cJSON_CreateString(lookup->valuestring));
-		item = item->next;
-	}
-	return list;
-}
-
-cJSON*
-FilterDetections( cJSON* list ) {
+	cJSON* response = cJSON_CreateArray();
+	int accept;
 	//Filter Detections
 	if( !detectionsPassed )
 		detectionsPassed = cJSON_CreateObject();
 
 	cJSON* settings = ACAP_Get_Config("settings");
 	if(!settings)
-		return list;
+		return response;
 	cJSON* detectionsFilter = cJSON_GetObjectItem(settings,"detectionsFilter");
 	if( !detectionsFilter )
-		return list;
+		return response;
 
-	cJSON* response = cJSON_CreateArray();
-	cJSON* item = list->child;
-	int accept = 1;
-	cJSON* aoi = cJSON_GetObjectItem(detectionsFilter,"aoi");	
-	int x1 = cJSON_GetObjectItem(aoi,"x1")->valueint;
-	int x2 = cJSON_GetObjectItem(aoi,"x2")->valueint;
-	int y1 = cJSON_GetObjectItem(aoi,"y1")->valueint;
-	int y2 = cJSON_GetObjectItem(aoi,"y2")->valueint;
-	int minWidth = cJSON_GetObjectItem(detectionsFilter,"minWidth")->valueint;
-	int minHeight = cJSON_GetObjectItem(detectionsFilter,"minHeight")->valueint;
-	int maxWidth = cJSON_GetObjectItem(detectionsFilter,"maxWidth")->valueint;
-	int maxHeight = cJSON_GetObjectItem(detectionsFilter,"maxHeight")->valueint;	
-	int trackOutside = (cJSON_GetObjectItem(detectionsFilter,"maxHeight")->type == cJSON_True)?1:0;	
+	cJSON* aoi = cJSON_GetObjectItem(detectionsFilter,"aoi");
+	cJSON* ignoreClasses = cJSON_GetObjectItem(detectionsFilter,"ignoreClass");
+
+	int x1 = cJSON_GetObjectItem(aoi,"x1")?cJSON_GetObjectItem(aoi,"x1")->valueint:0;
+	int x2 = cJSON_GetObjectItem(aoi,"x2")?cJSON_GetObjectItem(aoi,"x2")->valueint:1000;
+	int y1 = cJSON_GetObjectItem(aoi,"y1")?cJSON_GetObjectItem(aoi,"y1")->valueint:0;
+	int y2 = cJSON_GetObjectItem(aoi,"y1")?cJSON_GetObjectItem(aoi,"y2")->valueint:1000;
+	int minWidth = cJSON_GetObjectItem(detectionsFilter,"minWidth")?cJSON_GetObjectItem(detectionsFilter,"minWidth")->valueint:0;
+	int minHeight = cJSON_GetObjectItem(detectionsFilter,"minHeight")?cJSON_GetObjectItem(detectionsFilter,"minHeight")->valueint:0;
+	int maxWidth = cJSON_GetObjectItem(detectionsFilter,"minWidth")?cJSON_GetObjectItem(detectionsFilter,"maxWidth")->valueint:1000;
+	int maxHeight = cJSON_GetObjectItem(detectionsFilter,"maxHeight")?cJSON_GetObjectItem(detectionsFilter,"maxHeight")->valueint:1000;	
 	
+	cJSON* item = list->child;
 	while(item) {
-		const char* id = cJSON_GetObjectItem(item,"id")->valuestring;
-		if( cJSON_GetObjectItem( detectionsPassed, id ) ) {
-			if( cJSON_GetObjectItem(item,"active")->type != cJSON_True ) {
-				cJSON_DetachItemFromObject( detectionsPassed, id );
-				cJSON_AddItemReferenceToArray( response, item );	
-			} else {
-/*				
-				accept = 1;
-				if( !trackOutside ) {
-					if( accept && (cJSON_GetObjectItem(item,"cx")->valueint < x1 || cJSON_GetObjectItem(item,"cx")->valueint > x2 ) ) accept = 0;
-					if( accept && (cJSON_GetObjectItem(item,"cy")->valueint < y1 || cJSON_GetObjectItem(item,"cy")->valueint > y2) ) accept = 0;
-					if( accept && (cJSON_GetObjectItem(item,"w")->valueint < minWidth || cJSON_GetObjectItem(item,"w")->valueint > maxWidth )) accept = 0;
-					if( accept && (cJSON_GetObjectItem(item,"h")->valueint < minHeight || cJSON_GetObjectItem(item,"w")->valueint > maxHeight )) accept = 0;
-				}
+		accept = 1;
+		if( accept && (cJSON_GetObjectItem(item,"cx")->valueint < x1 || cJSON_GetObjectItem(item,"cx")->valueint > x2 ) ) accept = 0;
+		if( accept && (cJSON_GetObjectItem(item,"cy")->valueint < y1 || cJSON_GetObjectItem(item,"cy")->valueint > y2) ) accept = 0;
+		if( accept && (cJSON_GetObjectItem(item,"w")->valueint < minWidth || cJSON_GetObjectItem(item,"w")->valueint > maxWidth )) accept = 0;
+		if( accept && (cJSON_GetObjectItem(item,"h")->valueint < minHeight || cJSON_GetObjectItem(item,"w")->valueint > maxHeight )) accept = 0;
 
-				if( !accept )
-					cJSON_GetObjectItem(item,"ignore")->type = cJSON_NULL;
-*/				
-				cJSON* ignore = cJSON_GetObjectItem(detectionsFilter,"ignoreClass")?cJSON_GetObjectItem(detectionsFilter,"ignoreClass")->child:0;
-				while( ignore && accept ) {
-					if( strcmp( ignore->valuestring, cJSON_GetObjectItem(item,"class")->valuestring) == 0 )
-						accept = 0;
-					ignore = ignore->next;
-				}
-				if( accept )
-					cJSON_AddItemReferenceToArray( response, item );
-			}
-		} else {
-			accept = 1;
-			if( cJSON_GetObjectItem(item,"active")->type == cJSON_False ) accept = 0;
-			if( cJSON_GetObjectItem(item,"ignore")->type == cJSON_True ) accept = 0;
-			if( accept && (cJSON_GetObjectItem(item,"cx")->valueint < x1 || cJSON_GetObjectItem(item,"cx")->valueint > x2 ) ) accept = 0;
-			if( accept && (cJSON_GetObjectItem(item,"cy")->valueint < y1 || cJSON_GetObjectItem(item,"cy")->valueint > y2) ) accept = 0;
-			if( accept && (cJSON_GetObjectItem(item,"w")->valueint < minWidth || cJSON_GetObjectItem(item,"w")->valueint > maxWidth )) accept = 0;
-			if( accept && (cJSON_GetObjectItem(item,"h")->valueint < minHeight || cJSON_GetObjectItem(item,"w")->valueint > maxHeight )) accept = 0;
-			cJSON* ignore = cJSON_GetObjectItem(detectionsFilter,"ignoreClass")?cJSON_GetObjectItem(detectionsFilter,"ignoreClass")->child:0;
-			while( ignore && accept ) {
-				if( strcmp( ignore->valuestring, cJSON_GetObjectItem(item,"class")->valuestring) == 0 )
-					accept = 0;
-				ignore = ignore->next;
-			}
-			if( accept ) {
-				cJSON_AddTrueToObject(detectionsPassed, id );
-				cJSON_AddItemReferenceToArray( response, item );	
-			}
+		cJSON* ignore = ignoreClasses?ignoreClasses->child:0;
+		while( ignore && accept ) {
+			if( strcmp( ignore->valuestring, cJSON_GetObjectItem(item,"class")->valuestring) == 0 )
+				accept = 0;
+			ignore = ignore->next;
 		}
+		if( accept )
+			cJSON_AddItemReferenceToArray( response, item );
+
 		item = item->next;
 	}
 	return response;
@@ -262,6 +99,25 @@ cJSON*
 ProcessTrackers( cJSON* detections ) {
 	const char* id = 0;
 	cJSON* response = cJSON_CreateArray();
+	cJSON* settings = ACAP_Get_Config("settings");
+	if(!settings)
+		return response;
+	cJSON* trackerFilter = cJSON_GetObjectItem(settings,"trackerFilter");
+	if( !trackerFilter )
+		return response;
+	cJSON* aoi = cJSON_GetObjectItem(trackerFilter,"aoi");
+	if( !aoi )
+		return response;
+	cJSON* ignoreClasses = cJSON_GetObjectItem(trackerFilter,"ignoreClass");
+	if( !ignoreClasses )
+		return response;
+		
+	double minAge = cJSON_GetObjectItem(trackerFilter,"age")->valuedouble;
+	int minDistance = cJSON_GetObjectItem(trackerFilter,"distance")->valuedouble;
+	int x1 = cJSON_GetObjectItem(aoi,"x1")->valueint;
+	int y1 = cJSON_GetObjectItem(aoi,"y1")->valueint;
+	int x2 = cJSON_GetObjectItem(aoi,"x2")->valueint;
+	int y2 = cJSON_GetObjectItem(aoi,"y2")->valueint;
 	
 	if(!PreviousPosition)
 		PreviousPosition = cJSON_CreateObject();
@@ -269,11 +125,12 @@ ProcessTrackers( cJSON* detections ) {
 	cJSON* item = detections->child;
 	while( item ) {
 		id = cJSON_GetObjectItem(item,"id")->valuestring;
-		if( cJSON_GetObjectItem(item,"active")->type == cJSON_False && cJSON_GetObjectItem(PreviousPosition,id) ) {
+		cJSON* position = cJSON_GetObjectItem(PreviousPosition,id);
+		if( cJSON_GetObjectItem(item,"active")->type == cJSON_False ) {
 			cJSON_DeleteItemFromObject(PreviousPosition,id);
-			cJSON_AddItemReferenceToArray(response,item);
+			if( position )
+				cJSON_AddItemReferenceToArray(response,item);
 		} else {
-			cJSON* position = cJSON_GetObjectItem(PreviousPosition,id);
 			if( position ) {
 				double cx = cJSON_GetObjectItem(item,"cx")->valuedouble;
 				double cy = cJSON_GetObjectItem(item,"cy")->valuedouble;
@@ -296,10 +153,28 @@ ProcessTrackers( cJSON* detections ) {
 					cJSON_AddItemReferenceToArray(response,item);
 				}
 			} else {
-				if( cJSON_GetObjectItem(item,"active")->type == cJSON_True && cJSON_GetObjectItem(item,"ignore")->type == cJSON_False ) {
+				int x = cJSON_GetObjectItem(item,"cx")->valueint;
+				int y = cJSON_GetObjectItem(item,"cy")->valueint;
+				double bx = cJSON_GetObjectItem(item,"bx")->valuedouble;
+				double by = cJSON_GetObjectItem(item,"by")->valuedouble;
+				double dx = x - bx;
+				double dy = y - by;
+				int distance = sqrt( (dx*dx) + (dy*dy) ) / 10.0;
+				int accept = 1;
+				if( cJSON_GetObjectItem(item,"age")->valuedouble < minAge ) accept = 0;
+				if( accept && distance < minDistance ) accept = 0;
+				if( accept && (x < x1 || x > x2 ) ) accept = 0;
+				if( accept && (y < y1 || y > y2 ) ) accept = 0;
+				cJSON* ignore = ignoreClasses?ignoreClasses->child:0;
+				while( ignore && accept ) {
+					if( strcmp( ignore->valuestring, cJSON_GetObjectItem(item,"class")->valuestring) == 0 )
+						accept = 0;
+					ignore = ignore->next;
+				}
+				if( accept ) {
 					cJSON* position = cJSON_CreateObject();
-					cJSON_AddNumberToObject(position,"cx",cJSON_GetObjectItem(item,"cx")->valuedouble);
-					cJSON_AddNumberToObject(position,"cy",cJSON_GetObjectItem(item,"cy")->valuedouble);
+					cJSON_AddNumberToObject(position,"cx",x);
+					cJSON_AddNumberToObject(position,"cy",y);
 					cJSON_AddNumberToObject(position,"timestamp",cJSON_GetObjectItem(item,"timestamp")->valuedouble);
 					cJSON_AddItemToObject(PreviousPosition,id,position);
 					cJSON_AddItemReferenceToArray(response,item);
@@ -311,6 +186,7 @@ ProcessTrackers( cJSON* detections ) {
 	return response;
 }
 
+
 cJSON*
 ProcessPaths( cJSON* trackers ) {
 	//Important to free the return JSON
@@ -318,12 +194,23 @@ ProcessPaths( cJSON* trackers ) {
 		pathsCache = cJSON_CreateObject();
 	cJSON* response = cJSON_CreateArray();
 	
+	cJSON* settings = ACAP_Get_Config("settings");
+	if(!settings)
+		return response;
+	cJSON* pathFilter = cJSON_GetObjectItem(settings,"pathFilter");
+	if( !pathFilter )
+		return response;
+	cJSON* aoi = cJSON_GetObjectItem(pathFilter,"aoi");
+	if( !aoi )
+		return response;
+
+	
 	cJSON* tracker = trackers->child;
 	while( tracker ) {
 		const char* id = cJSON_GetObjectItem(tracker,"id")->valuestring;
 		cJSON* path = cJSON_GetObjectItem(pathsCache,id);
 		if( !path) {
-			if( cJSON_GetObjectItem(tracker,"active")->type == cJSON_True && cJSON_GetObjectItem(tracker,"ignore")->type == cJSON_False ) {
+			if( cJSON_GetObjectItem(tracker,"active")->type == cJSON_True ) {
 				path = cJSON_CreateObject();
 				cJSON_AddStringToObject(path,"id",id);
 				cJSON_AddStringToObject(path,"class",cJSON_GetObjectItem(tracker,"class")->valuestring);
@@ -371,23 +258,44 @@ ProcessPaths( cJSON* trackers ) {
 			cJSON_ReplaceItemInObject(path,"sampletime",cJSON_CreateNumber(cJSON_GetObjectItem(tracker,"timestamp")->valuedouble));
 			cJSON* pathList = cJSON_GetObjectItem(path,"path");
 			cJSON* lastPosition = cJSON_GetArrayItem(pathList,cJSON_GetArraySize(pathList)-1);
-			cJSON_ReplaceItemInObject(lastPosition,"d",cJSON_CreateNumber(duration));
+				cJSON_ReplaceItemInObject(lastPosition,"d",cJSON_CreateNumber(duration));
 			cJSON* position = cJSON_CreateObject();
 			cJSON_AddNumberToObject(position,"x",cJSON_GetObjectItem(tracker,"cx")->valuedouble);
 			cJSON_AddNumberToObject(position,"y",cJSON_GetObjectItem(tracker,"cy")->valuedouble);
 			cJSON_AddNumberToObject(position,"d",0);
 			cJSON_AddItemToArray(pathList,position);
 		}
-
 		if( path && cJSON_GetObjectItem(tracker,"active")->type == cJSON_False ) {
 			cJSON* complete = cJSON_DetachItemFromObject( pathsCache, id );
 			int accept = 1;
-			if( accept && cJSON_GetObjectItem(complete,"distance")->valuedouble < 10 ) accept = 0;
-			if( accept && cJSON_GetObjectItem(complete,"age")->valuedouble < 1.0 ) accept = 0;
-			if( accept )
+			double minAge = cJSON_GetObjectItem(pathFilter,"age")->valuedouble;
+			double minDistance = cJSON_GetObjectItem(pathFilter,"distance")->valueint;
+			
+			if( cJSON_GetObjectItem(complete,"distance")->valuedouble < minDistance )  accept = 0;
+			if( accept && cJSON_GetObjectItem(complete,"age")->valuedouble < minAge ) accept = 0;
+			if( accept ) {
+				int x1 = cJSON_GetObjectItem(aoi,"x1")->valueint;
+				int y1 = cJSON_GetObjectItem(aoi,"y1")->valueint;
+				int x2 = cJSON_GetObjectItem(aoi,"x2")->valueint;
+				int y2 = cJSON_GetObjectItem(aoi,"y2")->valueint;
+				accept = 0;
+				cJSON* position = cJSON_GetObjectItem(path,"path")->child;
+				if( position && cJSON_GetArraySize(position) > 2 ) {
+					while(position && !accept ) {
+						if( cJSON_GetObjectItem(position,"x")->valueint > x1 && 
+							cJSON_GetObjectItem(position,"x")->valueint < x2 &&
+							cJSON_GetObjectItem(position,"y")->valueint > y1 &&
+							cJSON_GetObjectItem(position,"y")->valueint < y2
+						) accept = 1;
+						position = position->next;
+					}
+				}
+			}
+			if( accept ) {
 				cJSON_AddItemToArray( response, complete );
-			else 
+			} else {
 				cJSON_Delete(complete);
+			}
 		}
 		tracker = tracker->next;
 	}
@@ -396,9 +304,14 @@ ProcessPaths( cJSON* trackers ) {
 
 cJSON*
 ProcessOccupancy( cJSON* detections ) {
-	//Will reuturn 0 if there is no occupancy change;
+	//Will return 0 if there is no occupancy change;
 	//Do NOT free return JSON
 	cJSON* item;
+	cJSON* settings = ACAP_Get_Config("settings");
+	if(!settings)
+		return 0;
+	cJSON* occupancyIntegration = cJSON_GetObjectItem(settings,"occupancyIntegration");
+	int size = cJSON_GetObjectItem(settings,"occupancyIntegration")?cJSON_GetObjectItem(settings,"occupancyIntegration")->valueint:20;
 	if(!occupancyDetectionCounter)
 		occupancyDetectionCounter = cJSON_CreateObject();
 	//Count the number of detections
@@ -410,23 +323,16 @@ ProcessOccupancy( cJSON* detections ) {
 
 	item = detections->child;
 	while(item) {
-		if( cJSON_GetObjectItem(item,"active")->type == cJSON_True && cJSON_GetObjectItem(item,"ignore")->type == cJSON_False ) {
-			const char* class = cJSON_GetObjectItem(item,"class")->valuestring;
-			if( cJSON_GetObjectItem(occupancyDetectionCounter,class)) {
-				cJSON_GetObjectItem(occupancyDetectionCounter,class)->valueint++;
-			} else {
-				cJSON_AddNumberToObject(occupancyDetectionCounter,class,1);
-			}
+		const char* class = cJSON_GetObjectItem(item,"class")->valuestring;
+		if( cJSON_GetObjectItem(occupancyDetectionCounter,class)) {
+			cJSON_GetObjectItem(occupancyDetectionCounter,class)->valueint++;
+		} else {
+			cJSON_AddNumberToObject(occupancyDetectionCounter,class,1);
 		}
 		item = item->next;
 	}
-	
-	//Integrate counters
-	int size = cJSON_GetObjectItem(ACAP_Get_Config("settings"),"occupancyIntegration")->valueint;
-
 	if( !classCounterArrays )
 		classCounterArrays = cJSON_CreateObject();
-
 	item = occupancyDetectionCounter->child;
 	while( item ) {
 		const char* class = item->string;
@@ -466,25 +372,31 @@ ProcessOccupancy( cJSON* detections ) {
 		cJSON_AddNumberToObject( response, item->string, value);
 		item = item->next;
 	}
+
 	if( previousOccupancy )
 		cJSON_Delete( previousOccupancy );
 	previousOccupancy = response;
 	if( !change )
 		return 0;
+	ACAP_STATUS_SetObject("occupancy", "status", previousOccupancy);
 	return response;
 }
 
 void
-MAIN_Detections_Callback(cJSON *list ) {
+Detections_Callback(cJSON *list ) {
 	char topic[128];
 	cJSON* item = 0;
 	cJSON* settings = ACAP_Get_Config("settings");
 	if( !settings )
 		return;
+	LOG_TRACE("%s:\n",__func__);
+	
 	cJSON* publish = cJSON_GetObjectItem(settings,"publish");
-	list = ProcessDetections( list );
-	//Publish Detections
-	cJSON* detections = FilterDetections( list );
+
+	LOG_TRACE("%s: Process detections\n",__func__);
+	cJSON* detections = ProcessDetections( list );
+
+	LOG_TRACE("%s: Publish detections\n",__func__);
 	if( cJSON_GetObjectItem(publish,"detections") && cJSON_GetObjectItem(publish,"detections")->type == cJSON_True ) {
 		sprintf(topic,"detections/%s", ACAP_DEVICE_Prop("serial") );
 		cJSON* payload = cJSON_CreateObject();
@@ -493,9 +405,11 @@ MAIN_Detections_Callback(cJSON *list ) {
 		cJSON_Delete( payload );
 	}
 
-	//Publish Occupancy
+
+	LOG_TRACE("%s: Process Occupancy\n",__func__);
 	cJSON* occupancy = ProcessOccupancy( detections );
 	
+	LOG_TRACE("%s: Publish Occupancy\n",__func__);
 	if( occupancy && cJSON_GetObjectItem(publish,"occupancy") && cJSON_GetObjectItem(publish,"occupancy")->type == cJSON_True ) {
 		cJSON* payload = cJSON_CreateObject();
 		cJSON_AddItemReferenceToObject(payload,"occupancy",occupancy);
@@ -503,9 +417,13 @@ MAIN_Detections_Callback(cJSON *list ) {
 		MQTT_Publish_JSON(topic,payload,0,0);
 		cJSON_Delete(payload);
 	}	
+
+	cJSON_Delete(detections);
+
+	LOG_TRACE("%s: Process Trackers\n",__func__);
+	cJSON* trackers = ProcessTrackers( list );
 	
-	//Publish trackers
-	cJSON* trackers = ProcessTrackers( detections );
+	LOG_TRACE("%s: Publish Trackers\n",__func__);
 	if( cJSON_GetObjectItem(publish,"tracker") && cJSON_GetObjectItem(publish,"tracker")->type == cJSON_True ) {
 		item = trackers->child;
 		while( item ) {
@@ -524,7 +442,7 @@ MAIN_Detections_Callback(cJSON *list ) {
 			idle = round(idle*10)/10;
 			if( idle > 2 ) {
 				const char* id = activeTracker->string;
-				cJSON* detection = detections->child;
+				cJSON* detection = list->child;
 				cJSON* found = 0;
 				while( detection && !found ) {
 					if( strcmp( id, cJSON_GetObjectItem(detection,"id")->valuestring ) == 0 )
@@ -543,26 +461,32 @@ MAIN_Detections_Callback(cJSON *list ) {
 		}
 	}
 
-	//Publish paths
+	LOG_TRACE("%s: Process Paths\n",__func__);
 	cJSON* paths = ProcessPaths( trackers );
 
+	cJSON* statusPaths = ACAP_STATUS_Object("detections", "paths");
+	LOG_TRACE("%s: Publish Paths\n",__func__);
+	statusPaths = ACAP_STATUS_Object("detections", "paths");
 	if( cJSON_GetObjectItem(publish,"path") && cJSON_GetObjectItem(publish,"path")->type == cJSON_True ) {
 		item = paths->child;
 		while( item ) {
+			cJSON_AddItemToArray(statusPaths,cJSON_Duplicate(item, 1));
 			sprintf(topic,"path/%s", ACAP_DEVICE_Prop("serial") );
 			MQTT_Publish_JSON(topic,item,0,0);
 			item = item->next;
 		}
 	}
+	while( cJSON_GetArraySize(statusPaths) > 10 )
+		cJSON_DeleteItemFromArray(statusPaths,0);
 
 	cJSON_Delete(trackers);
-	cJSON_Delete(detections);
 	cJSON_Delete(paths);
+	LOG_TRACE("%s: Complete\n",__func__);
 }
 
 
 void
-MAIN_Event_Callback(cJSON *event, void* userdata) {
+Event_Callback(cJSON *event, void* userdata) {
 	if(!event)
 		return;
 
@@ -600,7 +524,6 @@ MAIN_Event_Callback(cJSON *event, void* userdata) {
 		if( cJSON_GetObjectItem(eventFilter,"enabled")->type == cJSON_False ) {
 			const char* ignoreTopic = cJSON_GetObjectItem(eventFilter, "topic")?cJSON_GetObjectItem(eventFilter, "topic")->valuestring:0;
 			if( ignoreTopic && strstr(eventTopic->valuestring, ignoreTopic) ) {
-//LOG("%s\n",eventTopic->valuestring);
 				cJSON_Delete( eventTopic );
 				return;
 			}
@@ -615,7 +538,7 @@ MAIN_Event_Callback(cJSON *event, void* userdata) {
 }
 
 void 
-Connection_Status (int state) {
+MQTT_Status_Callback (int state) {
 	switch( state ) {
 		case MQTT_CONNECT:
 			LOG_TRACE("%s: Connect\n",__func__);
@@ -630,12 +553,12 @@ Connection_Status (int state) {
 }
 
 void
-MAIN_MQTT_Subscription(const char *topic, const char *payload) {
+MQTT_Subscription(const char *topic, const char *payload) {
 	LOG("Subscription: %s %s\n",topic,payload);
 }
 
 static gboolean
-Main_Status_Update(gpointer user_data) {
+Config_Update_Callback(gpointer user_data) {
 	
 	cJSON* settings = ACAP_Get_Config("settings");
 	if( !settings )
@@ -657,6 +580,7 @@ Main_Status_Update(gpointer user_data) {
 	char topic[256];
 	sprintf(topic,"status/%s",ACAP_DEVICE_Prop("serial"));
 	MQTT_Publish_JSON( topic, payload, 0, 0 );
+	cJSON_Delete( payload );
 	
     return G_SOURCE_CONTINUE;  // Return TRUE to continue the timer
 }
@@ -690,26 +614,18 @@ Settings_Updated_Callback( const char* service, cJSON* data) {
 	}
 }
 
-static gboolean
-CacheMonitor(gpointer user_data) {
-	int paths = pathsCache? cJSON_GetArraySize(pathsCache):0;
-	int previosPos = PreviousPosition?cJSON_GetArraySize(PreviousPosition):0;
-	LOG("Paths: %d Positions: %d\n", paths, previosPos)
-	return G_SOURCE_CONTINUE;
-}
-
 int
 main(void) {
 	openlog(APP_PACKAGE, LOG_PID|LOG_CONS, LOG_USER);
 	LOG("------ Starting ACAP Service ------\n");
 	
 	ACAP( APP_PACKAGE, Settings_Updated_Callback );
-	MQTT_Init( APP_PACKAGE, Connection_Status );
+	MQTT_Init( APP_PACKAGE, MQTT_Status_Callback );
 	ACAP_Set_Config("mqtt", MQTT_Settings());
-	MQTT_Subscribe( "mqtt", MAIN_MQTT_Subscription );
+	MQTT_Subscribe( "mqtt", MQTT_Subscription );
+	ACAP_STATUS_SetObject("detections", "paths", cJSON_CreateArray());
 
-
-	ACAP_EVENTS_SetCallback( MAIN_Event_Callback );
+	ACAP_EVENTS_SetCallback( Event_Callback );
 	cJSON* eventSubscriptions = ACAP_FILE_Read( "settings/subscriptions.json" );
 	cJSON* subscription = eventSubscriptions?eventSubscriptions->child:0;
 	while(subscription){
@@ -717,16 +633,9 @@ main(void) {
 		subscription = subscription->next;
 	}
 
-	attributes = ACAP_FILE_Read( "settings/attributes.json" );
-	if( !attributes ) {
-		LOG_WARN("Missing attributed\n");
-	} else {
-		ACAP_Set_Config("attributes", attributes);
-	}
 
-	ObjectDetection_Init( MAIN_Detections_Callback );
-	g_timeout_add_seconds(15 * 60, Main_Status_Update, NULL);	
-	g_timeout_add_seconds(5 * 60, CacheMonitor, NULL);	
+	ObjectDetection_Init( Detections_Callback );
+	g_timeout_add_seconds(15 * 60, Config_Update_Callback, NULL);	
 	main_loop = g_main_loop_new(NULL, FALSE);
     GSource *signal_source = g_unix_signal_source_new(SIGTERM);
     if (signal_source) {

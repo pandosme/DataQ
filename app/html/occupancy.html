@@ -19,9 +19,9 @@
         <div class="list-group list-group-flush">
 			<a href="index.html" class="list-group-item list-group-item-action">Overview</a>
 			<a href="events.html" class="list-group-item list-group-item-action">Events</a>
-			<a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
 			<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
 			<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
+			<a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
 			<a href="occupancy.html" class="list-group-item list-group-item-action active">Occupancy</a>
 			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
 			<a href="about.html" class="list-group-item list-group-item-action">About</a>
@@ -144,6 +144,7 @@ $(document).ready(function() {
 
 			$('.video-panel').css('padding-top', `${paddingPercentage}%`);
 			PlayVideo(aspectRatio, app.settings.scene.rotation );
+			UpdateTable( app.status.occupancy.status );
 		},
         error: function(response) {
 			showToast("The application is not running",'danger');
@@ -166,7 +167,6 @@ $(document).ready(function() {
 				showToast("Filter updated failed",'danger');
 			}
 		});
-
 	});
 
 
@@ -222,6 +222,19 @@ $(document).ready(function() {
 	  }
 	}
 
+	function UpdateTable( data ) {
+		const tableBody = document.getElementById('occupancy-table');
+		tableBody.innerHTML = '';
+
+		for( var id in data ) {
+			const row = document.createElement('tr');
+			row.innerHTML = '';
+			row.innerHTML += '<td>' + id + '</td>';
+			row.innerHTML += '<td>' + data[id] + '</td>';
+			tableBody.appendChild(row);
+		}
+	}
+
 	function onMessageArrived(message) {
 		var topic = message.topic.split("/")[1];
 		var payload = JSON.parse(message.payloadString);
@@ -269,19 +282,8 @@ $(document).ready(function() {
 			});
 			ctx.stroke();
 		}
-		if( topic === "occupancy" ) {
-			// Clear existing table rows
-			const tableBody = document.getElementById('occupancy-table');
-			tableBody.innerHTML = '';
-
-			for( var id in payload.occupancy ) {
-				const row = document.createElement('tr');
-				row.innerHTML = '';
-				row.innerHTML += '<td>' + id + '</td>';
-				row.innerHTML += '<td>' + payload.occupancy[id] + '</td>';
-				tableBody.appendChild(row);
-			}
-		}
+		if( topic === "occupancy" )
+			UpdateTable( payload.occupancy );
 	}
 
 	function PlayVideo(aspect, rotation) {
