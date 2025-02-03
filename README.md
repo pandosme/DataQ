@@ -98,8 +98,14 @@ MQTT Heartbeat published every 15 minutes
 ## MQTT Configuration
 
 ### Broker Setup Options
-- [Mosquitto](https://mosquitto.org/)
-- [Node-RED AEDES](https://flows.nodered.org/node/node-red-contrib-aedes)
+- [Mosquitto](https://mosquitto.org/)  
+  Add the following to your mosquitto.conf
+  ```
+  listener 1884
+  protocol websockets
+  ```
+- [Node-RED AEDES](https://flows.nodered.org/node/node-red-contrib-aedes)  
+  Bind WS port 1884 in the AEDES settings
 
 ### Requirements
 - WebSocket support for visualization
@@ -112,9 +118,9 @@ MQTT Heartbeat published every 15 minutes
 
 ### 1.2.0	February 3, 2025
 - Fixed "hanging-objects" due to changes in Axis OS12
-- Detcions imapcts Occupancy but not Trackers & Paths
-- Tracker impacts Paths and their filters has be separated from Detections
 - Fixed a memory leak (event processing);
+- Detections filter will only imapct Occupancy but not Trackers & Paths
+- Tracker filter impacts Path
 
 ### 1.1.1	January 23, 2025
 - Corrected Object Detection post-processeing 
