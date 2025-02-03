@@ -118,8 +118,9 @@ MQTT Heartbeat published every 15 minutes
 
 ### 1.2.0	February 3, 2025
 - Fixed "hanging-objects" due to changes in Axis OS12
-- Fixed a memory leak (event processing);
-- Detections filter will only imapct Occupancy but not Trackers & Paths
+- Fixed a memory leak (event processing)
+- Fixed faulty center-of-gravity when camera is rotated
+- Detections filter will only imapct Occupancy but no longer Trackers & Paths
 - Tracker filter impacts Path
 
 ### 1.1.1	January 23, 2025

@@ -226,11 +226,6 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 		int y = (y1 * 1000)/8192;
 		int w = ((x2-x1) * 1000)/8192;
 		int h = ((y2-y1) * 1000)/8192;
-		int cx = x + (w/2);
-		int cy = y + (h/2);
-		
-		if( centerOfGravity == 1 )
-			cy = y + h;
 
 		if( dataRotation == 180 ) {
 			x = 1000 - x - w;
@@ -254,6 +249,12 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 			y = 1000 - x - h;
 			x = t;
 		}
+
+		int cx = x + (w/2);
+		int cy = y + (h/2);
+		
+		if( centerOfGravity == 1 )
+			cy = y + h;
 
 		int confidence = (unsigned)(recv_det->score);
 		int classID = (int)recv_det->det_class;
