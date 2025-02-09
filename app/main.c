@@ -186,7 +186,6 @@ ProcessTrackers( cJSON* detections ) {
 	return response;
 }
 
-
 cJSON*
 ProcessPaths( cJSON* trackers ) {
 	//Important to free the return JSON
@@ -225,10 +224,6 @@ ProcessPaths( cJSON* trackers ) {
 				cJSON_AddNumberToObject(path,"dwell",0);
 				cJSON_AddStringToObject(path,"color",cJSON_GetObjectItem(tracker,"color")->valuestring);
 				cJSON_AddStringToObject(path,"color2",cJSON_GetObjectItem(tracker,"color2")->valuestring);
-				cJSON_AddFalseToObject(path,"hat");
-				cJSON_GetObjectItem(path,"hat")->type = cJSON_GetObjectItem(tracker,"hat")->type;
-				cJSON_AddFalseToObject(path,"face");
-				cJSON_GetObjectItem(path,"face")->type = cJSON_GetObjectItem(tracker,"face")->type;
 				cJSON* position = cJSON_CreateObject();
 				cJSON_AddNumberToObject(position,"x",cJSON_GetObjectItem(tracker,"cx")->valuedouble);
 				cJSON_AddNumberToObject(position,"y",cJSON_GetObjectItem(tracker,"cy")->valuedouble);
@@ -248,8 +243,6 @@ ProcessPaths( cJSON* trackers ) {
 			cJSON_ReplaceItemInObject(path,"topVelocity",cJSON_CreateNumber(cJSON_GetObjectItem(tracker,"topVelocity")->valuedouble));
 			cJSON_ReplaceItemInObject(path,"color",cJSON_CreateString(cJSON_GetObjectItem(tracker,"color")->valuestring));
 			cJSON_ReplaceItemInObject(path,"color2",cJSON_CreateString(cJSON_GetObjectItem(tracker,"color2")->valuestring));
-			cJSON_GetObjectItem(path,"hat")->type = cJSON_GetObjectItem(tracker,"hat")->type;
-			cJSON_GetObjectItem(path,"face")->type = cJSON_GetObjectItem(tracker,"face")->type;
 			double duration = cJSON_GetObjectItem(tracker,"timestamp")->valuedouble;
 			duration -= cJSON_GetObjectItem(path,"sampletime")->valuedouble;
 			duration /= 1000;
@@ -291,7 +284,16 @@ ProcessPaths( cJSON* trackers ) {
 					}
 				}
 			}
+			if( accept && (cJSON_GetArraySize(cJSON_GetObjectItem(complete,"path")) < 2 || cJSON_GetObjectItem(complete,"age")->valuedouble < 0.5 ) ) accept = 0;
 			if( accept ) {
+				if( strcmp( cJSON_GetObjectItem(tracker,"class")->valuestring,"Head") == 0 ) {
+					cJSON_AddStringToObject( complete,"hat", cJSON_GetObjectItem(tracker,"hat")->valuestring);
+					if( cJSON_GetObjectItem(tracker,"face")->type == cJSON_False )
+						cJSON_AddFalseToObject(complete,"face");
+					else
+						cJSON_AddTrueToObject(complete,"face");
+				}
+				cJSON_DeleteItemFromObject(complete,"sampleTime");
 				cJSON_AddItemToArray( response, complete );
 			} else {
 				cJSON_Delete(complete);
@@ -438,6 +440,7 @@ Detections_Callback(cJSON *list ) {
 		double now = ACAP_DEVICE_Timestamp();
 		cJSON* activeTracker = lastPublishedTracker->child;
 		while( activeTracker ) {
+			cJSON* next = activeTracker->next;
 			double idle = (now - activeTracker->valuedouble) / 1000;
 			idle = round(idle*10)/10;
 			if( idle > 2 ) {
@@ -457,7 +460,7 @@ Detections_Callback(cJSON *list ) {
 					MQTT_Publish_JSON(topic,found,0,0);
 				}
 			}
-			activeTracker = activeTracker->next;
+			activeTracker = next;
 		}
 	}
 
@@ -483,7 +486,6 @@ Detections_Callback(cJSON *list ) {
 	cJSON_Delete(paths);
 	LOG_TRACE("%s: Complete\n",__func__);
 }
-
 
 void
 Event_Callback(cJSON *event, void* userdata) {

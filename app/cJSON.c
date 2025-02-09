@@ -576,7 +576,10 @@ static cJSON_bool print_number(const cJSON * const item, printbuffer * const out
     }
     else
     {
-		length = sprintf((char*)number_buffer, "%.1f", d);
+		if( d > 100000)
+			length = sprintf((char*)number_buffer, "%.0f", d);
+		else
+			length = sprintf((char*)number_buffer, "%.1f", d);
         /* Try 15 decimal places of precision to avoid nonsignificant nonzero digits */
 //        length = sprintf((char*)number_buffer, "%1.15g", d);
 

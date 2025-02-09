@@ -78,14 +78,6 @@ ProcessAttributes( cJSON* item ) {
 
 	//Process detections
 	cJSON* lookup = 0;
-	if( !cJSON_GetObjectItem(item,"color") )
-		cJSON_AddStringToObject(item,"color","");
-	if( !cJSON_GetObjectItem(item,"color") )
-		cJSON_AddStringToObject(item,"color2","");
-	if( !cJSON_GetObjectItem(item,"hat") )
-		cJSON_AddFalseToObject(item,"hat");
-	if( !cJSON_GetObjectItem(item,"face") )
-		cJSON_AddFalseToObject(item,"face");
 	cJSON* attribute = cJSON_GetObjectItem(item,"attributes")?cJSON_GetObjectItem(item,"attributes")->child:0;
 	while( attribute ) {
 		int type = cJSON_GetObjectItem(attribute,"type")?cJSON_GetObjectItem(attribute,"type")->valueint: 0;
@@ -310,7 +302,7 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 			cJSON_AddNumberToObject(detection,"topVelocity",0);
 			cJSON_AddStringToObject(detection,"color","");
 			cJSON_AddStringToObject(detection,"color2","");
-			cJSON_AddFalseToObject(detection,"hat");
+			cJSON_AddStringToObject(detection,"hat","");
 			cJSON_AddFalseToObject(detection,"face");
 			cJSON_AddItemToObject(detection,"attributes",cJSON_CreateArray());
 			cJSON_AddItemToObject( activeDetections, idString, detection);

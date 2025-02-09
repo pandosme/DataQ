@@ -323,23 +323,28 @@ $(document).ready(function() {
 	}
 
 	function ConnectWebSocketClient() {
-		const clientID = "WS-" + app.manifest.acapPackageConf.setup.appName + "-" + app.device.serial;
-		if( MQTT_Client )
+		const clientID = "WS-" + app.manifest.acapPackageConf.setup.appName + "-" + app.device.serial + "-" + Math.floor(Math.random() * 10000);
+		if(MQTT_Client)
 			delete MQTT_Client;
-		MQTT_Client = new Paho.MQTT.Client(app.mqtt.address,app.settings.WS_Port,clientID);
+		
+		// Use WSS if page is loaded over HTTPS
+		MQTT_Client = new Paho.MQTT.Client(app.mqtt.address, app.settings.WS_Port, clientID);
+		
 		MQTT_Client.onConnectionLost = onConnectionLost;
 		MQTT_Client.onMessageArrived = onMessageArrived;
 		
 		var connectionOptions = {
-			useSSL: false,
+			useSSL: (location.protocol === 'https:'),
 			timeout: 3,
-			onSuccess:onConnect,
+			onSuccess: onConnect,
 			onFailure: onFailure
 		};
-		if( app.mqtt.user && app.mqtt.user.length )
+		
+		if(app.mqtt.user && app.mqtt.user.length)
 			connectionOptions.userName = app.mqtt.user;
-		if( app.mqtt.password && app.mqtt.password.length )
+		if(app.mqtt.password && app.mqtt.password.length)
 			connectionOptions.password = app.mqtt.password;
+			
 		MQTT_Client.connect(connectionOptions);
 	}
 
@@ -357,10 +362,16 @@ $(document).ready(function() {
 	}
 
 	function onConnectionLost(responseObject) {
-	  if (responseObject.errorCode !== 0) {
-		showLiveDataMessage("Live data visualization is temporarily unavailable - Web client is not connected to broker.");
-		showToast("Web page lost connection. " + responseObject.errorMessage,"warning");
-	  }
+		if (responseObject.errorCode !== 0) {
+			showLiveDataMessage("Live data visualization is temporarily unavailable - Web client is not connected to broker.");
+			showToast("Web page lost connection. " + responseObject.errorMessage, "warning");
+			
+			// Attempt to reconnect after 5 seconds
+			setTimeout(() => {
+				console.log("Attempting to reconnect...");
+				ConnectWebSocketClient();
+			}, 5000);
+		}
 	}
 
 	function onMessageArrived(message) {

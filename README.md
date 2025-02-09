@@ -21,6 +21,9 @@ DataQ is an MQTT Client for Axis cameras that enables custom data-driven solutio
 - MQTT Broker with WebSocket support
 - MQTT client for data consumption
 
+## Known limitations
+- Data visualization will not work when connecting to camera over HTTPS as the Web MQTT client does not support Secure WebSockets.
+
 ### [Download](https://www.dropbox.com/scl/fi/3z5ruobn27nvt2rwebqym/DataQ.zip?rlkey=etnpo7yvp2u6vqxi9d50hqpik&st=ian3s4md&dl=1)
 Pre-compiled version for ARMv7-HF and AARCH64
 
@@ -115,6 +118,13 @@ MQTT Heartbeat published every 15 minutes
 > **Note**: Use DataQ only when standard Axis device data formats don't meet your requirements.
 
 # History
+
+### 1.2.6	February 9, 2025
+- Fixed support for data visualization when accessin cemar over HTTPS with Secure WebSockets in client
+
+### 1.2.5	February 3, 2025
+- Adjustments on MQTT payload for path
+- Allow multiple web browsers (and tabs) visualize MQTT messages
 
 ### 1.2.0	February 3, 2025
 - Fixed "hanging-objects" due to changes in Axis OS12
