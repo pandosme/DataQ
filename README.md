@@ -22,7 +22,7 @@ DataQ is an MQTT Client for Axis cameras that enables custom data-driven solutio
 - MQTT client for data consumption
 
 ## Known limitations
-- Data visualization will not work when connecting to camera over HTTPS as the Web MQTT client does not support Secure WebSockets.
+- 
 
 ### [Download](https://www.dropbox.com/scl/fi/3z5ruobn27nvt2rwebqym/DataQ.zip?rlkey=etnpo7yvp2u6vqxi9d50hqpik&st=ian3s4md&dl=1)
 Pre-compiled version for ARMv7-HF and AARCH64
