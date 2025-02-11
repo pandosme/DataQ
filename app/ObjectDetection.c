@@ -139,12 +139,12 @@ ProcessAttributes( cJSON* item ) {
 				break;
 				case 7: //human_face_visibility
 				if( cJSON_GetObjectItem(item,"face") ) {
-					if( value = 0 )
+					if( value == 0 )
 						cJSON_GetObjectItem(item,"face")->type = cJSON_False;
 					else
 						cJSON_GetObjectItem(item,"face")->type = cJSON_True;
 				} else {
-					if( value = 0 )
+					if( value == 0 )
 						cJSON_AddFalseToObject(item,"face");
 					else
 						cJSON_AddTrueToObject(item,"face");
@@ -373,8 +373,8 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 			cJSON* objects = cJSON_CreateArray();
 			cJSON_AddNumberToObject(operation,"type",recv_event->action);
 			cJSON_AddItemToObject(operation,"objects",objects);
-			for( i = 0; i < recv_event->n_object_ids; i++ )
-				cJSON_AddItemToArray(objects,cJSON_CreateNumber(recv_event->object_ids[i]));
+			for( int j = 0; j < recv_event->n_object_ids; j++ )
+				cJSON_AddItemToArray(objects,cJSON_CreateNumber(recv_event->object_ids[j]));
 		}
 	}
 
