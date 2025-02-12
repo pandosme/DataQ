@@ -119,6 +119,10 @@ MQTT Heartbeat published every 15 minutes
 
 # History
 
+### 1.2.7	February 12, 2025
+- Fixed logic and refernce flaws.
+  Pull Request from InSupport
+
 ### 1.2.6	February 9, 2025
 - Fixed support for data visualization when accessin cemar over HTTPS with Secure WebSockets in client
 
