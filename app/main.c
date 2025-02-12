@@ -49,10 +49,10 @@ ProcessDetections( cJSON* list ) {
 	int x1 = cJSON_GetObjectItem(aoi,"x1")?cJSON_GetObjectItem(aoi,"x1")->valueint:0;
 	int x2 = cJSON_GetObjectItem(aoi,"x2")?cJSON_GetObjectItem(aoi,"x2")->valueint:1000;
 	int y1 = cJSON_GetObjectItem(aoi,"y1")?cJSON_GetObjectItem(aoi,"y1")->valueint:0;
-	int y2 = cJSON_GetObjectItem(aoi,"y1")?cJSON_GetObjectItem(aoi,"y2")->valueint:1000;
+	int y2 = cJSON_GetObjectItem(aoi,"y2")?cJSON_GetObjectItem(aoi,"y2")->valueint:1000;
 	int minWidth = cJSON_GetObjectItem(detectionsFilter,"minWidth")?cJSON_GetObjectItem(detectionsFilter,"minWidth")->valueint:0;
 	int minHeight = cJSON_GetObjectItem(detectionsFilter,"minHeight")?cJSON_GetObjectItem(detectionsFilter,"minHeight")->valueint:0;
-	int maxWidth = cJSON_GetObjectItem(detectionsFilter,"minWidth")?cJSON_GetObjectItem(detectionsFilter,"maxWidth")->valueint:1000;
+	int maxWidth = cJSON_GetObjectItem(detectionsFilter,"maxWidth")?cJSON_GetObjectItem(detectionsFilter,"maxWidth")->valueint:1000;
 	int maxHeight = cJSON_GetObjectItem(detectionsFilter,"maxHeight")?cJSON_GetObjectItem(detectionsFilter,"maxHeight")->valueint:1000;	
 	
 	cJSON* item = list->child;
@@ -61,7 +61,7 @@ ProcessDetections( cJSON* list ) {
 		if( accept && (cJSON_GetObjectItem(item,"cx")->valueint < x1 || cJSON_GetObjectItem(item,"cx")->valueint > x2 ) ) accept = 0;
 		if( accept && (cJSON_GetObjectItem(item,"cy")->valueint < y1 || cJSON_GetObjectItem(item,"cy")->valueint > y2) ) accept = 0;
 		if( accept && (cJSON_GetObjectItem(item,"w")->valueint < minWidth || cJSON_GetObjectItem(item,"w")->valueint > maxWidth )) accept = 0;
-		if( accept && (cJSON_GetObjectItem(item,"h")->valueint < minHeight || cJSON_GetObjectItem(item,"w")->valueint > maxHeight )) accept = 0;
+		if( accept && (cJSON_GetObjectItem(item,"h")->valueint < minHeight || cJSON_GetObjectItem(item,"h")->valueint > maxHeight )) accept = 0;
 
 		cJSON* ignore = ignoreClasses?ignoreClasses->child:0;
 		while( ignore && accept ) {
