@@ -1,5 +1,5 @@
 PROG1	= DataQ
-OBJS1	= main.c ACAP.c cJSON.c MQTT.c CERTS.c ObjectDetection.c TIME.c video_object_detection.pb-c.c protobuf-c.c
+OBJS1	= main.c ACAP.c cJSON.c MQTT.c CERTS.c ObjectDetection.c TIME.c video_object_detection.pb-c.c protobuf-c.c location.c
 PROGS	= $(PROG1) 
 
 PKGS = glib-2.0 gio-2.0 axevent axhttp video-object-detection-subscriber 

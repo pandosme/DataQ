@@ -11,6 +11,7 @@
 #include "ACAP.h"
 #include "MQTT.h"
 #include "ObjectDetection.h"
+#include "location.h"
 
 #define APP_PACKAGE	"DataQ"
 
@@ -139,6 +140,17 @@ ProcessTrackers( cJSON* detections ) {
 				double dx = cx - pcx;
 				double dy = cy - pcy;
 				int distance = sqrt( (dx*dx) + (dy*dy) ) / 10.0;
+				double lat = 0;
+				double lng = 0;
+				if( LOCATION_transform((int)cx, (int)cy, &lat, &lng) ) {
+					if( cJSON_GetObjectItem(item,"lat") ) {
+						cJSON_ReplaceItemInObject(item,"lat",cJSON_CreateNumber(lat));
+						cJSON_ReplaceItemInObject(item,"lng",cJSON_CreateNumber(lng));
+					} else {
+						cJSON_AddNumberToObject(item,"lat",lat);
+						cJSON_AddNumberToObject(item,"lng",lng);
+					}
+				}
 				if( distance > 5 ) {
 					double topVelocity = cJSON_GetObjectItem(item,"topVelocity")->valuedouble;
 					double seconds = (cJSON_GetObjectItem(item,"timestamp")->valuedouble - cJSON_GetObjectItem(position,"timestamp")->valuedouble)/1000.0;
@@ -391,14 +403,14 @@ Detections_Callback(cJSON *list ) {
 	cJSON* settings = ACAP_Get_Config("settings");
 	if( !settings )
 		return;
-	LOG_TRACE("%s:\n",__func__);
+//	LOG_TRACE("%s:\n",__func__);
 	
 	cJSON* publish = cJSON_GetObjectItem(settings,"publish");
 
-	LOG_TRACE("%s: Process detections\n",__func__);
+//	LOG_TRACE("%s: Process detections\n",__func__);
 	cJSON* detections = ProcessDetections( list );
 
-	LOG_TRACE("%s: Publish detections\n",__func__);
+//	LOG_TRACE("%s: Publish detections\n",__func__);
 	if( cJSON_GetObjectItem(publish,"detections") && cJSON_GetObjectItem(publish,"detections")->type == cJSON_True ) {
 		sprintf(topic,"detections/%s", ACAP_DEVICE_Prop("serial") );
 		cJSON* payload = cJSON_CreateObject();
@@ -408,10 +420,10 @@ Detections_Callback(cJSON *list ) {
 	}
 
 
-	LOG_TRACE("%s: Process Occupancy\n",__func__);
+//	LOG_TRACE("%s: Process Occupancy\n",__func__);
 	cJSON* occupancy = ProcessOccupancy( detections );
 	
-	LOG_TRACE("%s: Publish Occupancy\n",__func__);
+//	LOG_TRACE("%s: Publish Occupancy\n",__func__);
 	if( occupancy && cJSON_GetObjectItem(publish,"occupancy") && cJSON_GetObjectItem(publish,"occupancy")->type == cJSON_True ) {
 		cJSON* payload = cJSON_CreateObject();
 		cJSON_AddItemReferenceToObject(payload,"occupancy",occupancy);
@@ -422,10 +434,10 @@ Detections_Callback(cJSON *list ) {
 
 	cJSON_Delete(detections);
 
-	LOG_TRACE("%s: Process Trackers\n",__func__);
+//	LOG_TRACE("%s: Process Trackers\n",__func__);
 	cJSON* trackers = ProcessTrackers( list );
 	
-	LOG_TRACE("%s: Publish Trackers\n",__func__);
+//	LOG_TRACE("%s: Publish Trackers\n",__func__);
 	if( cJSON_GetObjectItem(publish,"tracker") && cJSON_GetObjectItem(publish,"tracker")->type == cJSON_True ) {
 		item = trackers->child;
 		while( item ) {
@@ -464,11 +476,11 @@ Detections_Callback(cJSON *list ) {
 		}
 	}
 
-	LOG_TRACE("%s: Process Paths\n",__func__);
+//	LOG_TRACE("%s: Process Paths\n",__func__);
 	cJSON* paths = ProcessPaths( trackers );
 
 	cJSON* statusPaths = ACAP_STATUS_Object("detections", "paths");
-	LOG_TRACE("%s: Publish Paths\n",__func__);
+//	LOG_TRACE("%s: Publish Paths\n",__func__);
 	statusPaths = ACAP_STATUS_Object("detections", "paths");
 	if( cJSON_GetObjectItem(publish,"path") && cJSON_GetObjectItem(publish,"path")->type == cJSON_True ) {
 		item = paths->child;
@@ -484,7 +496,7 @@ Detections_Callback(cJSON *list ) {
 
 	cJSON_Delete(trackers);
 	cJSON_Delete(paths);
-	LOG_TRACE("%s: Complete\n",__func__);
+//	LOG_TRACE("%s: Complete\n",__func__);
 }
 
 void
@@ -607,13 +619,17 @@ Settings_Updated_Callback( const char* service, cJSON* data) {
 	} else {
 		LOG_WARN("%s: JSON Parse error\n",__func__);
 	}
+
+	if( strcmp( service,"matrix" ) == 0 ) {
+		LOCATION_Matrix( data );
+	}
+
 	if( strcmp( service,"scene" ) == 0 ) {
 		int confidence = cJSON_GetObjectItem( data,"confidence")?cJSON_GetObjectItem( data,"confidence")->valueint:30;
 		int rotation = cJSON_GetObjectItem( data,"rotation")?cJSON_GetObjectItem( data,"rotation")->valueint:0;
 		int cog = cJSON_GetObjectItem( data,"cog")?cJSON_GetObjectItem( data,"cog")->valueint:1;
 		int maxAge = cJSON_GetObjectItem( data,"maxAge")?cJSON_GetObjectItem( data,"maxAge")->valueint:86400;
-		int low_tracker_confidence = cJSON_GetObjectItem( data,"tracker_confidence")?cJSON_GetObjectItem( data,"tracker_confidence")->type==cJSON_True:0;
-		ObjectDetection_Set( confidence, rotation, cog, maxAge, low_tracker_confidence );
+		ObjectDetection_Set( confidence, rotation, cog, maxAge );
 	}
 }
 
@@ -638,7 +654,10 @@ main(void) {
 
 
 	ObjectDetection_Init( Detections_Callback );
-	g_timeout_add_seconds(15 * 60, Config_Update_Callback, NULL);	
+	g_timeout_add_seconds(15 * 60, Config_Update_Callback, NULL);
+	
+	LOCATION_Init();
+	
 	main_loop = g_main_loop_new(NULL, FALSE);
     GSource *signal_source = g_unix_signal_source_new(SIGTERM);
     if (signal_source) {
