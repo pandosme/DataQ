@@ -15,10 +15,12 @@ html, body, #wrapper {
 
 /* Video/Map Containers */
 #video-view, #map {
-  height: 400px;
-  position: relative;
-  background: #f8f9fa;
+    height: 450px;
+    position: relative;
+    background: #f8f9fa;
+    overflow: hidden; /* Add this to prevent markers from overflowing */
 }
+
 
 #video {
     position: absolute;
@@ -26,6 +28,7 @@ html, body, #wrapper {
     left: 0;
     width: 100%;
     height: 100%;
+    object-fit: contain; /* Add this to maintain aspect ratio */
     z-index: 1;
 }
 
@@ -390,6 +393,17 @@ input:checked + .slider:before {
 
 .location-content.hidden {
     display: none;
+}
+
+.publish-control {
+    display: flex;
+    align-items: center;
+}
+
+.switch-label {
+    margin-left: 10px;
+    font-size: 1.5rem;
+    vertical-align: middle;
 }
 
 * Responsive Adjustments */

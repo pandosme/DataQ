@@ -119,7 +119,11 @@ MQTT Heartbeat published every 15 minutes
 
 # History
 
-### 1.2.8	February 12, 2025
+### 1.3.0	February 25, 2025
+- Added Geo Location for trackers.  Add 4 markers in the video view by clicking and move the corresponding map marker to the correct position.
+- Update the pages for better control.
+
+### 1.2.8	February 22, 2025
 - Created a new Menu "Scene" to be used to monitor and configure scene behaviour
 - Added support for enabling low confident trackers.
 - Added temporarily enabling publishing for objects needed for a specific page if the publishing is disabled. The publishing will be disabled again when leaving the page.

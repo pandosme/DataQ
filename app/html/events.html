@@ -38,55 +38,73 @@
     
     <div id="page-content-wrapper" class="p-0">
         <div class="container-fluid">
-            <div class="row mt-3">
-                <!-- Topics Card -->
-				<div class="col-6">
-					<div class="card">
-						<div class="card-header">
-							<h5 class="card-title mb-0">Topics to be published</h5>
+			<div class="col-12">		
+				<div class="card">
+					<div class="card-header">
+						<div class="publish-control">
+							<label class="switch">
+								<input type="checkbox" id="pageToggle">
+								<span class="slider round"></span>
+							</label>
+							<span class="switch-label">Publish Events</span>
 						</div>
-						<div class="alert alert-warning alert-dismissible fade d-none" id="liveDataAlert" role="alert">
-							<small id="liveDataMessage"></small>
-							<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-						</div>
-						
-						<div class="card-body">
-							<table class="table table-hover">
-								<thead>
-									<tr>
-										<th width="40px"></th>
-										<th>Event</th>
-										<th>Subscription topic</th>
-									</tr>
-								</thead>
-								<tbody id="topicsList">
-								</tbody>
-							</table>
+					</div>
+					<div id="locationContent" class="location-content">
+						<div class="card-body" id="settings-form">
+				
+							<div class="row mt-3">
+								<!-- Topics Card -->
+								<div class="col-6">
+									<div class="card">
+										<div class="card-header">
+											<h5 class="card-title mb-0">Topics to be published</h5>
+										</div>
+										<div class="alert alert-warning alert-dismissible fade d-none" id="liveDataAlert" role="alert">
+											<small id="liveDataMessage"></small>
+											<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+										</div>
+										
+										<div class="card-body">
+											<table class="table table-hover">
+												<thead>
+													<tr>
+														<th width="40px"></th>
+														<th>Event</th>
+														<th>Subscription topic</th>
+													</tr>
+												</thead>
+												<tbody id="topicsList">
+												</tbody>
+											</table>
+										</div>
+									</div>
+								</div>
+								
+								<!-- Messages Card -->
+								<div class="col-6">
+									<div class="card">
+										<div class="card-header">
+											<h5 class="card-title mb-0">Message monitor (click to view payload)</h5>
+										</div>
+										<div class="card-body">
+											<table class="table table-hover">
+												<thead>
+													<tr>
+														<th>Timestamp</th>
+														<th>Topic</th>
+													</tr>
+												</thead>
+												<tbody id="messagesList">
+												</tbody>
+											</table>
+										</div>
+									</div>
+								</div>
+							</div>
 						</div>
 					</div>
 				</div>
-                
-                <!-- Messages Card -->
-                <div class="col-6">
-                    <div class="card">
-                        <div class="card-header">
-                            <h5 class="card-title mb-0">Message monitor (click to view payload)</h5>
-                        </div>
-                        <div class="card-body">
-                            <table class="table table-hover">
-                                <thead>
-                                    <tr>
-                                        <th>Timestamp</th>
-                                        <th>Topic</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="messagesList">
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
+			</div>
         </div>
     </div>
     <div class="toast-container position-fixed top-0 end-0 p-3">
@@ -125,6 +143,38 @@ $(document).ready(function() {
             app = data;
             document.title = app.manifest.acapPackageConf.setup.friendlyName;
             $('.sidebar-heading').text(app.manifest.acapPackageConf.setup.friendlyName);
+			
+			const toggle = document.getElementById('pageToggle');
+			const content = document.getElementById('locationContent');
+
+			toggle.checked = app.settings.publish.events;
+			content.classList.toggle('hidden', !app.settings.publish.events);
+
+			toggle.addEventListener('change', async function() {
+				try {
+					// Update the settings
+					app.settings.publish.events = this.checked;
+					var payload = {
+						publish: app.settings.publish
+					}
+					$.ajax({
+						type: "GET",
+						url: 'settings?json=' + encodeURI(JSON.stringify(payload)),
+						error: function(xhr, status, error) {
+							showToast("Calibration failed", 'danger');
+						}
+					});
+					
+					// Show/hide content
+					content.classList.toggle('hidden', !this.checked);
+				} catch (error) {
+					console.error('Failed to update geolocation setting:', error);
+					// Revert the toggle if saving failed
+					this.checked = !this.checked;
+					alert('Failed to update location settings');
+				}
+			});
+			
             populateTopics();
 			
 			if( app.settings.publish.events === false )
