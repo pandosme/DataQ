@@ -115,16 +115,16 @@ MQTT Heartbeat published every 15 minutes
 - Topics and payload specifications (Documentation pending)
 
 > **Note**: This tool deprecates and replaces SIMQTT, ObjectTracker, ObjectPath and Occupancy
-> **Note**: Use DataQ only when standard Axis device data formats don't meet your requirements.
+> **Note**: Use DataQ when standard Axis device data formats don't meet your requirements.
 
 # History
 
 ### 1.2.8	February 12, 2025
 - Created a new Menu "Scene" to be used to monitor and configure scene behaviour
-- Added support for enabling low confident trackers
-- Added temporarily enbaling publishing for objects needed for a specific page if the publishing is disabled. The publishing will be disabled again when leaving the page.
+- Added support for enabling low confident trackers.
+- Added temporarily enabling publishing for objects needed for a specific page if the publishing is disabled. The publishing will be disabled again when leaving the page.
 - Fixed MQTT stability (recurring disconnects)
-- Added WSS port and a way to enforce the client to use WSS event for pacges accessed with HTTP.  WSS will always be used when a paged os accessed over HTTP.
+- Added WSS port and a way to enforce the client to use WSS event for pages accessed with HTTP.  WSS will always be used when a paged os accessed over HTTP.
 
 ### 1.2.7	February 12, 2025
 - Fixed logic and refernce flaws.
