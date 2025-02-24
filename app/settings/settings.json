@@ -1,5 +1,7 @@
 {
 	"WS_Port": 1884,
+	"WSS_Port": 443,
+	"tls": false,
 	"publish": {
 		"events": true,
 		"detections": false,
@@ -12,7 +14,8 @@
 		"confidence": 30,
 		"rotation": 0,
 		"cog": 1,
-		"maxAge": 86400
+		"maxAge": 86400,
+		"tracker_confidence": true
 	},
 	"vehicleAttributeType": 8,
 	"detectionsFilter": {

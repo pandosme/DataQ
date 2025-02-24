@@ -68,13 +68,30 @@ void	MQTT_Delivered(void *context, MQTTClient_deliveryToken dt);
 static void MQTT_HTTP_callback(const ACAP_HTTP_Response response,const ACAP_HTTP_Request request);
 int     MQTT_Set( cJSON* settings );
 static  gboolean MQTT_Timer();
+int		MQTT_Connected();
 
+
+// Add at the top of the file
+static time_t lastActivityTime = 0;
+
+// Update activity time on any message send/receive
+void UpdateActivityTime() {
+    lastActivityTime = time(NULL);
+}
 
 cJSON*
 MQTT_Settings() {
 	if( !MQTTSettings )
 		MQTTSettings = cJSON_CreateObject();
 	return  MQTTSettings;
+}
+
+static gboolean MQTT_Yield_Handler() {
+    if (MQTT_Connected()) {
+        (*f_MQTTClient_yield)();
+        UpdateActivityTime();
+    }
+    return TRUE;  // Continue the timer
 }
 
 int
@@ -155,7 +172,7 @@ MQTT_Init( const char* acapname, MQTT_Callback_Connection callback ) {
 		MQTT_Connect();
 	cJSON_Delete(settings);
 	g_timeout_add_seconds( 30, MQTT_Timer, NULL );
-	ACAP_STATUS_SetString("mqtt", "status", "Not connected" );
+	g_timeout_add(100, MQTT_Yield_Handler, NULL);
 	LOG_TRACE("%s: Exit\n",__func__);
 	return 1;
 }
@@ -579,6 +596,8 @@ MQTT_Publish( const char *topic, const char *payload, int qos, int retained ) {
 	if( status != MQTTCLIENT_SUCCESS ) {
 		LOG_WARN("%s: Error code %d\n", __func__,status);
 		return 0;
+	} else {
+		UpdateActivityTime();
 	}
 	return 1;
 }
@@ -718,6 +737,7 @@ MQTT_Unsubscribe( const char *topic ) {
 	return 1;
 }
 
+
 void
 MQTT_Disconnected(void *context, char *cause) {
 	LOG_WARN("MQTT client disconnected from broker: %s", cause?cause:"Unknown");
@@ -725,37 +745,13 @@ MQTT_Disconnected(void *context, char *cause) {
 	ACAP_STATUS_SetBool("mqtt","connected", FALSE );
 }
 
-static gboolean
-MQTT_Timer() {
-//	LOG_TRACE("%s\n",__func__);
-	if( !client || !MQTTSettings )
-		return TRUE;
-	if( !MQTT_Connected() && cJSON_GetObjectItem(MQTTSettings,"connect")->type == cJSON_True ) {
-		LOG("Trying to reconnect\n");
-		ACAP_STATUS_SetString("mqtt","status", "Reconnecting" );
-		ACAP_STATUS_SetBool("mqtt","connected", FALSE );
-		MQTT_Connect();
-		return TRUE;
-	}
-	if(MQTT_Connected() ) {
-		ACAP_STATUS_SetString("mqtt","status", "Connected" );
-		ACAP_STATUS_SetBool("mqtt","connected", TRUE );
-	}
-	
-/*
-	if( !(*f_MQTTClient_isConnected)(client) ) {
-		if( cJSON_GetObjectItem(MQTTSettings,"connect")->type == cJSON_True ) {
-			LOG_TRACE("%s: Disconnected.  Trying to reconnect\n",__func__);
-			if( MQTT_Connect() )
-				MQTT_ACAP_Connection_Callback( MQTT_RECONNECT );
-		}
-		return TRUE;
-	} 
-*/	
-	(*f_MQTTClient_yield)();
-	return TRUE;
-}
 
+static gboolean MQTT_Timer() {
+    if (!MQTT_Connected() && cJSON_GetObjectItem(MQTTSettings,"connect")->type == cJSON_True) {
+        MQTT_Connect();
+    }
+    return TRUE;
+}
 
 int MQTT_LoadLib() {
 	DIR *dir;

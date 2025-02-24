@@ -33,6 +33,7 @@ cJSON* activeDetections = 0;
 cJSON* detectionsFilter = 0;
 
 int minimumConfidence = 30;
+int low_tracker_confidence = 0;
 int centerOfGravity = 0;
 int dataRotation = 0;
 int maxAge = 86400;
@@ -206,7 +207,7 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 
         VOD__Detection *recv_det = recv_scene->detections[i];
 
-		if( recv_det->detection_status != VOD__DETECTION__DETECTION_STATUS__TRACKED_CONFIDENT )
+		if( low_tracker_confidence && recv_det->detection_status != VOD__DETECTION__DETECTION_STATUS__TRACKED_CONFIDENT )
 			continue;
 
 		objectID = (int)recv_det->id;
@@ -430,11 +431,12 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 void *ObjectDetection_some_user_data = 0;
 
 void
-ObjectDetection_Set( int confidence, int rotation, int cog, int maxAgeInSeconds ) {
+ObjectDetection_Set( int confidence, int rotation, int cog, int maxAgeInSeconds, int tracker_confidence ) {
 	minimumConfidence = confidence;
 	centerOfGravity = cog;
 	dataRotation = rotation;
 	maxAge = maxAgeInSeconds;
+	low_tracker_confidence = tracker_confidence;
 }
 
 int

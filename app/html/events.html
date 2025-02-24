@@ -25,6 +25,7 @@
         <div class="list-group list-group-flush">
             <a href="index.html" class="list-group-item list-group-item-action">Publish</a>
             <a href="events.html" class="list-group-item list-group-item-action active">Events</a>
+			<a href="scene.html" class="list-group-item list-group-item-action">Scene</a>
             <a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
             <a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
             <a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
@@ -157,13 +158,18 @@ $(document).ready(function() {
 			delete MQTT_Client;
 		
 		// Use WSS if page is loaded over HTTPS
-		MQTT_Client = new Paho.MQTT.Client(app.mqtt.address, app.settings.WS_Port, clientID);
+		
+		var tls = app.settings.tls;
+		if( location.protocol === 'https:')
+			tls = true;
+		var port = tls?app.settings.WSS_Port:app.settings.WS_Port;
+
+		MQTT_Client = new Paho.MQTT.Client(app.mqtt.address, port, clientID);
 		
 		MQTT_Client.onConnectionLost = onConnectionLost;
 		MQTT_Client.onMessageArrived = onMessageArrived;
-		
 		var connectionOptions = {
-			useSSL: (location.protocol === 'https:'),
+			useSSL: tls,
 			timeout: 3,
 			onSuccess: onConnect,
 			onFailure: onFailure
@@ -177,11 +183,9 @@ $(document).ready(function() {
 		MQTT_Client.connect(connectionOptions);
 	}
 
-
     function onConnect() {
         var topic = app.mqtt.preTopic + "/event/" + app.device.serial + "/#";
         MQTT_Client.subscribe(topic);
-        showToast("Web page connected to broker","success");
     }
 
 	function onFailure(message) {

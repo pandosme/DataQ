@@ -612,7 +612,8 @@ Settings_Updated_Callback( const char* service, cJSON* data) {
 		int rotation = cJSON_GetObjectItem( data,"rotation")?cJSON_GetObjectItem( data,"rotation")->valueint:0;
 		int cog = cJSON_GetObjectItem( data,"cog")?cJSON_GetObjectItem( data,"cog")->valueint:1;
 		int maxAge = cJSON_GetObjectItem( data,"maxAge")?cJSON_GetObjectItem( data,"maxAge")->valueint:86400;
-		ObjectDetection_Set( confidence, rotation, cog, maxAge );
+		int low_tracker_confidence = cJSON_GetObjectItem( data,"tracker_confidence")?cJSON_GetObjectItem( data,"tracker_confidence")->type==cJSON_True:0;
+		ObjectDetection_Set( confidence, rotation, cog, maxAge, low_tracker_confidence );
 	}
 }
 
