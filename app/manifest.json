@@ -22,7 +22,8 @@
 				{"name": "status","access": "admin","type": "transferCgi"},
 				{"name": "mqtt","access": "admin","type": "transferCgi"},
 				{"name": "certs","access": "admin","type": "transferCgi"},
-				{"name": "objectdetections","access": "admin","type": "transferCgi"}
+				{"name": "objectdetections","access": "admin","type": "transferCgi"},
+				{"name": "transform","access": "admin","type": "transferCgi"}
 			]
 		}
     }
