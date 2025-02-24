@@ -103,6 +103,11 @@ ProcessTrackers( cJSON* detections ) {
 	cJSON* settings = ACAP_Get_Config("settings");
 	if(!settings)
 		return response;
+
+	int geolocation = 0;
+	if( cJSON_GetObjectItem(settings,"geolocation") && cJSON_GetObjectItem(settings,"geolocation")->type==cJSON_True)
+		geolocation = 1;
+	
 	cJSON* trackerFilter = cJSON_GetObjectItem(settings,"trackerFilter");
 	if( !trackerFilter )
 		return response;
@@ -142,7 +147,7 @@ ProcessTrackers( cJSON* detections ) {
 				int distance = sqrt( (dx*dx) + (dy*dy) ) / 10.0;
 				double lat = 0;
 				double lng = 0;
-				if( LOCATION_transform((int)cx, (int)cy, &lat, &lng) ) {
+				if( geolocation && LOCATION_transform((int)cx, (int)cy, &lat, &lng) ) {
 					if( cJSON_GetObjectItem(item,"lat") ) {
 						cJSON_ReplaceItemInObject(item,"lat",cJSON_CreateNumber(lat));
 						cJSON_ReplaceItemInObject(item,"lng",cJSON_CreateNumber(lng));
@@ -629,7 +634,10 @@ Settings_Updated_Callback( const char* service, cJSON* data) {
 		int rotation = cJSON_GetObjectItem( data,"rotation")?cJSON_GetObjectItem( data,"rotation")->valueint:0;
 		int cog = cJSON_GetObjectItem( data,"cog")?cJSON_GetObjectItem( data,"cog")->valueint:1;
 		int maxAge = cJSON_GetObjectItem( data,"maxAge")?cJSON_GetObjectItem( data,"maxAge")->valueint:86400;
-		ObjectDetection_Set( confidence, rotation, cog, maxAge );
+		int tracker_confidence = 1;
+		if( cJSON_GetObjectItem(data,"tracker_confidence") && cJSON_GetObjectItem( data,"tracker_confidence")->type==cJSON_False)
+			tracker_confidence = 0;
+		ObjectDetection_Set( confidence, rotation, cog, maxAge, tracker_confidence );
 	}
 }
 
