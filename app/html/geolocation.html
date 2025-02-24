@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Geo Location</title>
+  <link rel="stylesheet" href="css/bootstrap.min.css">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="js/jquery-3.7.1.min.js"></script>
+  <script src="js/bootstrap.bundle.min.js"></script>
+  <script src="js/media-stream-player.min.js"></script>
+  <script src="js/paho-mqtt-min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/9.4.4/math.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+<div class="d-flex" id="wrapper">
+  <!-- Sidebar -->
+  <div class="bg-light border-right" id="sidebar-wrapper">
+    <div class="sidebar-heading">&nbsp;</div>
+    <div class="list-group list-group-flush">
+      <a href="index.html" class="list-group-item list-group-item-action">Overview</a>
+      <a href="events.html" class="list-group-item list-group-item-action">Events</a>
+	  <a href="scene.html" class="list-group-item list-group-item-action">Scene</a>
+      <a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
+      <a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
+      <a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
+      <a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
+	  <a href="geolocation.html" class="list-group-item list-group-item-action active">Geo Location</a>
+      <a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
+      <a href="about.html" class="list-group-item list-group-item-action">About</a>
+    </div>
+  </div>
+
+  <!-- Page Content -->
+  <div id="page-content-wrapper">
+    <div class="container-fluid">
+		<div class="geolocation-control">
+			<label class="switch">
+				<input type="checkbox" id="geolocationToggle">
+				<span class="slider round"></span>
+			</label>
+			<span class="switch-label">Include Geo Location in trackers</span>
+		</div>
+		<div id="locationContent" class="location-content">	
+			<!-- Mode Selector -->
+			<div class="btn-group mb-3" role="group" aria-label="Mode Selector">
+				<button type="button" id="defaultModeBtn" class="btn mode-button">Monitor</button>
+				<button type="button" id="editMarkersModeBtn" class="btn mode-button">Edit Markers</button>
+				<button type="button" id="validateCalibrationModeBtn" class="btn mode-button">Validate</button>
+			</div>
+
+			<!-- Alert message -->
+			<div class="alert alert-warning alert-dismissible fade d-none" id="liveDataAlert" role="alert">
+			<small id="liveDataMessage"></small>
+			<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+			</div>
+
+			<!-- Video and Map Section -->
+			<div class="row">
+				<div class="col-md-6">
+					<div id="video-view" aria-label="Camera feed" style="width: 800px;">
+						<div id="video"></div>
+						<div id="marker-canvas"></div>
+						<canvas id="detection-canvas" width="1000" height="1000" style="width:100%; height:100%; position:absolute; top:0px; left:0px;"></canvas>
+					</div>
+					<div class="mt-3">
+						<button type="button" id="saveBtn" class="btn btn-success btn-sm d-none">Save & Calibrate</button>
+					</div>
+				</div>
+
+				<div class="col-md-6">
+					<div id="map"></div>
+					<div class="mt-3">
+						<button type="button" id="saveMapBtn" class="btn btn-success btn-sm d-none">Save Map</button>
+					</div>
+				</div>
+			</div>
+		</div>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div class="toast-container position-fixed top-0 end-0 p-3"></div>
+</div>
+
+<script>
+// Global State
+const AppState = {
+    currentMode: 'default',
+    markers: new Map(),
+    nextMarkerId: 0,
+    map: null,
+    geoData: { lat: 0, lng: 0 },
+    videoAspect: '16:9',
+    validationMarker: null,
+    trackers: new Map()  // Add this line to store tracker markers
+};
+
+var width = 800;
+var height = 450;
+var forcePublish = false;
+
+let MQTT_Client = null;
+const mqttReconnectInterval = 5000;
+
+// Initialization
+$(document).ready(() => {
+    initializeApplication();
+});
+
+
+async function initializeApplication() {
+    try {
+        await loadAppConfig();
+        await loadGeolocation();
+        initializeMap();
+        initializeVideo();
+        setupEventHandlers();
+		$('#defaultModeBtn').addClass('active');
+		AppState.markers.forEach(marker => {
+			marker.videoMarker.style.display = 'none';
+			marker.mapMarker.remove();
+		});
+		
+        if (app.status.mqtt.connected)
+			ConnectWebSocketClient();
+    } catch (error) {
+        handleInitError(error);
+    }
+}
+
+async function loadAppConfig() {
+    const toggle = document.getElementById('geolocationToggle');
+    const content = document.getElementById('locationContent');
+    
+    try {
+        app = await $.ajax({ url: 'app', dataType: 'json' });
+        AppState.videoAspect = app.device.aspect || '16:9';
+        document.title = app.manifest.acapPackageConf.setup.friendlyName;
+        $('.sidebar-heading').text(document.title);
+        
+        // Store marker data for later initialization
+        AppState.savedMarkers = app.settings.markers || [];
+
+		// Initialize switch state from settings
+		toggle.checked = app.settings.geolocation;
+		content.classList.toggle('hidden', !app.settings.geolocation);
+		
+		toggle.addEventListener('change', async function() {
+			try {
+				// Update the settings
+				app.settings.geolocation = this.checked;
+				var payload = {
+					geolocation: app.settings.geolocation
+				}
+                $.ajax({
+                    type: "GET",
+                    url: 'settings?json=' + encodeURI(JSON.stringify(payload)),
+                    error: function(xhr, status, error) {
+                        showToast("Calibration failed", 'danger');
+                    }
+                });
+				
+				// Show/hide content
+				content.classList.toggle('hidden', !this.checked);
+			} catch (error) {
+				console.error('Failed to update geolocation setting:', error);
+				// Revert the toggle if saving failed
+				this.checked = !this.checked;
+				alert('Failed to update location settings');
+			}
+		});
+        initializeVideo();
+        if (app.status.mqtt.connected)
+			ConnectWebSocketClient();
+		setupResizeHandler();
+    } catch (error) {
+        showToast("Application config load failed", "danger");
+    }
+}
+
+async function loadGeolocation() {
+    try {
+        const data = await $.ajax({ 
+            url: '/axis-cgi/geolocation/get.cgi',
+            dataType: 'xml'
+        });
+        AppState.geoData.lat = parseFloat($(data).find('Lat').text());
+        AppState.geoData.lng = parseFloat($(data).find('Lng').text());
+        validateCoordinates();
+    } catch (error) {
+        showToast("Geolocation service unavailable", "warning");
+    }
+}
+
+function formatLongitude(lng) {
+    // Ensure 3 digits before decimal point
+    const absLng = Math.abs(lng);
+    const formatted = absLng < 100 ? 
+        (absLng < 10 ? "00" + absLng : "0" + absLng) : 
+        absLng.toString();
+    
+    return (lng < 0 ? "-" : "") + formatted;
+}
+
+function saveMapLocation() {
+    if (AppState.currentMode !== 'editMarkers') return;
+    
+    const center = AppState.map.getCenter();
+    // Format as DD (Decimal Degrees) with proper padding
+    const lat = center.lat.toFixed(8);
+    const lng = formatLongitude(center.lng.toFixed(8));
+    
+    $.ajax({
+        type: "GET",
+        url: '/axis-cgi/geolocation/set.cgi',
+        data: {
+            lat: lat,
+            lng: lng
+        },
+        success: function(response) {
+            // Parse XML response to check for success
+            if ($(response).find('Success').length > 0) {
+                showToast("Camera location updated", 'success');
+                AppState.geoData.lat = parseFloat(lat);
+                AppState.geoData.lng = parseFloat(lng);
+            } else {
+                const errorDesc = $(response).find('ErrorDescription').first().text();
+                showToast("Failed to update location: " + errorDesc, 'danger');
+            }
+        },
+        error: function(xhr, status, error) {
+            showToast("Failed to update camera location", 'danger');
+        }
+    });
+}
+
+function initializeMap() {
+    if (!document.getElementById('map')) return;
+    
+    // Set initial zoom level based on coordinates
+    const zoomLevel = (AppState.geoData.lat === 0 && AppState.geoData.lng === 0) ? 3 : 18;
+    
+    AppState.map = L.map('map', {
+        maxZoom: 22,
+        zoomControl: true
+    }).setView([AppState.geoData.lat, AppState.geoData.lng], zoomLevel);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap',
+        maxZoom: 22,
+        maxNativeZoom: 19
+    }).addTo(AppState.map);
+    
+    // Initialize saved markers after map is created
+    initializeSavedMarkers();
+}
+
+function initializeSavedMarkers() {
+    if (!AppState.savedMarkers) return;
+    
+    AppState.savedMarkers.forEach(markerData => {
+        const [normalizedX, normalizedY, lat, lng] = markerData;
+        
+        // Create video marker element
+        const videoMarker = document.createElement('div');
+        videoMarker.className = 'marker';
+        videoMarker.innerHTML = '<span class="marker-label">' + AppState.nextMarkerId + '</span>';
+        videoMarker.style.display = 'none';  // Initially hidden
+        
+        // Convert normalized coordinates to view coordinates
+        const videoElement = document.getElementById('video-view');
+        const viewCoords = normalizedToViewCoords(normalizedX, normalizedY, videoElement);
+        videoMarker.style.left = viewCoords.x + 'px';
+        videoMarker.style.top = viewCoords.y + 'px';
+        
+        // Create map marker
+        const mapMarker = L.marker([lat, lng], {
+            draggable: true
+        }).addTo(AppState.map);
+        
+        // Store both markers
+        const id = 'marker-' + AppState.nextMarkerId++;
+        AppState.markers.set(id, {
+            id: id,
+            normalizedX: normalizedX,
+            normalizedY: normalizedY,
+            videoMarker: videoMarker,
+            mapMarker: mapMarker
+        });
+
+        document.getElementById('video-view').appendChild(videoMarker);
+    });
+}
+
+function initializeVideo() {
+	width = 800;
+	height = 450;
+	var videoWidth = 1280;
+	var videoHeight = 720;
+
+	switch (app.device.aspect) {
+		case '4:3': width = 800; height = 600; videoWidth = 800; videoHeight = 600;break;
+		case '1:1': width = 800; height = 800; videoWidth = 640; videoHeight = 640;break;
+		case '16:10': width = 800; height = 500; videoWidth = 800; videoHeight = 500;break;
+		default: width = 800; height = 450; videoWidth = 1280; videoHeight = 720;break;
+	}
+
+	if( app.device.rotation === 90 || app.device.rotation === 270 ) {
+		var temp = width;
+		width = height;
+		height = temp;
+	}
+
+	$("#video-view").css("width", width + "px");
+	$("#video-view").css("height", height + "px");
+
+    const secureConnection = location.protocol === 'https:' ? ' secure=true' : '';
+    const player = '<media-stream-player hostname="' + window.location.hostname + '" ' + 
+        secureConnection + ' format="RTP_H264" compression="40" audio="0" resolution="' + 
+        videoWidth + 'x' + videoHeight + '" variant="basic" autoplay></media-stream-player>';
+
+    // Update only the video div instead of video-view
+    const videoDiv = document.getElementById('video');
+    videoDiv.innerHTML = player;
+}
+
+// Marker Management
+function createMarker(viewX, viewY) {
+    if (AppState.currentMode !== 'editMarkers') return;
+
+    const videoElement = document.getElementById('video-view');
+    const normalized = viewToNormalizedCoords(viewX, viewY, videoElement);
+    const id = 'marker-' + AppState.nextMarkerId++;
+    
+    // Create video marker element
+    const videoMarker = document.createElement('div');
+    videoMarker.className = 'marker';
+    videoMarker.innerHTML = '<span class="marker-label">' + AppState.nextMarkerId + '</span>';
+    
+    // Convert normalized coordinates back to view coordinates for display
+    const viewCoords = normalizedToViewCoords(normalized.x, normalized.y, videoElement);
+    videoMarker.style.left = viewCoords.x + 'px';
+    videoMarker.style.top = viewCoords.y + 'px';
+    
+    // Create map marker
+    const mapMarker = L.marker(AppState.map.getCenter(), {
+        draggable: true
+    }).addTo(AppState.map);
+    
+    // Store normalized coordinates
+    AppState.markers.set(id, {
+        id: id,
+        normalizedX: normalized.x,
+        normalizedY: normalized.y,
+        videoMarker: videoMarker,
+        mapMarker: mapMarker
+    });
+
+    document.getElementById('video-view').appendChild(videoMarker);
+}
+
+function selectMarker(id) {
+    // Reset all video markers to default state
+    AppState.markers.forEach(marker => {
+        marker.videoMarker.classList.remove('selected');
+    });
+
+    // Highlight selected video marker only
+    const selectedMarker = AppState.markers.get(id);
+    if (selectedMarker) {
+        selectedMarker.videoMarker.classList.add('selected');
+    }
+}
+
+function deleteMarker(id) {
+    if (!AppState.markers.has(id)) return;
+    
+    const marker = AppState.markers.get(id);
+    marker.videoMarker.remove();
+    AppState.map.removeLayer(marker.mapMarker);
+    AppState.markers.delete(id);
+}
+
+function calculateHomography(points) {
+    if (points.length < 4) {
+        throw new Error('At least 4 points required');
+    }
+
+    try {
+        // Build the A matrix for least squares
+        const A = math.matrix(points.flatMap(({ video: { x, y }, map: { lat, lng } }) => [
+            [x, y, 1, 0, 0, 0, -x * lng, -y * lng],
+            [0, 0, 0, x, y, 1, -x * lat, -y * lat]
+        ]));
+
+        // Build the B vector as a matrix
+        const B = math.matrix(points.flatMap(p => [p.map.lng, p.map.lat]));
+
+        // Solve H using LU decomposition
+        const H = math.lusolve(math.multiply(math.transpose(A), A), 
+                             math.multiply(math.transpose(A), B));
+
+        // Convert to array and normalize
+        const result = H.valueOf().flat();
+        return [
+            result[0], result[1], result[2],
+            result[3], result[4], result[5],
+            result[6], result[7], 1
+        ];
+    } catch (error) {
+        console.error('Homography calculation failed:', error);
+        throw new Error('Failed to calculate homography matrix');
+    }
+}
+
+function saveMarkers() {
+    if (AppState.currentMode !== 'editMarkers') return;
+    
+    // First save markers as before
+    const markerArray = [];
+    const points = [];
+    
+    AppState.markers.forEach(marker => {
+        const latlng = marker.mapMarker.getLatLng();
+        markerArray.push([
+            parseInt(marker.normalizedX),
+            parseInt(marker.normalizedY),
+            latlng.lat,
+            latlng.lng
+        ]);
+        
+        // Create points array for homography
+        points.push({
+            video: {
+                x: marker.normalizedX,
+                y: marker.normalizedY
+            },
+            map: {
+                lat: latlng.lat,
+                lng: latlng.lng
+            }
+        });
+    });
+    
+    // First save markers
+    const markersPayload = {
+        "markers": markerArray
+    };
+    
+    $.ajax({
+        type: "GET",
+        url: 'settings?json=' + encodeURI(JSON.stringify(markersPayload)),
+        success: function(response) {
+            // After markers are saved, calculate and save homography
+            try {
+                const matrix = calculateHomography(points);
+                const matrixPayload = {
+                    "matrix": matrix
+                };
+                
+                $.ajax({
+                    type: "GET",
+                    url: 'settings?json=' + encodeURI(JSON.stringify(matrixPayload)),
+                    success: function(response) {
+                        showToast("Calibration complete", 'success');
+                    },
+                    error: function(xhr, status, error) {
+                        showToast("Calibration failed", 'danger');
+                    }
+                });
+            } catch (error) {
+                showToast(error.message, 'danger');
+            }
+        },
+        error: function(xhr, status, error) {
+            showToast("Failed to save markers", 'danger');
+        }
+    });
+}
+
+function calculateAndSaveMatrix(markers) {
+    if (markers.length < 4) {
+        showToast("At least 4 markers needed for calibration", 'warning');
+        return;
+    }
+
+    // Create source and destination point arrays
+    const srcPoints = markers.map(m => ({ x: m[0], y: m[1] }));
+    const dstPoints = markers.map(m => ({ x: m[2], y: m[3] }));
+    
+    // Calculate homography matrix
+    const matrix = computeHomography(srcPoints, dstPoints);
+    
+    // Save the calculated matrix
+    const matrixPayload = {
+        "matrix": matrix
+    };
+    
+    $.ajax({
+        type: "GET",
+        url: 'settings?json=' + encodeURI(JSON.stringify(matrixPayload)),
+        success: function(response) {
+            showToast("Calibration complete", 'success');
+        },
+        error: function(xhr, status, error) {
+            showToast("Calibration failed", 'danger');
+        }
+    });
+}
+
+function createVideoMarkerElement(id, x, y) {
+    const marker = document.createElement('div');
+    marker.className = 'marker';
+    marker.style.left = x + 'px';
+    marker.style.top = y + 'px';
+    marker.innerHTML = '<span class="marker-label">' + AppState.nextMarkerId + '</span>';
+    document.getElementById('video-view').appendChild(marker);
+    return marker;
+}
+
+function createMapMarker(geo) {
+    return L.marker([geo.lat, geo.lng], {
+        draggable: true
+    }).addTo(AppState.map);
+}
+
+// Event Handling
+function setupEventHandlers() {
+    $('#defaultModeBtn').click(() => setMode('default'));
+    $('#editMarkersModeBtn').click(() => setMode('editMarkers'));
+    $('#validateCalibrationModeBtn').click(() => setMode('validate'));
+	$('#saveBtn').click(saveMarkers);
+	$('#saveMapBtn').click(saveMapLocation);
+}
+
+function setMode(mode) {
+    AppState.currentMode = mode;
+
+    $('.mode-button').removeClass('active').css('background-color', '#f8f9fa');
+    
+    // Hide all markers first
+    AppState.markers.forEach(marker => {
+        marker.videoMarker.style.display = 'none';
+        marker.mapMarker.remove();
+    });
+
+    // Show/hide save button based on mode
+    $('#saveBtn').toggleClass('d-none', mode !== 'editMarkers');
+	$('#saveMapBtn').toggleClass('d-none', mode !== 'editMarkers');	
+
+    switch(mode) {
+        case 'default':
+            $('#defaultModeBtn').addClass('active');
+			AppState.markers.forEach(marker => {
+				marker.videoMarker.style.display = 'none';
+				marker.mapMarker.remove();
+			});
+            break;
+            
+        case 'editMarkers':
+            $('#editMarkersModeBtn').addClass('active');
+            // Show all markers
+            AppState.markers.forEach(marker => {
+                marker.videoMarker.style.display = 'block';
+                marker.mapMarker.addTo(AppState.map);
+            });
+            setupVideoMarkerHandlers();
+            setupMapMarkerHandlers();
+            break;
+            
+		case 'validate':
+			 $('#validateCalibrationModeBtn').addClass('active');
+			// Hide all markers
+			AppState.markers.forEach(marker => {
+				marker.videoMarker.style.display = 'none';
+				marker.mapMarker.remove();
+			});
+			setupValidationHandlers();
+			break;
+    }
+}
+
+function updateInteractionHandlers() {
+    // Clear existing handlers
+    $('#video-view').off('mousedown contextmenu');
+    if (AppState.map) AppState.map.off('mousedown');
+
+    // Set up mode-specific handlers
+    switch(AppState.currentMode) {
+        case 'editMarkers':
+            setupVideoMarkerHandlers();
+            setupMapMarkerHandlers();
+            break;
+        case 'validate':
+            setupValidationHandlers();
+            break;
+        default:
+            // No special handlers for default mode
+            break;
+    }
+}
+
+function setupVideoMarkerHandlers() {
+    $('#video-view').off('mousedown contextmenu').on({
+        'mousedown': function(e) {
+            if (AppState.currentMode !== 'editMarkers') return;
+            
+            const rect = this.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const existingMarker = findMarkerAtPosition(x, y);
+            if (existingMarker) {
+                if (e.button === 2) {  // Right click
+                    e.preventDefault();
+                    deleteMarker(existingMarker.id);
+                } else {
+                    e.preventDefault();
+                    startDragging(existingMarker, e);
+                    selectMarker(existingMarker.id);
+                }
+            } else if (e.button === 0) {  // Left click
+                createMarker(x, y);
+            }
+        },
+        'contextmenu': function(e) {
+            // Prevent context menu from showing
+            e.preventDefault();
+        }
+    });
+}
+
+
+function startDragging(marker, startEvent) {
+    let isDragging = true;
+    
+    function onMouseMove(e) {
+        if (!isDragging) return;
+        
+        const videoElement = document.getElementById('video-view');
+        const rect = videoElement.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        // Update normalized coordinates
+        const normalized = viewToNormalizedCoords(x, y, videoElement);
+        marker.normalizedX = normalized.x;
+        marker.normalizedY = normalized.y;
+        
+        // Update display position
+        marker.videoMarker.style.left = x + 'px';
+        marker.videoMarker.style.top = y + 'px';
+    }
+    
+    function onMouseUp() {
+        isDragging = false;
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+    }
+    
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+}
+
+function setupMapMarkerHandlers() {
+    if (!AppState.map) return;
+
+    AppState.markers.forEach(marker => {
+        marker.mapMarker.on('dragend', function(e) {
+            const latlng = e.target.getLatLng();
+            console.log('Map marker moved:', latlng);
+            
+            // Store the new position
+            marker.mapMarker.setLatLng(latlng);
+        });
+    });
+}
+
+function setupValidationHandlers() {
+    $('#video-view').off('click').on('click', function(e) {
+        if (AppState.currentMode !== 'validate') return;
+        
+        const rect = this.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        // Get normalized coordinates
+        const normalized = viewToNormalizedCoords(x, y, this);
+        
+        // Send coordinates for validation
+        var url = 'transform?x=' + normalized.x + '&y=' + normalized.y;
+        $.ajax({
+            type: "GET",
+            dataType: 'json',
+            url: url,
+            success: function(response) {
+                // Remove previous validation marker if exists
+                if(AppState.validationMarker) {
+                    AppState.map.removeLayer(AppState.validationMarker);
+                }
+                
+                // Create new validation marker
+                AppState.validationMarker = L.marker([response.lat, response.lng], {
+                    icon: L.divIcon({className: 'validation-marker'})
+                }).addTo(AppState.map);
+            },
+            error: function(xhr, status, error) {
+                showToast("Transformation failed", 'warning');
+            }
+        });
+    });
+}
+
+// Helper Functions
+function getVideoAspectRatio() {
+    const videoElement = document.getElementById('video');
+    
+    // If video metadata is loaded, use actual video dimensions
+    if (videoElement.videoWidth && videoElement.videoHeight) {
+        return videoElement.videoWidth / videoElement.videoHeight;
+    }
+    
+    // Fallback to configured aspect ratio from AppState
+    if (AppState.videoAspect) {
+        const [width, height] = AppState.videoAspect.split(':').map(Number);
+        return width / height;
+    }
+    
+    // Default to 16:9 if no other information is available
+    return 16/9;
+}
+
+function viewToNormalizedCoords(viewX, viewY, videoElement) {
+    const rect = videoElement.getBoundingClientRect();
+    const videoAspect = getVideoAspectRatio();
+    const containerAspect = rect.width / rect.height;
+    
+    let effectiveWidth = rect.width;
+    let effectiveHeight = rect.height;
+    
+    if (containerAspect > videoAspect) {
+        effectiveWidth = effectiveHeight * videoAspect;
+    } else {
+        effectiveHeight = effectiveWidth / videoAspect;
+    }
+    
+    return {
+        x: Math.round((viewX / effectiveWidth) * 1000),
+        y: Math.round((viewY / effectiveHeight) * 1000)
+    };
+}
+
+function normalizedToViewCoords(normalizedX, normalizedY, videoElement) {
+    // Get the actual video element, not the container
+    const video = document.getElementById('video');
+    const rect = video.getBoundingClientRect();
+    
+    // Calculate scaling factors for both dimensions
+    const scaleX = rect.width / 1000;
+    const scaleY = rect.height / 1000;
+    
+    // Apply scaling uniformly
+    return {
+        x: normalizedX * scaleX,
+        y: normalizedY * scaleY
+    };
+}
+
+function setupResizeHandler() {
+    const resizeObserver = new ResizeObserver(entries => {
+        for (let entry of entries) {
+            updateAllMarkerPositions();
+        }
+    });
+    
+    // Handle window zoom changes
+    window.addEventListener('resize', () => {
+        updateAllMarkerPositions();
+    });
+    
+    // Handle browser zoom level changes
+    window.visualViewport.addEventListener('resize', () => {
+        updateAllMarkerPositions();
+    });
+    
+    // Observe video container for size changes
+    resizeObserver.observe(document.getElementById('video-view'));
+    
+    // Initial position update
+    updateAllMarkerPositions();
+}
+
+function updateAllMarkerPositions() {
+    const video = document.getElementById('video');
+    const markerCanvas = document.getElementById('marker-canvas');
+    
+    // Ensure marker canvas matches video dimensions exactly
+    markerCanvas.style.width = video.offsetWidth + 'px';
+    markerCanvas.style.height = video.offsetHeight + 'px';
+    
+    AppState.markers.forEach(marker => {
+        const viewCoords = normalizedToViewCoords(
+            marker.normalizedX,
+            marker.normalizedY,
+            video
+        );
+        marker.videoMarker.style.left = viewCoords.x + 'px';
+        marker.videoMarker.style.top = viewCoords.y + 'px';
+    });
+}
+
+function getVideoDimensions(aspect) {
+    switch(aspect) {
+        case '4:3': return [800, 600];
+        case '1:1': return [640, 640];
+        default: return [1280, 720];
+    }
+}
+
+function transformVideoToGeo(x, y) {
+    if (!app?.calibration?.matrix) return null;
+    const m = app.calibration.matrix;
+    const d = m[6] * x + m[7] * y + 1;
+    return {
+        lat: (m[3] * x + m[4] * y + m[5]) / d,
+        lng: (m[0] * x + m[1] * y + m[2]) / d
+    };
+}
+
+function findMarkerAtPosition(x, y) {
+    return Array.from(AppState.markers.values()).find(marker => {
+        const rect = marker.videoMarker.getBoundingClientRect();
+        const markerX = rect.left + rect.width/2;
+        const markerY = rect.top + rect.height/2;
+        const viewRect = document.getElementById('video-view').getBoundingClientRect();
+        
+        // Convert to video-view relative coordinates
+        const relativeMarkerX = markerX - viewRect.left;
+        const relativeMarkerY = markerY - viewRect.top;
+        
+        return Math.abs(relativeMarkerX - x) < 10 && 
+               Math.abs(relativeMarkerY - y) < 10;
+    });
+}
+
+function findMapMarker(latlng) {
+    return Array.from(AppState.markers.values()).find(marker => 
+        marker.mapMarker.getLatLng().distanceTo(latlng) < 10
+    );
+}
+
+function updateMarkerPosition(id, viewX, viewY) {
+    const marker = AppState.markers.get(id);
+    if (!marker) return;
+    
+    const videoElement = document.getElementById('video-view');
+    const normalized = viewToNormalizedCoords(viewX, viewY, videoElement);
+    
+    // Update stored normalized coordinates
+    marker.normalizedX = normalized.x;
+    marker.normalizedY = normalized.y;
+    
+    // Update display position
+    const viewCoords = normalizedToViewCoords(normalized.x, normalized.y, videoElement);
+    marker.videoMarker.style.left = viewCoords.x + 'px';
+    marker.videoMarker.style.top = viewCoords.y + 'px';
+}
+
+function updateModeUI() {
+    $('.btn-group .btn').removeClass('active btn-primary').addClass('btn-secondary');
+    $('#' + AppState.currentMode + 'ModeBtn').addClass('active btn-primary');
+}
+
+// MQTT Functions
+function ConnectWebSocketClient() {
+	const clientID = "WS-" + app.manifest.acapPackageConf.setup.appName + "-" + app.device.serial + "-" + Math.floor(Math.random() * 10000);
+	if(MQTT_Client)
+		delete MQTT_Client;
+	
+	// Use WSS if page is loaded over HTTPS
+	
+	var tls = app.settings.tls;
+	if( location.protocol === 'https:')
+		tls = true;
+	var port = tls?app.settings.WSS_Port:app.settings.WS_Port;
+
+	MQTT_Client = new Paho.MQTT.Client(app.mqtt.address, port, clientID);
+	
+	MQTT_Client.onConnectionLost = onConnectionLost;
+	MQTT_Client.onMessageArrived = onMessageArrived;
+	var connectionOptions = {
+		useSSL: tls,
+		timeout: 3,
+		onSuccess: onConnect,
+		onFailure: onFailure
+	};
+	
+	if(app.mqtt.user && app.mqtt.user.length)
+		connectionOptions.userName = app.mqtt.user;
+	if(app.mqtt.password && app.mqtt.password.length)
+		connectionOptions.password = app.mqtt.password;
+		
+	MQTT_Client.connect(connectionOptions);
+}
+
+function onConnect() {
+	var topic = app.mqtt.preTopic + "/tracker/" + app.device.serial;
+	MQTT_Client.subscribe(topic);
+}
+
+function onFailure(message) {
+	showToast("Web page not connected. " + message.errorMessage + "Check WebSocket connection in MQTT Settings","warning");
+}
+
+function onConnectionLost(responseObject) {
+	if (responseObject.errorCode !== 0) {
+		showToast("Web page lost connection. " + responseObject.errorMessage, "warning");
+		
+		// Attempt to reconnect after 5 seconds
+		setTimeout(() => {
+			console.log("Attempting to reconnect...");
+			ConnectWebSocketClient();
+		}, 5000);
+	}
+}
+
+var detections = {};
+
+function onMessageArrived(message) {
+    if (AppState.currentMode !== "default") {
+        return;
+    }
+
+	var detection = JSON.parse(message.payloadString);
+	if (!detection || !detection.hasOwnProperty("lat") || !detection.hasOwnProperty("id"))
+		return;
+
+	if (detection.active) {
+		detections[detection.id] = detection;
+			// Add or update tracker
+
+		var age = "";
+		if (detection.hasOwnProperty("age")) {
+			age = detection.age.toFixed(1) + "s";
+			if (detection.age > 60)
+				age = parseInt(detection.age/60) + "m";
+			if (detection.age > 3600)
+				age = parseInt(detection.age/3600) + "h";
+		}
+
+
+		if (AppState.trackers.has(detection.id)) {
+			// Update existing tracker position
+			const marker = AppState.trackers.get(detection.id);
+			marker.setLatLng([detection.lat, detection.lng]);
+			marker.setIcon(L.divIcon({
+				className: 'tracker-marker',
+				html: '<div class="tracker-id">' + detection.class + " " + age + '</div>'
+			}));
+		} else {
+			// Create new tracker marker
+			const marker = L.marker([detection.lat, detection.lng], {
+				icon: L.divIcon({
+					className: 'tracker-marker',
+					html: '<div class="tracker-id">' + detection.class + " " + age + '</div>'
+				})
+			}).addTo(AppState.map);
+			
+			AppState.trackers.set(detection.id, marker);
+		}
+	} else {
+		// Remove inactive tracker
+		delete detections[detection.id];
+		if (AppState.trackers.has(detection.id)) {
+			const marker = AppState.trackers.get(detection.id);
+			AppState.map.removeLayer(marker);
+			AppState.trackers.delete(detection.id);
+		}
+	}
+	
+	var ctx = document.getElementById('detection-canvas').getContext("2d");
+	if (!ctx)
+		return;
+		
+	ctx.beginPath();
+	ctx.clearRect(0, 0, 1000, 1000);
+	ctx.stroke();
+
+	ctx.lineWidth = 3;
+	ctx.strokeStyle = '#FFFF00';
+	ctx.font = "30px Arial";
+	ctx.fillStyle = '#FFFF00';
+
+	// Clear existing table rows
+	
+	ctx.beginPath();
+	for( var id in detections) {
+		detection = detections[id];
+		// Skip invalid detections
+		if (typeof detection !== 'object' || detection === null) return;
+		
+		// Draw on canvas
+		ctx.moveTo(detection.bx,detection.by);
+		ctx.lineTo(detection.cx,detection.cy);
+		ctx.rect(detection.x, detection.y, detection.w, detection.h);
+		var text = detection.class || "Undefined";
+		if (detection.hasOwnProperty("confidence"))
+			text += " " + detection.confidence;
+			
+		var age = "";
+		if (detection.hasOwnProperty("age")) {
+			age = detection.age.toFixed(1) + "s";
+			if (detection.age > 60)
+				age = parseInt(detection.age/60) + "m";
+			if (detection.age > 3600)
+				age = parseInt(detection.age/3600) + "h";
+			text += " " + age;
+		}
+		ctx.fillText(text, detection.x, detection.y-10);
+	}
+	ctx.stroke();
+}
+
+// UI Functions
+function showToast(message, type) {
+    type = type || 'info';
+    
+    var toastHtml = '<div class="toast align-items-center text-white bg-' + type + ' border-0" role="alert">' +
+        '<div class="d-flex"><div class="toast-body">' + message + '</div>' +
+        '<button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>' +
+        '</div></div>';
+    
+    var $container = $('.toast-container');
+    var $toast = $(toastHtml);
+    
+    $container.append($toast);
+    $toast.toast({ delay: 3000 }).toast('show');
+    $toast.on('hidden.bs.toast', function() { $(this).remove(); });
+}
+
+function validateCoordinates() {
+    const { lat, lng } = AppState.geoData;
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        showToast("Invalid geolocation data", "danger");
+    }
+}
+
+function handleInitError(error) {
+    console.error("Initialization error:", error);
+    showToast("Application initialization failed", "danger");
+}
+</script>
+</body>
+</html>
