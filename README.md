@@ -123,6 +123,7 @@ MQTT Heartbeat published every 15 minutes
 - Refactoring MQTT client
   * Announcement reatined message
   * Disconnect retained message
+- User interface updates
 
 ### 1.2.8	February 27, 2025
 - Created a new Menu "Scene" to be used to monitor and configure scene behaviour
