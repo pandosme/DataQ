@@ -8,7 +8,7 @@
             "embeddedSdkVersion": "3.0",
             "vendorUrl": "https://pandosme.github.io",
             "runMode": "once",
-            "version": "1.2.8",
+            "version": "1.2.9",
             "user": {
                 "group": "sdk",
                 "username": "sdk"

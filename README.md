@@ -119,7 +119,12 @@ MQTT Heartbeat published every 15 minutes
 
 # History
 
-### 1.2.8	February 12, 2025
+### 1.2.9	March 2, 2025
+- Refactoring MQTT client
+  * Announcement reatined message
+  * Disconnect retained message
+
+### 1.2.8	February 27, 2025
 - Created a new Menu "Scene" to be used to monitor and configure scene behaviour
 - Added support for enabling low confident trackers.
 - Added temporarily enabling publishing for objects needed for a specific page if the publishing is disabled. The publishing will be disabled again when leaving the page.
