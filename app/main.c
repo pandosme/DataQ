@@ -11,7 +11,6 @@
 #include "ACAP.h"
 #include "MQTT.h"
 #include "ObjectDetection.h"
-#include "location.h"
 
 #define APP_PACKAGE	"DataQ"
 
@@ -103,10 +102,6 @@ ProcessTrackers( cJSON* detections ) {
 	cJSON* settings = ACAP_Get_Config("settings");
 	if(!settings)
 		return response;
-
-	int geolocation = 0;
-	if( cJSON_GetObjectItem(settings,"geolocation") && cJSON_GetObjectItem(settings,"geolocation")->type==cJSON_True)
-		geolocation = 1;
 	
 	cJSON* trackerFilter = cJSON_GetObjectItem(settings,"trackerFilter");
 	if( !trackerFilter )
@@ -147,15 +142,6 @@ ProcessTrackers( cJSON* detections ) {
 				int distance = sqrt( (dx*dx) + (dy*dy) ) / 10.0;
 				double lat = 0;
 				double lng = 0;
-				if( geolocation && LOCATION_transform((int)cx, (int)cy, &lat, &lng) ) {
-					if( cJSON_GetObjectItem(item,"lat") ) {
-						cJSON_ReplaceItemInObject(item,"lat",cJSON_CreateNumber(lat));
-						cJSON_ReplaceItemInObject(item,"lng",cJSON_CreateNumber(lng));
-					} else {
-						cJSON_AddNumberToObject(item,"lat",lat);
-						cJSON_AddNumberToObject(item,"lng",lng);
-					}
-				}
 				if( distance > 5 ) {
 					double topVelocity = cJSON_GetObjectItem(item,"topVelocity")->valuedouble;
 					double seconds = (cJSON_GetObjectItem(item,"timestamp")->valuedouble - cJSON_GetObjectItem(position,"timestamp")->valuedouble)/1000.0;
@@ -625,10 +611,6 @@ Settings_Updated_Callback( const char* service, cJSON* data) {
 		LOG_WARN("%s: JSON Parse error\n",__func__);
 	}
 
-	if( strcmp( service,"matrix" ) == 0 ) {
-		LOCATION_Matrix( data );
-	}
-
 	if( strcmp( service,"scene" ) == 0 ) {
 		int confidence = cJSON_GetObjectItem( data,"confidence")?cJSON_GetObjectItem( data,"confidence")->valueint:30;
 		int rotation = cJSON_GetObjectItem( data,"rotation")?cJSON_GetObjectItem( data,"rotation")->valueint:0;
@@ -664,8 +646,6 @@ main(void) {
 	ObjectDetection_Init( Detections_Callback );
 	g_timeout_add_seconds(15 * 60, Config_Update_Callback, NULL);
 	
-	LOCATION_Init();
-	
 	main_loop = g_main_loop_new(NULL, FALSE);
     GSource *signal_source = g_unix_signal_source_new(SIGTERM);
     if (signal_source) {
@@ -677,8 +657,8 @@ main(void) {
 
 	g_main_loop_run(main_loop);
 	LOG("Terminating and cleaning up %s\n",APP_PACKAGE);
-	MQTT_Cleanup();
 	ACAP_Cleanup();
+	MQTT_Cleanup();
 	
     return 0;
 }
