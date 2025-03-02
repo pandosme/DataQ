@@ -132,11 +132,6 @@ MQTT_HTTP_callback(const ACAP_HTTP_Response response, const ACAP_HTTP_Request re
     if (!json) {
 		const char* action = ACAP_HTTP_Request_Param(request, "action");
 		if( action ) {
-			if( strlen( LastWillMessage) ) {
-				char topic[64];
-				sprintf(topic, "connect/%s",ACAP_DEVICE_Prop("serial"));
-				MQTT_Publish( topic,LastWillMessage,0,1);
-			}
 			cJSON_ReplaceItemInObject(MQTTSettings,"connected",cJSON_CreateFalse());
 			ACAP_FILE_Write( "localdata/mqtt.json", MQTTSettings );
 			if( MQTT_Disconnect() )
@@ -340,6 +335,38 @@ int MQTT_Connect() {
         }
     }
 
+	//ADD Last Will Testament
+	MQTTClient_willOptions LastWill = MQTTClient_willOptions_initializer;
+	
+	char *preTopic = cJSON_GetObjectItem(MQTTSettings,"preTopic") ? cJSON_GetObjectItem(MQTTSettings,"preTopic")->valuestring:0;
+	if( preTopic && strlen(preTopic) )
+		sprintf(LastWillTopic,"%s/connect/%s",preTopic,ACAP_DEVICE_Prop("serial"));
+	else
+		sprintf(LastWillTopic,"connect/%s",ACAP_DEVICE_Prop("serial"));
+
+	cJSON* lwt = cJSON_CreateObject();
+	cJSON_AddFalseToObject(lwt,"connected");
+	cJSON_AddStringToObject(lwt,"address",ACAP_DEVICE_Prop("IPv4"));
+	cJSON* helperProperties = cJSON_GetObjectItem(MQTTSettings,"payload");
+	if( helperProperties ) {
+		const char* name = cJSON_GetObjectItem(helperProperties,"name")?cJSON_GetObjectItem(helperProperties,"name")->valuestring:0;
+		const char* location = cJSON_GetObjectItem(helperProperties,"location")?cJSON_GetObjectItem(helperProperties,"location")->valuestring:0;
+		if( name && strlen(name) )
+			cJSON_AddStringToObject(lwt,"name",name);
+		if( location && strlen(location) )
+			cJSON_AddStringToObject(lwt,"location",location);
+	}
+	cJSON_AddStringToObject(lwt,"serial",ACAP_DEVICE_Prop("serial"));
+	char* json = cJSON_PrintUnformatted(lwt);
+	if( json ) {
+		sprintf(LastWillMessage,"%s",json);
+		LastWill.topicName = LastWillTopic;
+		LastWill.message = LastWillMessage;
+		LastWill.retained = 1;
+		conn_opts.will = &LastWill;
+	}
+	cJSON_Delete(lwt);
+
    // Set up SSL options if TLS is enabled
    MQTTClient_SSLOptions ssl_opts = MQTTClient_SSLOptions_initializer;
    if (g_mqtt_state.config.tls) {
@@ -366,7 +393,7 @@ int MQTT_Connect() {
        char errMsg[256];
        snprintf(errMsg, sizeof(errMsg), "Failed to connect to MQTT broker: %d", rc);
        LOG_WARN("%s: %s\n", __func__, errMsg);
-       ACAP_STATUS_SetString("mqtt", "status", "Reconnecting");
+       ACAP_STATUS_SetString("mqtt", "status", "Reconnecting...");
        return 0;
    }
 
@@ -389,6 +416,12 @@ int MQTT_Connect() {
 // Disconnect from the MQTT broker
 int MQTT_Disconnect() {
     LOG_TRACE("%s: Entry\n", __func__);
+
+	if( strlen( LastWillMessage) ) {
+		char topic[64];
+		sprintf(topic, "connect/%s",ACAP_DEVICE_Prop("serial"));
+		MQTT_Publish( topic,LastWillMessage,0,1);
+	}
     
     pthread_mutex_lock(&g_mqtt_state.mutex);
     g_mqtt_state.manual_disconnect = true;
@@ -434,7 +467,7 @@ static int MQTT_initialize_settings(const char* acapname) {
     MQTTSettings = ACAP_FILE_Read("settings/mqtt.json");
     if (!MQTTSettings) {
         LOG_WARN("%s: Unable to parse default settings\n", __func__);
-        ACAP_STATUS_SetString("mqtt", "status", "Unable to parse default settings");
+        ACAP_STATUS_SetString("mqtt", "status", "Missing default settings");
         return 0;
     }
     
@@ -590,6 +623,9 @@ static void* disconnect_timeout_thread(void* arg) {
 // Publish a message to a topic
 int MQTT_Publish(const char *topic, const char *payload, int qos, int retained) {
     LOG_TRACE("%s: Entry\n", __func__);
+
+	if(!MQTT_isConnected())
+		return 0;
 	
     int result = 0;
     
@@ -597,7 +633,6 @@ int MQTT_Publish(const char *topic, const char *payload, int qos, int retained) 
     pthread_mutex_lock(&g_mqtt_state.mutex);
     if (!g_mqtt_state.connected || !g_mqtt_state.initialized) {
         pthread_mutex_unlock(&g_mqtt_state.mutex);
-        ACAP_STATUS_SetString("mqtt", "status", "Cannot publish: Not connected");
         return 0;
     }
     pthread_mutex_unlock(&g_mqtt_state.mutex);
@@ -625,7 +660,6 @@ int MQTT_Publish(const char *topic, const char *payload, int qos, int retained) 
         char errMsg[256];
         snprintf(errMsg, sizeof(errMsg), "Failed to publish message: %d", result);
         LOG_WARN("%s: %s\n", __func__, errMsg);
-        ACAP_STATUS_SetString("mqtt", "status", errMsg);
     }
     LOG_TRACE("%s: Exit\n", __func__);
     return (result == MQTTCLIENT_SUCCESS) ? 1 : 0;
@@ -634,9 +668,11 @@ int MQTT_Publish(const char *topic, const char *payload, int qos, int retained) 
 // Publish a JSON message to a topic
 int MQTT_Publish_JSON(const char *topic, cJSON *payload, int qos, int retained) {
     if (!payload) {
-        ACAP_STATUS_SetString("mqtt", "status", "Cannot publish: NULL JSON payload");
         return 0;
     }
+
+	if(!MQTT_isConnected())
+		return 0;
     
 	cJSON* publish = cJSON_Duplicate(payload, 1);
 	cJSON* helperProperties = cJSON_GetObjectItem(MQTTSettings,"payload");
@@ -668,6 +704,9 @@ int MQTT_Publish_JSON(const char *topic, cJSON *payload, int qos, int retained) 
 // Publish binary data to a topic
 int MQTT_Publish_Binary(const char *topic, int payloadlen, void *payload, int qos, int retained) {
     int result = 0;
+
+	if(!MQTT_isConnected())
+		return 0;
     
     // Check if connected
     pthread_mutex_lock(&g_mqtt_state.mutex);

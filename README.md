@@ -119,9 +119,11 @@ MQTT Heartbeat published every 15 minutes
 
 # History
 
-### 1.3.0	February 25, 2025
-- Added Geo Location for trackers.  Add 4 markers in the video view by clicking and move the corresponding map marker to the correct position.
-- Update the pages for better control.
+### 1.2.9	March 2, 2025
+- Refactoring MQTT client
+  * Announcement reatined message
+  * Disconnect retained message
+- User interface updates
 
 ### 1.2.8	February 22, 2025
 - Created a new Menu "Scene" to be used to monitor and configure scene behaviour
