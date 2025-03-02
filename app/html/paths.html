@@ -44,169 +44,172 @@
     
     <div id="page-content-wrapper" class="p-0">
         <div class="container-fluid">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="card-title mb-0">Paths</h5>
-                    </div>
-					<div class="alert alert-warning alert-dismissible fade d-none" id="liveDataAlert" role="alert">
-						<small id="liveDataMessage"></small>
-						<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-					</div>
-                    <div class="card-body" id="settings-form">
-                        <div class="row">
-                            <!-- Left column for video -->
-                            <div class="col-8" style="min-width: 800px">
-                                <div id="video-view" style="display: inline-block">
-                                    <div style="width:100%; height:100%; position:relative">
-                                        <div id="video" style="width:100%; height:100%; position:absolute; top:0; left:0;"></div>
-                                        <canvas id="detection-canvas" width="1000" height="1000" style="width:100%; height:100%; position:absolute; top:0px; left:0px;"></canvas>
-                                        <canvas id="settings-canvas" width="1000" height="1000" style="width:100%; height:100%; position:absolute; top:0px; left:0px;"></canvas>
-                                    </div>
-                                </div>
-                            </div>
-                            <!-- Right column for table -->
-                            <div class="col" style="min-width: 400px">
-                                <div class="table-responsive">
-                                    <table class="table table-striped table-hover table-sm">
-                                        <thead>
-                                            <tr>
-												<th style="width: 20%">Class</th>
-												<th style="width: 20%">Confidence</th>
-												<th style="width: 20%">Age</th>
-												<th style="width: 20%">Distance</th>
-												<th style="width: 20%">Color</th>
-												<th style="width: 20%">Color2</th>												
-                                            </tr>
-                                        </thead>
-                                        <tbody id="detections-table">
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="row mt-3">
-						<div class="col-4">
-							<div class="card">
-								<div class="card-header">
-									<h5 class="card-title mb-0">Filter</h5>
+				<div class="col-12">
+					<div class="card">
+						<div class="card-header">
+							<div class="publish-control">
+								<label class="switch">
+									<input type="checkbox" id="pageToggle">
+									<span class="slider round"></span>
+								</label>
+								<span class="switch-label">Publish Paths</span>
+							</div>
+						</div>
+						<div id="locationContent" class="location-content">	
+							<div class="card-body" id="settings-form">
+								<div class="row">
+									<!-- Left column for video -->
+									<div class="col-8" style="min-width: 800px">
+										<div id="video-view" style="display: inline-block">
+											<div style="width:100%; height:100%; position:relative">
+												<div id="video" style="width:100%; height:100%; position:absolute; top:0; left:0;"></div>
+												<canvas id="detection-canvas" width="1000" height="1000" style="width:100%; height:100%; position:absolute; top:0px; left:0px;"></canvas>
+											</div>
+										</div>
+									</div>
+									<!-- Right column for table -->
+									<div class="col" style="min-width: 400px">
+										<div class="table-responsive">
+											<table class="table table-striped table-hover table-sm">
+												<thead>
+													<tr>
+														<th style="width: 20%">Class</th>
+														<th style="width: 20%">Confidence</th>
+														<th style="width: 20%">Age</th>
+														<th style="width: 20%">Distance</th>
+														<th style="width: 20%">Color</th>
+														<th style="width: 20%">Color2</th>												
+													</tr>
+												</thead>
+												<tbody id="detections-table">
+												</tbody>
+											</table>
+										</div>
+									</div>
 								</div>
-								<div class="card-body">
-									<button type="button" class="btn btn-outline-primary w-100 mb-3" id="btn-area">
-										Set area object must pass
-									</button>
-									
-									<div class="mb-3 d-flex align-items-center">
-										<label for="filter-age" class="form-label text-nowrap me-3 mb-0">
-											Minimum time in scene
-										</label>
-										<select class="form-select ms-auto" id="filter-age" style="width: 100px;">
-											<option value="0">0 s</option>
-											<option value="1">1 s</option>
-											<option value="2">2 s</option>
-											<option value="3">3 s</option>
-											<option value="4">4 s</option>
-											<option value="5">5 s</option>
-											<option value="6">6 s</option>
-											<option value="7">7 s</option>
-											<option value="8">8 s</option>
-											<option value="9">9 s</option>
-											<option value="10">10 s</option>
-										</select>
-									</div>
+							</div>
+							<div class="row mt-3">
+								<div class="col-4">
+									<div class="card">
+										<div class="card-header">
+											<h5 class="card-title mb-0">Filter</h5>
+										</div>
+										<div class="card-body">
+											<button type="button" class="btn btn-outline-primary w-100 mb-3" id="btn-area">
+												Set area object must pass
+											</button>
+											
+											<div class="mb-3 d-flex align-items-center">
+												<label for="filter-age" class="form-label text-nowrap me-3 mb-0">
+													Minimum time in scene
+												</label>
+												<select class="form-select ms-auto" id="filter-age" style="width: 100px;">
+													<option value="0">0 s</option>
+													<option value="1">1 s</option>
+													<option value="2">2 s</option>
+													<option value="3">3 s</option>
+													<option value="4">4 s</option>
+													<option value="5">5 s</option>
+													<option value="6">6 s</option>
+													<option value="7">7 s</option>
+													<option value="8">8 s</option>
+													<option value="9">9 s</option>
+													<option value="10">10 s</option>
+												</select>
+											</div>
 
-									<div class="mb-3 d-flex align-items-center">
-										<label for="filter-distance" class="form-label text-nowrap me-3 mb-0">
-											Minimum distance (% of view)
-										</label>
-										<select class="form-select ms-auto" id="filter-distance" style="width: 100px;">
-											<option value="0">0%</option>
-											<option value="5">5%</option>
-											<option value="10">10%</option>
-											<option value="15">15%</option>
-											<option value="20">20%</option>
-											<option value="25">25%</option>
-											<option value="30">30%</option>
-										</select>
-									</div>
+											<div class="mb-3 d-flex align-items-center">
+												<label for="filter-distance" class="form-label text-nowrap me-3 mb-0">
+													Minimum distance (% of view)
+												</label>
+												<select class="form-select ms-auto" id="filter-distance" style="width: 100px;">
+													<option value="0">0%</option>
+													<option value="5">5%</option>
+													<option value="10">10%</option>
+													<option value="15">15%</option>
+													<option value="20">20%</option>
+													<option value="25">25%</option>
+													<option value="30">30%</option>
+												</select>
+											</div>
 
-									<button type="button" class="btn btn-success w-100" id="btn-save">Save</button>
+											<button type="button" class="btn btn-success w-100" id="btn-save">Save</button>
+										</div>
+									</div>
+								</div>
+								<div class="col-5">
+									<div class="card">
+										<div class="card-header">
+											<h5 class="card-title mb-0">Class filter</h5>
+										</div>
+										<div class="card-body">
+											<div class="row">
+												<!-- Column 1 -->
+												<div class="col-4">
+													<div class="form-check">
+														<input class="form-check-input" type="checkbox" value="Human" id="class-human">
+														<label class="form-check-label" for="class-human">Human</label>
+													</div>
+													<div class="form-check">
+														<input class="form-check-input" type="checkbox" value="Head" id="class-head">
+														<label class="form-check-label" for="class-head">Head</label>
+													</div>
+												</div>
+												<!-- Column 2 -->
+												<div class="col-4">
+													<div class="form-check">
+														<input class="form-check-input" type="checkbox" value="Car" id="class-car">
+														<label class="form-check-label" for="class-car">Car</label>
+													</div>
+													<div class="form-check">
+														<input class="form-check-input" type="checkbox" value="Truck" id="class-truck">
+														<label class="form-check-label" for="class-truck">Truck</label>
+													</div>
+													<div class="form-check">
+														<input class="form-check-input" type="checkbox" value="Bus" id="class-bus">
+														<label class="form-check-label" for="class-bus">Bus</label>
+													</div>
+													<div class="form-check">
+														<input class="form-check-input" type="checkbox" value="Vehicle" id="class-vehicle">
+														<label class="form-check-label" for="class-vehicle">Vehicle</label>
+													</div>
+													<div class="form-check">
+														<input class="form-check-input" type="checkbox" value="Bike" id="class-bike">
+														<label class="form-check-label" for="class-bike">Bike</label>
+													</div>
+												</div>
+												<!-- Column 3 -->
+												<div class="col-4">
+													<div class="form-check">
+														<input class="form-check-input" type="checkbox" value="Animal" id="class-animal">
+														<label class="form-check-label" for="class-animal">Animal</label>
+													</div>
+													<div class="form-check">
+														<input class="form-check-input" type="checkbox" value="LicensePlate" id="class-license">
+														<label class="form-check-label" for="class-license">License Plate</label>
+													</div>
+													<div class="form-check">
+														<input class="form-check-input" type="checkbox" value="Bag" id="class-bag">
+														<label class="form-check-label" for="class-bag">Bag</label>
+													</div>
+													<div class="form-check">
+														<input class="form-check-input" type="checkbox" value="Backpack" id="class-backpack">
+														<label class="form-check-label" for="class-backpack">Backpack</label>
+													</div>
+													<div class="form-check">
+														<input class="form-check-input" type="checkbox" value="Suitcase" id="class-suitcase">
+														<label class="form-check-label" for="class-suitcase">Suitcase</label>
+													</div>
+												</div>
+											</div>
+										</div>
+									</div>
 								</div>
 							</div>
 						</div>
-                        <div class="col-5">
-                            <div class="card">
-                                <div class="card-header">
-                                    <h5 class="card-title mb-0">Class filter</h5>
-                                </div>
-                                <div class="card-body">
-                                    <div class="row">
-                                        <!-- Column 1 -->
-                                        <div class="col-4">
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" value="Human" id="class-human">
-                                                <label class="form-check-label" for="class-human">Human</label>
-                                            </div>
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" value="Head" id="class-head">
-                                                <label class="form-check-label" for="class-head">Head</label>
-                                            </div>
-                                        </div>
-                                        <!-- Column 2 -->
-                                        <div class="col-4">
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" value="Car" id="class-car">
-                                                <label class="form-check-label" for="class-car">Car</label>
-                                            </div>
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" value="Truck" id="class-truck">
-                                                <label class="form-check-label" for="class-truck">Truck</label>
-                                            </div>
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" value="Bus" id="class-bus">
-                                                <label class="form-check-label" for="class-bus">Bus</label>
-                                            </div>
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" value="Vehicle" id="class-vehicle">
-                                                <label class="form-check-label" for="class-vehicle">Vehicle</label>
-                                            </div>
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" value="Bike" id="class-bike">
-                                                <label class="form-check-label" for="class-bike">Bike</label>
-                                            </div>
-                                        </div>
-                                        <!-- Column 3 -->
-                                        <div class="col-4">
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" value="Animal" id="class-animal">
-                                                <label class="form-check-label" for="class-animal">Animal</label>
-                                            </div>
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" value="LicensePlate" id="class-license">
-                                                <label class="form-check-label" for="class-license">License Plate</label>
-                                            </div>
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" value="Bag" id="class-bag">
-                                                <label class="form-check-label" for="class-bag">Bag</label>
-                                            </div>
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" value="Backpack" id="class-backpack">
-                                                <label class="form-check-label" for="class-backpack">Backpack</label>
-                                            </div>
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" value="Suitcase" id="class-suitcase">
-                                                <label class="form-check-label" for="class-suitcase">Suitcase</label>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
 					</div>
-                </div>
-            </div>
-        </div>
+				</div>
+			</div>
     </div>
 	<div class="modal fade" id="jsonModal" tabindex="-1" aria-labelledby="jsonModalLabel" aria-hidden="true">
 		<div class="modal-dialog">
@@ -252,19 +255,46 @@ $(document).ready(function() {
 			const [aspectWidth, aspectHeight] = aspectRatio.split(':').map(Number);
 			const paddingPercentage = (aspectHeight / aspectWidth) * 100;
 
+			const toggle = document.getElementById('pageToggle');
+			const content = document.getElementById('locationContent');
+
+			toggle.checked = app.settings.publish.path;
+			content.classList.toggle('hidden', !app.settings.publish.path);
+
+			toggle.addEventListener('change', async function() {
+				try {
+					// Update the settings
+					app.settings.publish.path = this.checked;
+					var payload = {
+						publish: app.settings.publish
+					}
+					$.ajax({
+						type: "GET",
+						url: 'settings?json=' + encodeURI(JSON.stringify(payload)),
+						error: function(xhr, status, error) {
+							showToast("Calibration failed", 'danger');
+						}
+					});
+					
+					// Show/hide content
+					content.classList.toggle('hidden', !this.checked);
+				} catch (error) {
+					console.error('Failed to update geolocation setting:', error);
+					// Revert the toggle if saving failed
+					this.checked = !this.checked;
+					alert('Failed to update location settings');
+				}
+			});
+
 			$("#filter-distance").val(app.settings.pathFilter.distance);
 			$("#filter-age").val(app.settings.pathFilter.age);
 
 			initializeClassFilters();
 
-			if( app.settings.publish.path === false )
-				showLiveDataMessage("Live data visualization is unavailable - Path publishing is disabled.");
-
 			if( app.status.mqtt.connected ) {
 				ConnectWebSocketClient();
 			} else {
 				setTimeout(() => {
-					showLiveDataMessage("Live data visualization in unavailable. Check MQTT Settings");
 					showToast("DataQ is not connected to a broker.  Please go to MQTT Settings");
 				}, 100);
 			}
@@ -401,15 +431,6 @@ $(document).ready(function() {
 		}
 	}
 
-	function showLiveDataMessage(message) {
-		const alert = document.getElementById('liveDataAlert');
-		const messageElement = document.getElementById('liveDataMessage');
-		
-		messageElement.textContent = message;
-		alert.classList.remove('d-none');
-		alert.classList.add('show');
-	}
-
 	function ConnectWebSocketClient() {
 		const clientID = "WS-" + app.manifest.acapPackageConf.setup.appName + "-" + app.device.serial + "-" + Math.floor(Math.random() * 10000);
 		if(MQTT_Client)
@@ -448,13 +469,11 @@ $(document).ready(function() {
 
 	function onFailure(message) {
 		console.log("onFailure");
-		showLiveDataMessage("Live data visualization is temporarily unavailable - Web client is not connected to broker.");
 		showToast("Web page not connect. " + message.errorMessage + "Check WebSocket connection in MQTT Settings","warning");
 	}
 
 	function onConnectionLost(responseObject) {
 	  if (responseObject.errorCode !== 0) {
-		showLiveDataMessage("Live data visualization is temporarily unavailable - Web client is not connected to broker.");
 		showToast("Web page lost connection. " + responseObject.errorMessage,"warning");
 	  }
 	}
