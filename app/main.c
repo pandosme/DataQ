@@ -677,8 +677,8 @@ main(void) {
 
 	g_main_loop_run(main_loop);
 	LOG("Terminating and cleaning up %s\n",APP_PACKAGE);
-	ACAP_Cleanup();
 	MQTT_Cleanup();
+	ACAP_Cleanup();
 	
     return 0;
 }
