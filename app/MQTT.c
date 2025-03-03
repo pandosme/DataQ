@@ -1,7 +1,7 @@
 /**
  * MQTT.c
- * 
- * ACAP SDK 3.5
+ * Fred Juhlin 2025
+ * For ACAP SDK 3.5
  * This file implements an MQTT client using the Paho MQTT library.
  * It handles connection, disconnection, reconnection, and message publishing.
  */
@@ -152,9 +152,6 @@ MQTT_HTTP_callback(const ACAP_HTTP_Response response, const ACAP_HTTP_Request re
         return;
     }
 
-	//Force connection
-	cJSON_GetObjectItem(settings,"connect")->type = cJSON_True;
-
 	cJSON* payload = cJSON_GetObjectItem(settings,"payload");
 
 	if( payload ) {  //Just update the helper pyaload properties
@@ -174,6 +171,9 @@ MQTT_HTTP_callback(const ACAP_HTTP_Response response, const ACAP_HTTP_Request re
 		return;
 	}
 
+	//Force connection
+	cJSON_GetObjectItem(settings,"connect")->type = cJSON_True;
+
     LOG_TRACE("%s: %s\n", __func__, json);
         
     if (!MQTT_Set(settings)) {
@@ -189,6 +189,7 @@ MQTT_HTTP_callback(const ACAP_HTTP_Response response, const ACAP_HTTP_Request re
     ACAP_HTTP_Respond_Text(response, "MQTT Updated");
     MQTT_Connect();
 }
+
 
 // Set MQTT configuration
 int MQTT_Set(cJSON* settings) {
@@ -293,8 +294,9 @@ int MQTT_Connect() {
         snprintf(clientId, sizeof(clientId), "%s_%ld", g_mqtt_state.acapname, (long)time(NULL));
     }
 
-    int rc = mqtt_client_create(&g_mqtt_state.client, server_uri, clientId,
-                                 MQTTCLIENT_PERSISTENCE_NONE, NULL);
+	LOG_TRACE("%s: Create client %s %s TLS=%d\n",__func__,clientId,server_uri,g_mqtt_state.config.tls);
+
+    int rc = mqtt_client_create(&g_mqtt_state.client, server_uri, clientId, MQTTCLIENT_PERSISTENCE_NONE, NULL);
     
     if (rc != MQTTCLIENT_SUCCESS) {
         char errMsg[256];
@@ -372,18 +374,14 @@ int MQTT_Connect() {
    if (g_mqtt_state.config.tls) {
        ssl_opts.verify = g_mqtt_state.config.verify;
        ssl_opts.enableServerCertAuth = g_mqtt_state.config.verify;
-
+	   ssl_opts.sslVersion = MQTT_SSL_VERSION_TLS_1_2;
+	
        // Add certificate files if available
-       char* caFile = CERTS_Get_CA();
-       char* certFile = CERTS_Get_Cert();
-       char* keyFile = CERTS_Get_Key();
-       char* keyPassword = CERTS_Get_Password();
-
-       if (caFile) ssl_opts.trustStore = caFile;
-       if (certFile) ssl_opts.keyStore = certFile;
-       if (keyFile) ssl_opts.privateKey = keyFile;
-       if (keyPassword) ssl_opts.privateKeyPassword = keyPassword;
-
+	   ssl_opts.trustStore = CERTS_Get_CA();
+       ssl_opts.keyStore = CERTS_Get_Cert();
+       ssl_opts.privateKey = CERTS_Get_Key();
+       ssl_opts.privateKeyPassword = CERTS_Get_Password();
+//LOG("%s %s %s %s\n", ssl_opts.trustStore, ssl_opts.keyStore,ssl_opts.privateKey,ssl_opts.privateKeyPassword);
        conn_opts.ssl = &ssl_opts;
    }
 
@@ -447,7 +445,6 @@ int MQTT_Disconnect() {
     if (g_mqtt_state.reconnect_thread_running) {
         pthread_join(g_mqtt_state.reconnect_thread, NULL);
     }
-    
     // Notify application about disconnection
     MQTT_notify_connection_state(MQTT_DISCONNECT);
     LOG_TRACE("%s: Exit\n", __func__);
@@ -611,13 +608,6 @@ int MQTT_isConnected() {
     pthread_mutex_unlock(&g_mqtt_state.mutex);
     
     return connected ? 1 : 0;
-}
-
-static void* disconnect_timeout_thread(void* arg) {
-    sleep(5); // 5-second timeout
-    LOG_WARN("MQTT disconnect timeout occurred\n");
-    // Force disconnect here if needed
-    pthread_exit(NULL);
 }
 
 // Publish a message to a topic
@@ -993,9 +983,8 @@ static int MQTT_load_library(void) {
         return 0;
     }
     
-    // Look for any file containing "libpaho-mqtt3c"
     while ((ent = readdir(dir)) != NULL) {
-        if (strstr(ent->d_name, "libpaho-mqtt3c") != NULL) {
+        if (strstr(ent->d_name, "libpaho-mqtt3cs") != NULL) {
             libFile = strdup(ent->d_name);  // Make a copy of the filename
             break;
         }
@@ -1147,7 +1136,11 @@ static int MQTT_parse_config(const cJSON *root) {
         ACAP_STATUS_SetString("mqtt", "status", "NULL config JSON provided");
         return 0;
     }
-    
+    char* json = cJSON_PrintUnformatted(root);
+	if(json) {
+		LOG("%s\n",json);
+		free(json);
+	}
     // Clear the existing configuration
     memset(&g_mqtt_state.config, 0, sizeof(MQTTConfig));
     

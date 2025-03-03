@@ -274,8 +274,8 @@ function onFailure(message) {
 	showToast("Web page not connect.<br/>" + message.errorMessage + "Check WebSocket connection in MQTT Settings","warning");
 }
 
-function onConnectionLost(responseObject) {
-  if (responseObject.errorCode !== 0) {
+function onConnectionLost(message) {
+  if (message.errorCode !== 0) {
 	showToast("Web page lost connection. " + message.errorMessage,"warning");
   }
 }

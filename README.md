@@ -119,6 +119,9 @@ MQTT Heartbeat published every 15 minutes
 
 # History
 
+### 1.2.10	March 3, 2025
+- Fixed MQTT TLS flaws introduced in refactoring (1.2.9)
+
 ### 1.2.9	March 2, 2025
 - Refactoring MQTT client
   * Announcement reatined message
