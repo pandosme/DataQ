@@ -121,7 +121,7 @@ MQTT Heartbeat published every 15 minutes
 
 ### 1.3.0	March 3, 2025
 - Replaced "Max age" with "Max idle".  
-  When Max idle time is set, detections are not published when max age reached.  
+  When Max idle time is set, detections are not published when after not moving X seconds.  
   When the object starts moving, the same object ID will be used when publishing.  Age birth and distance will be preserved.    
   Occupancy is imapcted and will not count idle objects  
   Path will be published when object is idle  
