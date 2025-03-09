@@ -6,12 +6,11 @@
     <title></title>
     <link rel="stylesheet" href="css/bootstrap.min.css">
     <link rel="stylesheet" href="css/app.css">
-    <link rel="stylesheet" href="css/imgareaselect-default.css">
     <script src="js/jquery-3.7.1.min.js"></script>
     <script src="js/bootstrap.bundle.min.js"></script>
     <script src="js/media-stream-player.min.js"></script>
     <script src="js/paho-mqtt-min.js"></script>
-    <script src="js/jquery.imgareaselect.js"></script>
+    <script src="js/labelselector.js"></script>
 </head>
 <body>
 <div class="d-flex" id="wrapper">
@@ -37,11 +36,7 @@
                     <div class="card-header">
                         <h5 class="card-title mb-0">Scene</h5>
                     </div>
-					<div class="alert alert-warning alert-dismissible fade d-none" id="liveDataAlert" role="alert">
-						<small id="liveDataMessage"></small>
-						<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-					</div>
-					
+
                     <div class="card-body" id="settings-form">
                         <div class="row">
                             <!-- Left column for video -->
@@ -78,10 +73,35 @@
 											</select>
 										</div>
 										<div class="form-group mb-3">
+											<label for="scene-maxIdle" class="form-label">Max idle</label>
+											<select class="form-select" id="scene-maxIdle">
+												<option value="0">Forever</option>
+												<option value="5">5s</option>
+												<option value="10">10s</option>
+												<option value="15">15s</option>
+												<option value="20">20s</option>
+												<option value="30">30s</option>												
+												<option value="45">45s</option>
+												<option value="60">1m</option>
+												<option value="120">2m</option>
+												<option value="180">3m</option>
+												<option value="240">4m</option>
+												<option value="300">5m</option>
+												<option value="600">10m</option>
+												<option value="900">15m</option>
+												<option value="1200">20m</option>
+												<option value="1500">25m</option>
+												<option value="1800">30m</option>
+												<option value="2700">45m</option>
+												<option value="3600">1h</option>
+												<option value="7200">2h</option>
+											</select>
+										</div>
+										<div class="form-group mb-3">
 											<label for="scene-tracker" class="form-label">Tracker</label>
 											<select class="form-select" id="scene-tracker">
-												<option value="0">Low confidence</option>
-												<option value="1">High confidence</option>
+												<option value="0">Allow low confidence</option>
+												<option value="1">Require high confidence</option>
 											</select>
 										</div>
 										<div class="form-group mb-3">
@@ -89,30 +109,6 @@
 											<select class="form-select" id="scene-cog">
 												<option value="0">Center of the object</option>
 												<option value="1">Bottom-center (feet/wheels)</option>
-											</select>
-										</div>
-										<div class="form-group mb-3">
-											<label for="scene-maxage" class="form-label">Max age</label>
-											<select class="form-select" id="scene-maxage">
-												<option value="86400">None</option>
-												<option value="5">5 seconds</option>
-												<option value="10">10 seconds</option>
-												<option value="20">20 seconds</option>
-												<option value="30">30 seconds</option>
-												<option value="60">1 minute</option>
-												<option value="120">2 minutes</option>
-												<option value="180">3 minutes</option>
-												<option value="240">4 minutes</option>
-												<option value="300">5 minutes</option>
-												<option value="600">10 minutes</option>
-												<option value="900">15 minutes</option>
-												<option value="1200">20 minutes</option>
-												<option value="1800">30 minutes</option>
-												<option value="2700">45 minutes</option>
-												<option value="3600">1 hour</option>
-												<option value="7200">2 hours</option>
-												<option value="10800">3 hours</option>
-												<option value="14400">4 hours</option>
 											</select>
 										</div>
 										<div class="form-group mb-3">
@@ -131,68 +127,9 @@
 								</div>
 								<div class="card">
 									<div class="card-header">
-										<h5 class="card-title mb-0">Class filter</h5>
+										<h5 class="card-title mb-0">Label filter</h5>
 									</div>
-									<div class="card-body">
-										<div class="row">
-											<!-- Column 1 -->
-											<div class="col-4">
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="Human" id="class-human">
-													<label class="form-check-label" for="class-human">Human</label>
-												</div>
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="Head" id="class-head">
-													<label class="form-check-label" for="class-head">Head</label>
-												</div>
-											</div>
-											<!-- Column 2 -->
-											<div class="col-4">
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="Car" id="class-car">
-													<label class="form-check-label" for="class-car">Car</label>
-												</div>
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="Truck" id="class-truck">
-													<label class="form-check-label" for="class-truck">Truck</label>
-												</div>
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="Bus" id="class-bus">
-													<label class="form-check-label" for="class-bus">Bus</label>
-												</div>
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="Vehicle" id="class-vehicle">
-													<label class="form-check-label" for="class-vehicle">Vehicle</label>
-												</div>
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="Bike" id="class-bike">
-													<label class="form-check-label" for="class-bike">Bike</label>
-												</div>
-											</div>
-											<!-- Column 3 -->
-											<div class="col-4">
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="Animal" id="class-animal">
-													<label class="form-check-label" for="class-animal">Animal</label>
-												</div>
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="LicensePlate" id="class-license">
-													<label class="form-check-label" for="class-license">License Plate</label>
-												</div>
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="Bag" id="class-bag">
-													<label class="form-check-label" for="class-bag">Bag</label>
-												</div>
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="Backpack" id="class-backpack">
-													<label class="form-check-label" for="class-backpack">Backpack</label>
-												</div>
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="Suitcase" id="class-suitcase">
-													<label class="form-check-label" for="class-suitcase">Suitcase</label>
-												</div>
-											</div>
-										</div>
+									<div id="labelSelector" class="card-body">
 									</div>
 								</div>
 							</div>
@@ -232,10 +169,10 @@ $(document).ready(function() {
 			$("#scene-confidence").val(app.settings.scene.confidence);
 			$("#scene-rotation").val(app.settings.scene.rotation);
 			$("#scene-cog").val(app.settings.scene.cog);
-			$("#scene-maxage").val(app.settings.scene.maxAge);
+			$("#scene-maxIdle").val(app.settings.scene.maxIdle);
 			$("#scene-tracker").val(app.settings.scene.tracker_confidence?"1":"0");
 
-			initializeClassFilters();
+			const labelSelector = new LabelSelector('labelSelector', app.settings.scene.ignoreClass, labelsUpdated);
 
 			if( app.settings.publish.detections === false ) {
 				forcePublish = true;
@@ -252,7 +189,6 @@ $(document).ready(function() {
 				ConnectWebSocketClient();
 			} else {
 				setTimeout(() => {
-					showLiveDataMessage("Live data visualization in unavailable. Check MQTT Settings");
 					showToast("DataQ is not connected to a broker.  Please go to MQTT Settings");
 				}, 100);
 			}
@@ -278,44 +214,6 @@ window.addEventListener("beforeunload", function(event) {
 	}
 	event.returnValue = '';		
 });
-
-function showLiveDataMessage(message) {
-	const alert = document.getElementById('liveDataAlert');
-	const messageElement = document.getElementById('liveDataMessage');
-	
-	messageElement.textContent = message;
-	alert.classList.remove('d-none');
-	alert.classList.add('show');
-}
-
-function initializeClassFilters() {
-	// Initialize checkboxes based on ignoreClass array
-	$('.form-check-input').each(function() {
-		const className = $(this).val();
-		const isIgnored = app.settings.detectionsFilter.ignoreClass.includes(className);
-		$(this).prop('checked', !isIgnored);
-	});
-
-	// Add change event handler for all checkboxes
-	$('.form-check-input').change(function() {
-		const className = $(this).val();
-		const isChecked = $(this).prop('checked');
-		
-		if (isChecked) {
-			// Remove from ignoreClass array if unchecked
-			const index = app.settings.detectionsFilter.ignoreClass.indexOf(className);
-			if (index > -1) {
-				app.settings.detectionsFilter.ignoreClass.splice(index, 1);
-			}
-		} else {
-			// Add to ignoreClass array if checked
-			if (!app.settings.detectionsFilter.ignoreClass.includes(className)) {
-				app.settings.detectionsFilter.ignoreClass.push(className);
-			}
-		}
-		saveFilter();
-	});
-}
 
 function ConnectWebSocketClient() {
 	const clientID = "WS-" + app.manifest.acapPackageConf.setup.appName + "-" + app.device.serial + "-" + Math.floor(Math.random() * 10000);
@@ -355,13 +253,11 @@ function onConnect() {
 
 function onFailure(message) {
 	console.log("onFailure");
-	showLiveDataMessage("Live data visualization is temporarily unavailable - Web client is not connected to broker.");
 	showToast("Web page not connect. " + message.errorMessage + "Check WebSocket connection in MQTT Settings","warning");
 }
 
 function onConnectionLost(responseObject) {
 	if (responseObject.errorCode !== 0) {
-		showLiveDataMessage("Live data visualization is temporarily unavailable - Web client is not connected to broker.");
 		showToast("Web page lost connection. " + responseObject.errorMessage, "warning");
 		
 		// Attempt to reconnect after 5 seconds
@@ -395,24 +291,24 @@ function onMessageArrived(message) {
 	detections.forEach(function(detection) {
 		// Skip invalid detections
 		if (typeof detection !== 'object' || detection === null) return;
-		
-		// Draw on canvas
-		ctx.rect(detection.x, detection.y, detection.w, detection.h);
-		var text = detection.class || "Undefined";
-		if (detection.hasOwnProperty("confidence"))
-			text += " " + detection.confidence;
-			
-		var age = "";
-		if (detection.hasOwnProperty("age")) {
-			age = detection.age.toFixed(1) + "s";
-			if (detection.age > 60)
-				age = parseInt(detection.age/60) + "m";
-			if (detection.age > 3600)
-				age = parseInt(detection.age/3600) + "h";
-			text += " " + age;
+		if( detection.ignore === false ) {
+			// Draw on canvas
+			ctx.rect(detection.x, detection.y, detection.w, detection.h);
+			var text = detection.class || "Undefined";
+			if (detection.hasOwnProperty("confidence"))
+				text += " " + detection.confidence;
+				
+			var age = "";
+			if (detection.hasOwnProperty("age")) {
+				age = detection.age.toFixed(1) + "s";
+				if (detection.age > 60)
+					age = parseInt(detection.age/60) + "m";
+				if (detection.age > 3600)
+					age = parseInt(detection.age/3600) + "h";
+				text += " " + age;
+			}
+			ctx.fillText(text, detection.x, detection.y-10);
 		}
-		ctx.fillText(text, detection.x, detection.y-10);
-
 	});
 	ctx.stroke();
 }
@@ -447,29 +343,9 @@ function PlayVideo(aspect, rotation) {
 				+ ' resolution="' + videoWidth + 'x' + videoHeight + '"'
 				+ ' variant="basic" autoplay></media-stream-player>';
 	$("#video").append(player);
-
-	if( areaHandler )
-		delete areaHandler;
-
-	areaHandler = $("#video").imgAreaSelect({
-		x1: 0, y1: 0, x2: width, y2: height,
-		handles: true, enable:true, movable:true, resizable:true, show:false,
-		instance: true,
-		onSelectEnd: function(img, selection) {
-			updateArea( areaMode, selection );
-		}
-	});
-	areaHandler.setOptions({hide:true});
 }
 
-$('#btn-scene-save').click(function() {
-	app.settings.scene = {
-		confidence: parseInt($("#scene-confidence").val()),
-		rotation: parseInt($("#scene-rotation").val()),
-		cog: parseInt($("#scene-cog").val()),
-		tracker_confidence: ($("#scene-tracker").val()==="1"),
-		maxAge: parseInt($("#scene-maxage").val()),
-	}
+function saveFilter() {
 	var payload = {
 		scene: app.settings.scene
 	}
@@ -483,20 +359,23 @@ $('#btn-scene-save').click(function() {
 			showToast("Filter updated failed",'danger');
 		}
 	});
+}
+
+
+$('#btn-scene-save').click(function() {
+	app.settings.scene = {
+		confidence: parseInt($("#scene-confidence").val()),
+		rotation: parseInt($("#scene-rotation").val()),
+		cog: parseInt($("#scene-cog").val()),
+		tracker_confidence: ($("#scene-tracker").val()==="1"),
+		maxIdle: parseInt($("#scene-maxIdle").val()),
+	}
+	saveFilter();
 });
 
-function saveFilter() {
-	var payload = { detectionsFilter: app.settings.detectionsFilter };
-	var url = 'settings?json=' + encodeURI(JSON.stringify(payload));
-	$.ajax({type: "GET",
-		url: url,
-		success: function(response) {
-			showToast("Filter updated",'info');
-		},
-		error: function(xhr, status, error) {
-			showToast("Filter updated failed",'danger');
-		}
-	});
+function labelsUpdated(selection) {
+	app.settings.scene.ignoreClass = selection;
+	saveFilter();
 }
 
 function showToast(message, type = 'danger') {

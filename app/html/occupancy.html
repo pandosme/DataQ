@@ -19,10 +19,9 @@
         <div class="list-group list-group-flush">
 			<a href="index.html" class="list-group-item list-group-item-action">Overview</a>
 			<a href="events.html" class="list-group-item list-group-item-action">Events</a>
-			<a href="scene.html" class="list-group-item list-group-item-action">Scene</a>
+			<a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
 			<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
 			<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
-			<a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
 			<a href="occupancy.html" class="list-group-item list-group-item-action active">Occupancy</a>
 			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
 			<a href="about.html" class="list-group-item list-group-item-action">About</a>
@@ -162,7 +161,7 @@ $(document).ready(function() {
 				}
 			});
 
-			$("#occupancy-transition").val(app.settings.occupancyIntegration);
+			$("#occupancy-transition").val(app.settings.occupancyFilter.integration);
 
 			if( app.settings.publish.detections === false ) {
 				forcePublish = true;
@@ -213,9 +212,9 @@ window.addEventListener("beforeunload", function(event) {
 });
 
 $('#occupancy-transition').on('change', function() {
-	app.settings.occupancyIntegration = parseInt($(this).val());
+	app.settings.occupancyFilter.integration = parseInt($(this).val());
 	var payload = {
-		occupancyIntegration: app.settings.occupancyIntegration
+		occupancyFilter: app.settings.occupancyFilter
 	}
 	var url = 'settings?json=' + encodeURI(JSON.stringify(payload));
 	$.ajax({type: "GET",

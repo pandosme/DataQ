@@ -6,12 +6,10 @@
     <title></title>
     <link rel="stylesheet" href="css/bootstrap.min.css">
     <link rel="stylesheet" href="css/app.css">
-    <link rel="stylesheet" href="css/imgareaselect-default.css">
     <script src="js/jquery-3.7.1.min.js"></script>
     <script src="js/bootstrap.bundle.min.js"></script>
     <script src="js/media-stream-player.min.js"></script>
     <script src="js/paho-mqtt-min.js"></script>
-    <script src="js/jquery.imgareaselect.js"></script>
 </head>
 <body>
 <div class="d-flex" id="wrapper">
@@ -20,10 +18,9 @@
         <div class="list-group list-group-flush">
 			<a href="index.html" class="list-group-item list-group-item-action">Publish</a>
 			<a href="events.html" class="list-group-item list-group-item-action">Events</a>
-			<a href="scene.html" class="list-group-item list-group-item-action">Scene</a>
+			<a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
 			<a href="trackers.html" class="list-group-item list-group-item-action active">Trackers</a>
 			<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
-			<a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
 			<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
 			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
 			<a href="about.html" class="list-group-item list-group-item-action">About</a>
@@ -83,15 +80,11 @@
 										<h5 class="card-title mb-0">Filter</h5>
 									</div>
 									<div class="card-body">
-										<button type="button" class="btn btn-outline-primary w-100 mb-3" id="btn-area">
-											Set required birth area
-										</button>
-										
 										<div class="mb-3 d-flex align-items-center">
 											<label for="filter-age" class="form-label text-nowrap me-3 mb-0">
 												Minimum age before tracking
 											</label>
-											<select class="form-select ms-auto" id="filter-age" style="width: 100px;">
+											<select class="form-select ms-auto" id="filter-age" style="width: 150px;">
 												<option value="0">0.0 s</option>
 												<option value="0.5">0.5 s</option>
 												<option value="1">1.0 s</option>
@@ -112,7 +105,7 @@
 											<label for="filter-distance" class="form-label text-nowrap me-3 mb-0">
 												Minimum distance before tracking (% of view)
 											</label>
-											<select class="form-select ms-auto" id="filter-distance" style="width: 100px;">
+											<select class="form-select ms-auto" id="filter-distance" style="width: 150px;">
 												<option value="0">0%</option>
 												<option value="5">5%</option>
 												<option value="10">10%</option>
@@ -122,76 +115,7 @@
 												<option value="30">30%</option>
 											</select>
 										</div>
-
 										<button type="button" class="btn btn-success w-100" id="btn-save">Save</button>
-									</div>
-								</div>
-							</div>
-							<div class="col-5">
-								<div class="card">
-									<div class="card-header">
-										<h5 class="card-title mb-0">Class filter</h5>
-									</div>
-									<div class="card-body">
-										<div class="row">
-											<!-- Column 1 -->
-											<div class="col-4">
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="Human" id="class-human">
-													<label class="form-check-label" for="class-human">Human</label>
-												</div>
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="Head" id="class-head">
-													<label class="form-check-label" for="class-head">Head</label>
-												</div>
-											</div>
-											<!-- Column 2 -->
-											<div class="col-4">
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="Car" id="class-car">
-													<label class="form-check-label" for="class-car">Car</label>
-												</div>
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="Truck" id="class-truck">
-													<label class="form-check-label" for="class-truck">Truck</label>
-												</div>
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="Bus" id="class-bus">
-													<label class="form-check-label" for="class-bus">Bus</label>
-												</div>
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="Vehicle" id="class-vehicle">
-													<label class="form-check-label" for="class-vehicle">Vehicle</label>
-												</div>
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="Bike" id="class-bike">
-													<label class="form-check-label" for="class-bike">Bike</label>
-												</div>
-											</div>
-											<!-- Column 3 -->
-											<div class="col-4">
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="Animal" id="class-animal">
-													<label class="form-check-label" for="class-animal">Animal</label>
-												</div>
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="LicensePlate" id="class-license">
-													<label class="form-check-label" for="class-license">License Plate</label>
-												</div>
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="Bag" id="class-bag">
-													<label class="form-check-label" for="class-bag">Bag</label>
-												</div>
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="Backpack" id="class-backpack">
-													<label class="form-check-label" for="class-backpack">Backpack</label>
-												</div>
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="Suitcase" id="class-suitcase">
-													<label class="form-check-label" for="class-suitcase">Suitcase</label>
-												</div>
-											</div>
-										</div>
 									</div>
 								</div>
 							</div>
@@ -209,8 +133,6 @@ let MQTT_Client = 0;
 var app = null;
 var width = 800;
 var height = 450;
-var areaHandler = 0;
-var areaMode = null;
 
 $(document).ready(function() {
 	
@@ -223,6 +145,10 @@ $(document).ready(function() {
 			app = data;
 			document.title = app.manifest.acapPackageConf.setup.friendlyName;
 			$('.sidebar-heading').text(app.manifest.acapPackageConf.setup.friendlyName);
+
+			$("#filter-distance").val(app.settings.trackerFilter.distance);
+			$("#filter-age").val(app.settings.trackerFilter.age);
+
 			const aspectRatio = app.device.aspect || '16:9';
 			const [aspectWidth, aspectHeight] = aspectRatio.split(':').map(Number);
 			const paddingPercentage = (aspectHeight / aspectWidth) * 100;
@@ -265,11 +191,6 @@ $(document).ready(function() {
 					showToast("DataQ is not connected to a broker.  Please go to MQTT Settings");
 				}, 100);
 			}
-
-			$("#filter-distance").val(app.settings.trackerFilter.distance);
-			$("#filter-age").val(app.settings.trackerFilter.age);
-
-			initializeClassFilters();
 			
 			$('.video-panel').css('padding-top', `${paddingPercentage}%`);
 			PlayVideo(aspectRatio, app.settings.scene.rotation );
@@ -280,106 +201,33 @@ $(document).ready(function() {
 	});
 });
 
-function initializeClassFilters() {
-	// Initialize checkboxes based on ignoreClass array
-	$('.form-check-input').each(function() {
-		const className = $(this).val();
-		const isIgnored = app.settings.trackerFilter.ignoreClass.includes(className);
-		$(this).prop('checked', !isIgnored);
-	});
-
-	// Add change event handler for all checkboxes
-	$('.form-check-input').change(function() {
-		const className = $(this).val();
-		const isChecked = $(this).prop('checked');
-		
-		if (isChecked) {
-			// Remove from ignoreClass array if unchecked
-			const index = app.settings.trackerFilter.ignoreClass.indexOf(className);
-			if (index > -1) {
-				app.settings.trackerFilter.ignoreClass.splice(index, 1);
-			}
-		} else {
-			// Add to ignoreClass array if checked
-			if (!app.settings.trackerFilter.ignoreClass.includes(className)) {
-				app.settings.trackerFilter.ignoreClass.push(className);
-			}
+function saveFilter() {
+	var payload = {
+		trackerFilter: app.settings.trackerFilter
+	}
+	var url = 'settings?json=' + encodeURI(JSON.stringify(payload));
+	$.ajax({type: "GET",
+		url: url,
+		success: function(response) {
+			showToast("Settings updated",'info');
+		},
+		error: function(xhr, status, error) {
+			showToast("Filter updated failed",'danger');
 		}
-		saveFilter();
 	});
 }
 
-function selectArea( area ) {
-	if( area === "aoi") {
-		var x1 = parseInt( app.settings.trackerFilter.aoi.x1 / 1000 * width);
-		var y1 = parseInt( app.settings.trackerFilter.aoi.y1 / 1000 * height);
-		var x2 = parseInt( app.settings.trackerFilter.aoi.x2 / 1000 * width);
-		var y2 = parseInt( app.settings.trackerFilter.aoi.y2 / 1000 * height);
-	}
-	if( area === "minSize") {
-		var x1 = parseInt( (1000 - app.settings.trackerFilter.minWidth) / 2000 * width);
-		var y1 = parseInt( (1000 - app.settings.trackerFilter.minHeight) / 2000 * height);
-		var x2 = x1 + parseInt( app.settings.trackerFilter.minWidth / 1000 * width);
-		var y2 = y1 + parseInt( app.settings.trackerFilter.minHeight / 1000 * height);
-	}
-	if( area === "maxSize") {
-		var x1 = parseInt( (1000 - app.settings.trackerFilter.maxWidth) / 2000 * width);
-		var y1 = parseInt( (1000 - app.settings.trackerFilter.maxHeight) / 2000 * height);
-		var x2 = x1 + parseInt( app.settings.trackerFilter.maxWidth / 1000 * width);
-		var y2 = y1 + parseInt( app.settings.trackerFilter.maxHeight / 1000 * height);
-	}
-	areaHandler.setSelection(x1, y1, x2, y2, 0);				
-	areaHandler.setOptions({show:true});
-	areaMode = area;
-}
 
-function updateArea( area, selection ) {
-	if( area === "aoi") {
-		app.settings.trackerFilter.aoi.x1 = Math.round(selection.x1 * 1000 / width);
-		app.settings.trackerFilter.aoi.x2 = Math.round(selection.x2 * 1000 / width);
-		app.settings.trackerFilter.aoi.y1 = Math.round(selection.y1 * 1000 / height);
-		app.settings.trackerFilter.aoi.y2 = Math.round(selection.y2 * 1000 / height);
-	}
-	if( area === "minSize") {
-		app.settings.trackerFilter.minWidth = Math.round(selection.x2 * 1000 / width) - Math.round(selection.x1 * 1000 / width);
-		app.settings.trackerFilter.minHeight = Math.round(selection.y2 * 1000 / height) - Math.round(selection.y1 * 1000 / height);
-	}
-	if( area === "maxSize") {
-		app.settings.trackerFilter.maxWidth = Math.round(selection.x2 * 1000 / width) - Math.round(selection.x1 * 1000 / width);
-		app.settings.trackerFilter.maxHeight = Math.round(selection.y2 * 1000 / height) - Math.round(selection.y1 * 1000 / height);
-	}
-}
-
-function setActiveMode(mode, button) {
-	$('.btn-outline-primary').removeClass('active');
-	if (areaMode === mode) {
-		// If clicking the same button, deactivate it
-		areaMode = null;
-	} else {
-		// Activate the new mode
-		currentMode = mode;
-		$(button).addClass('active');
-	}
-}
-
-$('#filter-age').on('change', function(e) {
-	app.settings.trackerFilter.age = parseFloat($(this).val());
-});
-
-$('#filter-distance').on('change', function(e) {
-	app.settings.trackerFilter.distance = parseInt($(this).val());
-});
-
-$('#btn-area').click(function() {
-	setActiveMode('aoi', this);
-	selectArea("aoi");
-});
-
-$('#btn-save').click(function() {
-	$('.btn-outline-primary').removeClass('active');
+$('#scene-save').click(function() {
+	app.settings.trackerFilter.distance = parseInt($("#filter-distance").val()),
+	app.settings.trackerFilter.age = parseInt($("#filter-age").val())
 	saveFilter();
-	areaHandler.setOptions({hide:true});
 });
+
+function labelsUpdated(selection) {
+	app.settings.trackerFilter.ignoreClass = selection;
+	saveFilter();
+}
 
 function ConnectWebSocketClient() {
 	const clientID = "WS-" + app.manifest.acapPackageConf.setup.appName + "-" + app.device.serial + "-" + Math.floor(Math.random() * 10000);
@@ -432,7 +280,7 @@ var detections = {};
 
 function onMessageArrived(message) {
 	var detection = JSON.parse(message.payloadString);
-	if( detection.active == false )
+	if( detection.active == false ||  detection.ignore == true )
 		delete detections[detection.id];
 	else
 		detections[detection.id] = detection;
@@ -524,33 +372,6 @@ function PlayVideo(aspect, rotation) {
 				+ ' resolution="' + videoWidth + 'x' + videoHeight + '"'
 				+ ' variant="basic" autoplay></media-stream-player>';
 	$("#video").append(player);
-
-	if( areaHandler )
-		delete areaHandler;
-
-	areaHandler = $("#video").imgAreaSelect({
-		x1: 0, y1: 0, x2: width, y2: height,
-		handles: true, enable:true, movable:true, resizable:true, show:false,
-		instance: true,
-		onSelectEnd: function(img, selection) {
-			updateArea( areaMode, selection );
-		}
-	});
-	areaHandler.setOptions({hide:true});
-}
-
-function saveFilter() {
-	var payload = { trackerFilter: app.settings.trackerFilter };
-	var url = 'settings?json=' + encodeURI(JSON.stringify(payload));
-	$.ajax({type: "GET",
-		url: url,
-		success: function(response) {
-			showToast("Filter updated",'info');
-		},
-		error: function(xhr, status, error) {
-			showToast("Filter updated failed",'danger');
-		}
-	});
 }
 
 function showToast(message, type = 'danger') {
