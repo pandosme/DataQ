@@ -137,6 +137,7 @@ MQTT Heartbeat published every 15 minutes
 ### Requirements
 - WebSocket support for data visualization in the user interface
 
+
 > **Note**: This ACAP deprecates and replaces SIMQTT, ObjectTracker, ObjectPath and Occupancy  
 > **Note**: Use DataQ when standard Axis device services and data formats do not meet your requirements.
 
