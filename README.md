@@ -66,7 +66,7 @@ Geospace transforms the object detections x/y space in video to longitude and la
 In order to get a good result, it is recommended that the calibration markers cover the area where objects move while maximizing the 4-corner area. It is also recommended to enable the camera's Barrel distortion correction (Menu | Installation | Image correction).  
 You may add more than 4 markers if needed, but it may also make things worse.  
 
-Geospace data uses Trackers. They do not need to be published but you may need to adjust both "Detections" and "Trackers".  
+Geospace data uses Trackers for the transformations. Trackers do not need to be published but you may need to adjust both "Detections" and "Trackers".  
 Recommended settings:  
 * Set Detections "Max idle" to 5 or 10 seconds to prevent sending location for stationary objects.
 * Disable all labels under Detections you are not interested in.
