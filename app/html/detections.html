@@ -70,7 +70,7 @@
 												<button type="button" class="btn btn-outline-primary col-3" id="btn-area">Set Area of Interest</button>
 												<button type="button" class="btn btn-outline-primary col-3" id="btn-min-size">Set minimum size (w and h)</button>
 												<button type="button" class="btn btn-outline-primary col-3" id="btn-max-size">Set maximum size (w and h)</button>
-												<button type="button" class="btn btn-success col-2" id="btn-save">Save</button>
+												<button type="button" class="btn btn-success col-2" id="btn-save-settings">Save</button>
 											</div>
 										</div>
 									</div>
@@ -351,22 +351,19 @@ function ConnectWebSocketClient() {
 function updateConnectionStatus(status) {
     const statusElement = document.getElementById('connectionStatus');
     const messageElement = document.getElementById('statusMessage');
-
+    
     switch (status) {
         case 'connected':
-            statusElement.classList.remove('disconnected', 'reconnecting');
-            statusElement.classList.add('connected');
+            statusElement.style.backgroundColor = '#00ff00'; // Green
             messageElement.textContent = 'Connected';
             break;
         case 'disconnected':
-            statusElement.classList.remove('connected', 'reconnecting');
-            statusElement.classList.add('disconnected');
+            statusElement.style.backgroundColor = '#ff0000'; // Red
             messageElement.textContent = 'Disconnected';
             break;
         case 'connecting':
         case 'reconnecting':
-            statusElement.classList.remove('connected', 'disconnected');
-            statusElement.classList.add('reconnecting');
+            statusElement.style.backgroundColor = '#ffff00'; // Yellow
             messageElement.textContent = status.charAt(0).toUpperCase() + status.slice(1);
             break;
         default:
@@ -503,8 +500,7 @@ function saveFilter() {
 	});
 }
 
-
-$('#btn-save').click(function() {
+$('#btn-save-settings').click(function() {
 	app.settings.scene.confidence = parseInt($("#scene-confidence").val());
 	app.settings.scene.rotation = parseInt($("#scene-rotation").val());
 	app.settings.scene.cog = parseInt($("#scene-cog").val());
@@ -512,6 +508,7 @@ $('#btn-save').click(function() {
 	app.settings.scene.maxIdle = parseInt($("#scene-maxIdle").val());
 	saveFilter();
 });
+
 
 function labelsUpdated(selection) {
 	app.settings.scene.ignoreClass = selection;

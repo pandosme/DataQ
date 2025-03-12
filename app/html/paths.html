@@ -244,7 +244,7 @@ $(document).ready(function() {
 	});
 });
 
-function savePathFilter() {
+function saveFilter() {
 	var payload = { pathFilter: app.settings.pathFilter };
 	var url = 'settings?json=' + encodeURI(JSON.stringify(payload));
 	$.ajax({type: "GET",
@@ -260,7 +260,7 @@ function savePathFilter() {
 
 $('#btn-save').click(function() {
 	$('.btn-outline-primary').removeClass('active');
-	savePathFilter();
+	saveFilter();
 	areaHandler.setOptions({hide:true});
 });
 
@@ -392,22 +392,19 @@ function ConnectWebSocketClient() {
 function updateConnectionStatus(status) {
     const statusElement = document.getElementById('connectionStatus');
     const messageElement = document.getElementById('statusMessage');
-
+    
     switch (status) {
         case 'connected':
-            statusElement.classList.remove('disconnected', 'reconnecting');
-            statusElement.classList.add('connected');
+            statusElement.style.backgroundColor = '#00ff00'; // Green
             messageElement.textContent = 'Connected';
             break;
         case 'disconnected':
-            statusElement.classList.remove('connected', 'reconnecting');
-            statusElement.classList.add('disconnected');
+            statusElement.style.backgroundColor = '#ff0000'; // Red
             messageElement.textContent = 'Disconnected';
             break;
         case 'connecting':
         case 'reconnecting':
-            statusElement.classList.remove('connected', 'disconnected');
-            statusElement.classList.add('reconnecting');
+            statusElement.style.backgroundColor = '#ffff00'; // Yellow
             messageElement.textContent = status.charAt(0).toUpperCase() + status.slice(1);
             break;
         default:

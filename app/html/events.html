@@ -227,31 +227,27 @@ function ConnectWebSocketClient() {
 }
 
 function updateConnectionStatus(status) {
-	const statusElement = document.getElementById('connectionStatus');
-	const messageElement = document.getElementById('statusMessage');
-
-	switch (status) {
-		case 'connected':
-			statusElement.classList.remove('disconnected', 'reconnecting');
-			statusElement.classList.add('connected');
-			messageElement.textContent = 'Connected';
-			break;
-		case 'disconnected':
-			statusElement.classList.remove('connected', 'reconnecting');
-			statusElement.classList.add('disconnected');
-			messageElement.textContent = 'Disconnected';
-			break;
-		case 'connecting':
-		case 'reconnecting':
-			statusElement.classList.remove('connected', 'disconnected');
-			statusElement.classList.add('reconnecting');
-			messageElement.textContent = status.charAt(0).toUpperCase() + status.slice(1);
-			break;
-		default:
-			console.log('Unknown status:', status);
-	}
+    const statusElement = document.getElementById('connectionStatus');
+    const messageElement = document.getElementById('statusMessage');
+    
+    switch (status) {
+        case 'connected':
+            statusElement.style.backgroundColor = '#00ff00'; // Green
+            messageElement.textContent = 'Connected';
+            break;
+        case 'disconnected':
+            statusElement.style.backgroundColor = '#ff0000'; // Red
+            messageElement.textContent = 'Disconnected';
+            break;
+        case 'connecting':
+        case 'reconnecting':
+            statusElement.style.backgroundColor = '#ffff00'; // Yellow
+            messageElement.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+            break;
+        default:
+            console.log('Unknown status:', status);
+    }
 }
-
 
 function onConnect() {
 	updateConnectionStatus('connected');

@@ -1,6 +1,6 @@
 # DataQ
 
-DataQ is an MQTT Client for Axis cameras that enables custom data-driven solutions when standard camera data formats are insufficient. It processes, filters, and transforms data before MQTT publishing to optimize resource usage.
+DataQ is an MQTT Client for Axis cameras that enables custom data-driven solutions when standard camera data and formats are insufficient. It processes, filters, and transforms data before MQTT publishing to optimize resource usage.
 
 ## Key Features
 
@@ -21,8 +21,6 @@ DataQ is an MQTT Client for Axis cameras that enables custom data-driven solutio
 - MQTT Broker with WebSocket support
 - MQTT client for data consumption
 
-## Known limitations
-- 
 
 ### [Download](https://www.dropbox.com/scl/fi/3z5ruobn27nvt2rwebqym/DataQ.zip?rlkey=etnpo7yvp2u6vqxi9d50hqpik&st=ian3s4md&dl=1)
 Pre-compiled version for ARMv7-HF and AARCH64
@@ -59,8 +57,33 @@ Event-based triggers for actions, offering streamlined MQTT message publishing c
 
 **Occupancy Data**
 - Provides updates when number of detected objects in the scene changes
-	- Que management
+	- Queue management
 	- Loitering
+
+**Geospace Data**  
+  
+Geospace transforms the object detections x/y space in video to longitude and latitude. The technology used is homography.  
+In order to get a good result, it is recommended that the calibration markers cover the area where objects move while maximizing the 4-corner area. It is also recommended to enable the camera's Barrel distortion correction (Menu | Installation | Image correction).  
+You may add more than 4 markers if needed, but it may also make things worse.  
+
+Geospace data uses Trackers. They do not need to be published but you may need to adjust both "Detections" and "Trackers".  
+Recommended settings:  
+* Set Detections "Max idle" to 5 or 10 seconds to prevent sending location for stationary objects.
+* Disable all labels under Detections you are not interested in.
+* Set Tracker "Minimum distance" to 5% or more to prevent stationary objects from being falsely detected as moving.
+
+1. Click "Edit Markers".  
+  - Use the mouse to move the map to the area the camera is located. Click "Save map"
+  - Add 4 markers by clicking the left mouse in the video. A corresponding marker will be displayed in the map. 
+	Move the markers to distinct positions (e.g. corner of a building)
+	Marker is removed by right-clicking on the marker in the video view.  
+  - Click "Save and calibrate"
+2. Click "Verify"
+  - Use the mouse and left-click in the video view. A marker will be shown in the map. See how well they correlate. You may need to go back to step 1 and adjust calibration.  
+3. Click "Monitor"
+  - Detected moving Objects will be displayed in both video and map view.
+
+Check out the Node-RED example worldmap-flow.json under examples. Import the worldmap node and the worldmap-flow.json to your Node-RED. Configure the MQTT client.  
 
 ### Monitoring Data
 
@@ -73,7 +96,7 @@ MQTT Heartbeat published every 15 minutes
 ## Integration Specifications
 
 ### Coordinate System
-- Relative coordinates: [0,0] to [1000,1000]
+- Relative coordinates: to[1000][1000]
 - Origin: Top-left corner
 - Aspect ratio independent
 
@@ -86,17 +109,18 @@ MQTT Heartbeat published every 15 minutes
 | class | Object classification (Human, Vehicle, etc.) |
 | active | Tracking status boolean |
 | x, y, w, h | Bounding box coordinates |
-| cx, cy | Center of gravity coordinates |
+| cx, cy | Center of gravity coordinates. Either middle of the object or bottom-center |
 | dx, dy | Travel distance from origin |
 | birth | Object detection timestamp (EPOCH) |
 | bx, by | Initial position coordinates |
 | age | Duration since detection (seconds) |
 | confidence | Detection confidence (0-100) |
 | timestamp | Current/last detection time |
-| topVelocity | Maximum tracked speed |
+| topVelocity | Maximum tracked speed (% of view/seconds)|
 | color, color2 | Primary/secondary object colors |
 | attributes | Additional object characteristics |
 | path | Position and duration array |
+| lat,lon | Longitude and Latitude |
 
 ## MQTT Configuration
 
@@ -111,27 +135,24 @@ MQTT Heartbeat published every 15 minutes
   Bind WS port 1884 in the AEDES settings
 
 ### Requirements
-- WebSocket support for visualization
-- Topics and payload specifications (Documentation pending)
+- WebSocket support for data visualization in the user interface
 
-> **Note**: This tool deprecates and replaces SIMQTT, ObjectTracker, ObjectPath and Occupancy
-> **Note**: Use DataQ when standard Axis device data formats don't meet your requirements.
+> **Note**: This ACAP deprecates and replaces SIMQTT, ObjectTracker, ObjectPath and Occupancy  
+> **Note**: Use DataQ when standard Axis device services and data formats do not meet your requirements.
 
 # History
 
 ### 1.4.1	March 13, 2025
-- Added Geospace data that provides a way to transform object video positions to a geolocation longitude and latitude. 
-  The technology used is homography.  The user defines four markers in a video x/y spave with a corresponding lat/lon marker on a world map.  
-  It is recommeded to focus calibrations on the area where objects move.  
-  It is also recommeded to enable the cameras Barrel distortion correction (Menu | Installation | Image correction)
+- Added Geospace data (Check documentation above).
 - Added web page MQTT connection message box to know if the web page is connected or not.
+- Bug fixes
 
 ### 1.3.0	March 3, 2025
 - Replaced "Max age" with "Max idle".  
   When Max idle time is set, detections are not published when after not moving X seconds.  
-  When the object starts moving, the same object ID will be used when publishing.  Age birth and distance will be preserved.    
-  Occupancy is imapcted and will not count idle objects  
-  Path will be published when object is idle  
+  When the object starts moving, the same object ID will be used when publishing. Age, birth and distance will be preserved.    
+  Occupancy is impacted and will not count idle objects.  
+  Path will be published when object is idle.  
 - Restructuring GUI
 
 ### 1.2.10	March 3, 2025
@@ -139,23 +160,23 @@ MQTT Heartbeat published every 15 minutes
 
 ### 1.2.9	March 2, 2025
 - Refactoring MQTT client
-  * Announcement reatined message
+  * Announcement retained message
   * Disconnect retained message
 - User interface updates
 
 ### 1.2.8	February 22, 2025
-- Created a new Menu "Scene" to be used to monitor and configure scene behaviour
+- Created a new Menu "Scene" to be used to monitor and configure scene behavior
 - Added support for enabling low confident trackers.
 - Added temporarily enabling publishing for objects needed for a specific page if the publishing is disabled. The publishing will be disabled again when leaving the page.
 - Fixed MQTT stability (recurring disconnects)
-- Added WSS port and a way to enforce the client to use WSS event for pages accessed with HTTP.  WSS will always be used when a paged os accessed over HTTP.
+- Added WSS port and a way to enforce the client to use WSS even for pages accessed with HTTP. WSS will always be used when a page is accessed over HTTP.
 
 ### 1.2.7	February 12, 2025
-- Fixed logic and refernce flaws.
+- Fixed logic and reference flaws.
   Pull Request from InSupport
 
 ### 1.2.6	February 9, 2025
-- Fixed support for data visualization when accessin cemar over HTTPS with Secure WebSockets in client
+- Fixed support for data visualization when accessing camera over HTTPS with Secure WebSockets in client
 
 ### 1.2.5	February 3, 2025
 - Adjustments on MQTT payload for path
@@ -165,15 +186,15 @@ MQTT Heartbeat published every 15 minutes
 - Fixed "hanging-objects" due to changes in Axis OS12
 - Fixed a memory leak (event processing)
 - Fixed faulty center-of-gravity when camera is rotated
-- Detections filter will only imapct Occupancy but no longer Trackers & Paths
+- Detections filter will only impact Occupancy but no longer Trackers & Paths
 - Tracker filter impacts Path
 
 ### 1.1.1	January 23, 2025
-- Corrected Object Detection post-processeing 
+- Corrected Object Detection post-processing 
 
 ### 1.1.0	January 18, 2025
-- Objects are now only tracked withing Area-Of-Intrest
-- Added Scene Max Age (Detections) that defines how old an object needs to be before being ignored.  Typically used to Occupancy.
+- Objects are now only tracked within Area-Of-Interest
+- Added Scene Max Age (Detections) that defines how old an object needs to be before being ignored. Typically used for Occupancy.
 - Added Occupancy
 
 ### 1.0.2	January 14, 2025

@@ -90,9 +90,7 @@
 											</label>
 											<select class="form-select ms-auto" id="filter-age" style="width: 150px;">
 												<option value="0">0.0 s</option>
-												<option value="0.5">0.5 s</option>
 												<option value="1">1.0 s</option>
-												<option value="1.5">1.5 s</option>
 												<option value="2">2.0 s</option>
 												<option value="3">3.0 s</option>
 												<option value="4">4.0 s</option>
@@ -206,6 +204,21 @@ $(document).ready(function() {
         }
 	});
 });
+
+function saveFilter() {
+	var payload = { trackerFilter: app.settings.trackerFilter };
+	var url = 'settings?json=' + encodeURI(JSON.stringify(payload));
+	$.ajax({type: "GET",
+		url: url,
+		success: function(response) {
+			showToast("Filter updated",'info');
+		},
+		error: function(xhr, status, error) {
+			showToast("Filter updated failed",'danger');
+		}
+	});
+}
+
 
 $('#btn-save').click(function() {
 	app.settings.trackerFilter.distance = parseInt($("#filter-distance").val()),

@@ -1,0 +1,228 @@
+[
+    {
+        "id": "c8da33167c4b1fd9",
+        "type": "ui_worldmap",
+        "z": "810ff148240a5f14",
+        "group": "fe08ef8587e2d522",
+        "order": 0,
+        "width": 0,
+        "height": 0,
+        "name": "",
+        "lat": "0",
+        "lon": "0",
+        "zoom": "2",
+        "layer": "OSMG",
+        "cluster": "",
+        "maxage": "",
+        "usermenu": "show",
+        "layers": "show",
+        "panit": "false",
+        "panlock": "false",
+        "zoomlock": "false",
+        "hiderightclick": "true",
+        "coords": "none",
+        "showgrid": "false",
+        "showruler": "true",
+        "allowFileDrop": "false",
+        "path": "/worldmap",
+        "overlist": "DR,CO,RA,DN,HM",
+        "maplist": "OSMG",
+        "mapname": "",
+        "mapurl": "",
+        "mapopt": "",
+        "mapwms": false,
+        "x": 840,
+        "y": 140,
+        "wires": []
+    },
+    {
+        "id": "806b074696f55097",
+        "type": "function",
+        "z": "810ff148240a5f14",
+        "name": "function 1",
+        "func": "    \nvar icon = null;\n\nswitch( msg.payload.class ) {\n    case \"Car\": icon = \"fa-car\"; break;\n    case \"Bike\": icon = \"fa-motorcycle \"; break;\n    case \"Human\": icon = \"fa-male\"; break;\n    case \"Truck\": icon = \"fa-truck\"; break;\n    case \"Bus\": icon = \"fa-bus\"; break;\n}\n\nvar age = msg.payload.age + \"s\";\nif( msg.payload.age > 60)\n    age = (msg.payload.age/60).toFixed(1) + \"m\";\nif( msg.payload.age > 3600)\n    age = (msg.payload.age/3600).toFixed(1) + \"h\";\n\nmsg.payload = {\n    layer: msg.payload.class,\n    name: msg.payload.id,\n    label: age,\n    lat: msg.payload.lat,\n    lon: msg.payload.lon,\n}\n\nif( icon ) {\n    msg.payload.icon = icon;\n}\n\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 640,
+        "y": 140,
+        "wires": [
+            [
+                "c8da33167c4b1fd9"
+            ]
+        ]
+    },
+    {
+        "id": "ca53252c314ff07d",
+        "type": "switch",
+        "z": "810ff148240a5f14",
+        "name": "Active",
+        "property": "payload.active",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "true",
+                "vt": "jsonata"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 1,
+        "x": 470,
+        "y": 140,
+        "wires": [
+            [
+                "806b074696f55097"
+            ]
+        ]
+    },
+    {
+        "id": "1f4b8fa0ea9298de",
+        "type": "switch",
+        "z": "810ff148240a5f14",
+        "name": "Inactive",
+        "property": "payload.active",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "false",
+                "vt": "jsonata"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 1,
+        "x": 480,
+        "y": 180,
+        "wires": [
+            [
+                "3c00adf2cfe02877"
+            ]
+        ]
+    },
+    {
+        "id": "3c00adf2cfe02877",
+        "type": "function",
+        "z": "810ff148240a5f14",
+        "name": "function 2",
+        "func": "msg.payload = {\n    name: msg.payload.id,\n    lat: msg.payload.lat,\n    lon: msg.payload.lon,\n    deleted: true\n}\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 640,
+        "y": 180,
+        "wires": [
+            [
+                "c8da33167c4b1fd9"
+            ]
+        ]
+    },
+    {
+        "id": "c106ba15fc430a2f",
+        "type": "mqtt in",
+        "z": "810ff148240a5f14",
+        "name": "",
+        "topic": "dataq/geospace/#",
+        "qos": "2",
+        "datatype": "auto-detect",
+        "broker": "",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 150,
+        "y": 140,
+        "wires": [
+            [
+                "ca53252c314ff07d",
+                "1f4b8fa0ea9298de"
+            ]
+        ]
+    },
+    {
+        "id": "1e676aaba14bee82",
+        "type": "inject",
+        "z": "810ff148240a5f14",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 460,
+        "y": 100,
+        "wires": [
+            [
+                "cad8e1d27890c2ac"
+            ]
+        ]
+    },
+    {
+        "id": "cad8e1d27890c2ac",
+        "type": "function",
+        "z": "810ff148240a5f14",
+        "name": "Reset map",
+        "func": "msg.payload = {\n    command: { \n        clearlayer: [\"unknown\",\"Car\",\"Human\",\"Bus\",\"Truck\",\"Bike\"]\n    }\n}\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 630,
+        "y": 100,
+        "wires": [
+            [
+                "c8da33167c4b1fd9"
+            ]
+        ]
+    },
+    {
+        "id": "345e32573246e48b",
+        "type": "comment",
+        "z": "810ff148240a5f14",
+        "name": "Set your local coordinate and default zoom",
+        "info": "",
+        "x": 940,
+        "y": 100,
+        "wires": []
+    },
+    {
+        "id": "fe08ef8587e2d522",
+        "type": "ui_group",
+        "name": "Default",
+        "tab": "f21bb52f1a037684",
+        "order": 1,
+        "disp": false,
+        "width": "22",
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "f21bb52f1a037684",
+        "type": "ui_tab",
+        "name": "Geospace",
+        "icon": "dashboard",
+        "disabled": false,
+        "hidden": false
+    }
+]

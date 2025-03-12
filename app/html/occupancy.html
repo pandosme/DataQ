@@ -226,7 +226,6 @@ $('#occupancy-transition').on('change', function() {
 		url: url,
 		success: function(response) {
 			showToast("Settings updated",'info');
-			location.reload();
 		},
 		error: function(xhr, status, error) {
 			showToast("Filter updated failed",'danger');
@@ -269,22 +268,19 @@ function ConnectWebSocketClient() {
 function updateConnectionStatus(status) {
     const statusElement = document.getElementById('connectionStatus');
     const messageElement = document.getElementById('statusMessage');
-
+    
     switch (status) {
         case 'connected':
-            statusElement.classList.remove('disconnected', 'reconnecting');
-            statusElement.classList.add('connected');
+            statusElement.style.backgroundColor = '#00ff00'; // Green
             messageElement.textContent = 'Connected';
             break;
         case 'disconnected':
-            statusElement.classList.remove('connected', 'reconnecting');
-            statusElement.classList.add('disconnected');
+            statusElement.style.backgroundColor = '#ff0000'; // Red
             messageElement.textContent = 'Disconnected';
             break;
         case 'connecting':
         case 'reconnecting':
-            statusElement.classList.remove('connected', 'disconnected');
-            statusElement.classList.add('reconnecting');
+            statusElement.style.backgroundColor = '#ffff00'; // Yellow
             messageElement.textContent = status.charAt(0).toUpperCase() + status.slice(1);
             break;
         default:
