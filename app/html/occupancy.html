@@ -23,7 +23,7 @@
 			<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
 			<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
 			<a href="occupancy.html" class="list-group-item list-group-item-action active">Occupancy</a>
-			<a href="geospace.html" class="list-group-item list-group-item-action">GeoSpace</a>
+			<a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
 			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
 			<a href="about.html" class="list-group-item list-group-item-action">About</a>
         </div>
@@ -33,13 +33,16 @@
         <div class="container-fluid">
 			<div class="col-12">
 				<div class="card">
-					<div class="card-header">
+					<div class="card-header d-flex justify-content-between align-items-center">
 						<div class="publish-control">
 							<label class="switch">
 								<input type="checkbox" id="pageToggle">
 								<span class="slider round"></span>
 							</label>
 							<span class="switch-label">Publish Occupancy</span>
+						</div>
+						<div id="connectionStatus" class="connection-status">
+							<span id="statusMessage">Connected</span>
 						</div>
 					</div>
 					<div id="locationContent" class="location-content">					
@@ -185,7 +188,8 @@ $(document).ready(function() {
 				ConnectWebSocketClient();
 			} else {
 				setTimeout(() => {
-					showToast("DataQ is not connected to a broker.  Please go to MQTT Settings");
+					updateConnectionStatus('disconnected');
+					showToast("DataQ is not connected to a broker.  Please go to MQTT Settings","warning");
 				}, 100);
 			}
 
@@ -231,6 +235,7 @@ $('#occupancy-transition').on('change', function() {
 });
 
 function ConnectWebSocketClient() {
+	updateConnectionStatus('connecting');
 	const clientID = "WS-" + app.manifest.acapPackageConf.setup.appName + "-" + app.device.serial + "-" + Math.floor(Math.random() * 10000);
 	if(MQTT_Client)
 		delete MQTT_Client;
@@ -261,7 +266,34 @@ function ConnectWebSocketClient() {
 	MQTT_Client.connect(connectionOptions);
 }
 
+function updateConnectionStatus(status) {
+    const statusElement = document.getElementById('connectionStatus');
+    const messageElement = document.getElementById('statusMessage');
+
+    switch (status) {
+        case 'connected':
+            statusElement.classList.remove('disconnected', 'reconnecting');
+            statusElement.classList.add('connected');
+            messageElement.textContent = 'Connected';
+            break;
+        case 'disconnected':
+            statusElement.classList.remove('connected', 'reconnecting');
+            statusElement.classList.add('disconnected');
+            messageElement.textContent = 'Disconnected';
+            break;
+        case 'connecting':
+        case 'reconnecting':
+            statusElement.classList.remove('connected', 'disconnected');
+            statusElement.classList.add('reconnecting');
+            messageElement.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+            break;
+        default:
+            console.log('Unknown status:', status);
+    }
+}
+
 function onConnect() {
+	updateConnectionStatus('connected');
 	var topic = app.mqtt.preTopic + "/detections/" + app.device.serial;
 	MQTT_Client.subscribe(topic);
 	topic = app.mqtt.preTopic + "/occupancy/" + app.device.serial;
@@ -269,14 +301,20 @@ function onConnect() {
 }
 
 function onFailure(message) {
-	console.log("onFailure");
-	showToast("Web page not connect. " + message.errorMessage + "Check WebSocket connection in MQTT Settings","warning");
+	updateConnectionStatus('disconnected');	
+	showToast( message.errorMessage + "Check WebSocket connection in MQTT Settings","warning");
 }
 
 function onConnectionLost(responseObject) {
-  if (responseObject.errorCode !== 0) {
-	showToast("Web page lost connection. " + responseObject.errorMessage,"warning");
-  }
+	if (responseObject.errorCode !== 0) {
+		showToast(responseObject.errorMessage, "warning");
+		updateConnectionStatus('disconnected');
+		// Attempt to reconnect after 5 seconds
+		setTimeout(() => {
+			console.log("Attempting to reconnect...");
+			ConnectWebSocketClient();
+		}, 5000);
+	}
 }
 
 function UpdateTable( data ) {

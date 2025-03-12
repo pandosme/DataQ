@@ -1136,7 +1136,7 @@ static int MQTT_parse_config(const cJSON *root) {
     }
     char* json = cJSON_PrintUnformatted(root);
 	if(json) {
-		LOG("%s\n",json);
+		LOG_TRACE("%s\n",json);
 		free(json);
 	}
     // Clear the existing configuration

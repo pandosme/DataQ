@@ -22,7 +22,7 @@
 			<a href="trackers.html" class="list-group-item list-group-item-action active">Trackers</a>
 			<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
 			<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
-			<a href="geospace.html" class="list-group-item list-group-item-action">GeoSpace</a>
+			<a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
 			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
 			<a href="about.html" class="list-group-item list-group-item-action">About</a>
         </div>
@@ -32,13 +32,16 @@
         <div class="container-fluid">
 			<div class="col-12">
 				<div class="card">
-					<div class="card-header">
+					<div class="card-header d-flex justify-content-between align-items-center">
 						<div class="publish-control">
 							<label class="switch">
 								<input type="checkbox" id="pageToggle">
 								<span class="slider round"></span>
 							</label>
 							<span class="switch-label">Publish Tracker</span>
+						</div>
+						<div id="connectionStatus" class="connection-status">
+							<span id="statusMessage">Connected</span>
 						</div>
 					</div>
 					<div id="locationContent" class="location-content">
@@ -185,11 +188,13 @@ $(document).ready(function() {
 				}
 			});
 
+			updateConnectionStatus('connecting');
+
 			if( app.status.mqtt.connected ) {
 				ConnectWebSocketClient();
 			} else {
 				setTimeout(() => {
-					showToast("DataQ is not connected to a broker.  Please go to MQTT Settings");
+					showToast("DataQ is not connected to a broker.  Please go to MQTT Settings","warning");
 				}, 100);
 			}
 			
@@ -214,6 +219,7 @@ function labelsUpdated(selection) {
 }
 
 function ConnectWebSocketClient() {
+	updateConnectionStatus('connecting');
 	const clientID = "WS-" + app.manifest.acapPackageConf.setup.appName + "-" + app.device.serial + "-" + Math.floor(Math.random() * 10000);
 	if(MQTT_Client)
 		delete MQTT_Client;
@@ -244,19 +250,44 @@ function ConnectWebSocketClient() {
 	MQTT_Client.connect(connectionOptions);
 }
 
+function updateConnectionStatus(status) {
+    const statusElement = document.getElementById('connectionStatus');
+    const messageElement = document.getElementById('statusMessage');
+    
+    switch (status) {
+        case 'connected':
+            statusElement.style.backgroundColor = '#00ff00'; // Green
+            messageElement.textContent = 'Connected';
+            break;
+        case 'disconnected':
+            statusElement.style.backgroundColor = '#ff0000'; // Red
+            messageElement.textContent = 'Disconnected';
+            break;
+        case 'connecting':
+        case 'reconnecting':
+            statusElement.style.backgroundColor = '#ffff00'; // Yellow
+            messageElement.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+            break;
+        default:
+            console.log('Unknown status:', status);
+    }
+}
+
 function onConnect() {
+	updateConnectionStatus('connected');
 	var topic = app.mqtt.preTopic + "/tracker/" + app.device.serial;
 	MQTT_Client.subscribe(topic);
 }
 
 function onFailure(message) {
 	console.log("onFailure");
-	showToast("Web page not connect. " + message.errorMessage + "Check WebSocket connection in MQTT Settings","warning");
+	updateConnectionStatus('disconnected');
 }
 
 function onConnectionLost(responseObject) {
   if (responseObject.errorCode !== 0) {
 	showToast("Web page lost connection. " + responseObject.errorMessage,"warning");
+	updateConnectionStatus('disconnected');
   }
 }
 

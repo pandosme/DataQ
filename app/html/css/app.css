@@ -3,6 +3,12 @@ html, body, #wrapper {
 	height: 100%;
 }
 
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
 #sidebar-wrapper {
 	min-height: 100vh;
 }
@@ -414,4 +420,17 @@ input:checked + .slider:before {
   .btn-group {
     width: 100%;
   }
+}
+
+.connection-status {
+    padding: 5px 15px;
+    border-radius: 20px;
+    font-size: 1.5rem;
+    max-width: 200px; /* Limit the width */
+    text-align: center;
+}
+
+#connectionStatus {
+    background-color: #00ff00; /* Green for connected */
+    color: black;
 }

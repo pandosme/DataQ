@@ -29,7 +29,7 @@
             <a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
             <a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
 			<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
-			<a href="geospace.html" class="list-group-item list-group-item-action">GeoSpace</a>
+			<a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
             <a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
             <a href="about.html" class="list-group-item list-group-item-action">About</a>
         </div>
@@ -39,13 +39,16 @@
         <div class="container-fluid">
 			<div class="col-12">		
 				<div class="card">
-					<div class="card-header">
+					<div class="card-header d-flex justify-content-between align-items-center">
 						<div class="publish-control">
 							<label class="switch">
 								<input type="checkbox" id="pageToggle">
 								<span class="slider round"></span>
 							</label>
 							<span class="switch-label">Publish Events</span>
+						</div>
+						<div id="connectionStatus" class="connection-status">
+							<span id="statusMessage">Connected</span>
 						</div>
 					</div>
 					<div id="locationContent" class="location-content">
@@ -176,14 +179,12 @@ $(document).ready(function() {
 			
             populateTopics();
 			
-			if( app.settings.publish.events === false )
-				showLiveDataMessage("Live data visualization is unavailable - Events publishing is disabled.");
-			
             if( app.status.mqtt.connected ) {
                 ConnectWebSocketClient();
             } else {
                 setTimeout(() => {
-                    showToast("DataQ is not connected to a broker.  Please go to MQTT Settings");
+					updateConnectionStatus('disconnected');				
+					showToast("DataQ is not connected to a broker.  Please go to MQTT Settings","warning");
                 }, 100);
             }
         },
@@ -191,67 +192,90 @@ $(document).ready(function() {
             showToast("The application is not running",'danger');
         }
     });
-
-	function showLiveDataMessage(message) {
-		const alert = document.getElementById('liveDataAlert');
-		const messageElement = document.getElementById('liveDataMessage');
-		
-		messageElement.textContent = message;
-		alert.classList.remove('d-none');
-		alert.classList.add('show');
-	}
-
-
-	function ConnectWebSocketClient() {
-		const clientID = "WS-" + app.manifest.acapPackageConf.setup.appName + "-" + app.device.serial + "-" + Math.floor(Math.random() * 10000);
-		if(MQTT_Client)
-			delete MQTT_Client;
-		
-		// Use WSS if page is loaded over HTTPS
-		
-		var tls = app.settings.tls;
-		if( location.protocol === 'https:')
-			tls = true;
-		var port = tls?app.settings.WSS_Port:app.settings.WS_Port;
-
-		MQTT_Client = new Paho.MQTT.Client(app.mqtt.address, port, clientID);
-		
-		MQTT_Client.onConnectionLost = onConnectionLost;
-		MQTT_Client.onMessageArrived = onMessageArrived;
-		var connectionOptions = {
-			useSSL: tls,
-			timeout: 3,
-			onSuccess: onConnect,
-			onFailure: onFailure
-		};
-		
-		if(app.mqtt.user && app.mqtt.user.length)
-			connectionOptions.userName = app.mqtt.user;
-		if(app.mqtt.password && app.mqtt.password.length)
-			connectionOptions.password = app.mqtt.password;
-			
-		MQTT_Client.connect(connectionOptions);
-	}
-
-    function onConnect() {
-        var topic = app.mqtt.preTopic + "/event/" + app.device.serial + "/#";
-        MQTT_Client.subscribe(topic);
-    }
-
-	function onFailure(message) {
-		console.log("onFailure");
-		showLiveDataMessage("Live data visualization is temporarily unavailable - Web client is not connected to broker.");
-		showToast("Web page not connect. " + message.errorMessage + "Check WebSocket connection in MQTT Settings","warning");
-	}
-
-	function onConnectionLost(responseObject) {
-	  if (responseObject.errorCode !== 0) {
-		showLiveDataMessage("Live data visualization is temporarily unavailable - Web client is not connected to broker.");
-		showToast("Web page lost connection. " + responseObject.errorMessage,"warning");
-	  }
-	}
 });
 
+function ConnectWebSocketClient() {
+	updateConnectionStatus('connecting');
+	const clientID = "WS-" + app.manifest.acapPackageConf.setup.appName + "-" + app.device.serial + "-" + Math.floor(Math.random() * 10000);
+	if(MQTT_Client)
+		delete MQTT_Client;
+	
+	// Use WSS if page is loaded over HTTPS
+	
+	var tls = app.settings.tls;
+	if( location.protocol === 'https:')
+		tls = true;
+	var port = tls?app.settings.WSS_Port:app.settings.WS_Port;
+
+	MQTT_Client = new Paho.MQTT.Client(app.mqtt.address, port, clientID);
+	
+	MQTT_Client.onConnectionLost = onConnectionLost;
+	MQTT_Client.onMessageArrived = onMessageArrived;
+	var connectionOptions = {
+		useSSL: tls,
+		timeout: 3,
+		onSuccess: onConnect,
+		onFailure: onFailure
+	};
+	
+	if(app.mqtt.user && app.mqtt.user.length)
+		connectionOptions.userName = app.mqtt.user;
+	if(app.mqtt.password && app.mqtt.password.length)
+		connectionOptions.password = app.mqtt.password;
+		
+	MQTT_Client.connect(connectionOptions);
+}
+
+function updateConnectionStatus(status) {
+	const statusElement = document.getElementById('connectionStatus');
+	const messageElement = document.getElementById('statusMessage');
+
+	switch (status) {
+		case 'connected':
+			statusElement.classList.remove('disconnected', 'reconnecting');
+			statusElement.classList.add('connected');
+			messageElement.textContent = 'Connected';
+			break;
+		case 'disconnected':
+			statusElement.classList.remove('connected', 'reconnecting');
+			statusElement.classList.add('disconnected');
+			messageElement.textContent = 'Disconnected';
+			break;
+		case 'connecting':
+		case 'reconnecting':
+			statusElement.classList.remove('connected', 'disconnected');
+			statusElement.classList.add('reconnecting');
+			messageElement.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+			break;
+		default:
+			console.log('Unknown status:', status);
+	}
+}
+
+
+function onConnect() {
+	updateConnectionStatus('connected');
+	var topic = app.mqtt.preTopic + "/event/" + app.device.serial + "/#";
+	MQTT_Client.subscribe(topic);
+}
+
+function onFailure(message) {
+	console.log("onFailure");
+	updateConnectionStatus('disconnected');		
+	showToast(message.errorMessage + "Check WebSocket connection in MQTT Settings","warning");
+}
+
+function onConnectionLost(responseObject) {
+	if (responseObject.errorCode !== 0) {
+		showToast(responseObject.errorMessage, "warning");
+		updateConnectionStatus('disconnected');
+		// Attempt to reconnect after 5 seconds
+		setTimeout(() => {
+			console.log("Attempting to reconnect...");
+			ConnectWebSocketClient();
+		}, 5000);
+	}
+}
 
 document.getElementById('topicsList').addEventListener('change', function(event) {
     if (event.target.type === 'checkbox') {

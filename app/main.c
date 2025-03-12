@@ -699,7 +699,7 @@ MemoryMonitor(gpointer user_data) {
 	int c7 = cJSON_GetArraySize(classCounterArrays);
 	int c8 = cJSON_GetArraySize(previousOccupancy);
 	int c9 = ObjectDetection_CacheSize();
-	LOG("%d %d %d %d %d %d %d %d\n",c2,c3,c4,c5,c6,c7,c8,c9);
+	LOG_TRACE("%d %d %d %d %d %d %d %d\n",c2,c3,c4,c5,c6,c7,c8,c9);
 
     return G_SOURCE_CONTINUE;  // Return TRUE to continue the timer
 }

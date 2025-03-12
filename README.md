@@ -119,6 +119,13 @@ MQTT Heartbeat published every 15 minutes
 
 # History
 
+### 1.4.1	March 13, 2025
+- Added Geospace data that provides a way to transform object video positions to a geolocation longitude and latitude. 
+  The technology used is homography.  The user defines four markers in a video x/y spave with a corresponding lat/lon marker on a world map.  
+  It is recommeded to focus calibrations on the area where objects move.  
+  It is also recommeded to enable the cameras Barrel distortion correction (Menu | Installation | Image correction)
+- Added web page MQTT connection message box to know if the web page is connected or not.
+
 ### 1.3.0	March 3, 2025
 - Replaced "Max age" with "Max idle".  
   When Max idle time is set, detections are not published when after not moving X seconds.  
