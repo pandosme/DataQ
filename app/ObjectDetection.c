@@ -51,24 +51,36 @@ cJSON* attributes = 0;
 
 void
 ObjectDetection_Config( cJSON* data ) {
-	config_min_confidence = cJSON_GetObjectItem(data,"confidence")->valueint;
-	config_cog = cJSON_GetObjectItem(data,"cog")->valueint;
-	config_rotation = cJSON_GetObjectItem(data,"rotation")->valueint;
-	config_tracker_confidence = cJSON_GetObjectItem(data,"tracker_confidence")->valueint;
-	config_max_idle = cJSON_GetObjectItem(data,"maxIdle")->valueint;
-	config_blacklist = cJSON_GetObjectItem(data,"ignoreClass");
-	config_min_height = cJSON_GetObjectItem(data,"minHeight")->valueint;
-	config_max_height = cJSON_GetObjectItem(data,"maxHeight")->valueint;
-	config_min_width = cJSON_GetObjectItem(data,"minWidth")->valueint;
-	config_max_width = cJSON_GetObjectItem(data,"maxWidth")->valueint;
+	if( !data ) {
+		LOG_WARN("%s: Invlaid input\n",__func__);
+		return;
+	}
+		
+	config_min_confidence = cJSON_GetObjectItem(data,"confidence")?cJSON_GetObjectItem(data,"confidence")->valueint:40;
+	config_cog = cJSON_GetObjectItem(data,"cog")?cJSON_GetObjectItem(data,"cog")->valueint:0;
+	config_rotation = cJSON_GetObjectItem(data,"rotation")?cJSON_GetObjectItem(data,"rotation")->valueint:0;
+	config_tracker_confidence = cJSON_GetObjectItem(data,"tracker_confidence")?cJSON_GetObjectItem(data,"tracker_confidence")->valueint:1;
+	config_max_idle = cJSON_GetObjectItem(data,"maxIdle")?cJSON_GetObjectItem(data,"maxIdle")->valueint:0;
+	config_blacklist = cJSON_GetObjectItem(data,"ignoreClass")?cJSON_GetObjectItem(data,"ignoreClass"):cJSON_CreateArray();
+	config_min_height = cJSON_GetObjectItem(data,"minHeight")?cJSON_GetObjectItem(data,"minHeight")->valueint:10;
+	config_max_height = cJSON_GetObjectItem(data,"maxHeight")?cJSON_GetObjectItem(data,"maxHeight")->valueint:800;
+	config_min_width = cJSON_GetObjectItem(data,"minWidth")?cJSON_GetObjectItem(data,"minWidth")->valueint:10;
+	config_max_width = cJSON_GetObjectItem(data,"maxWidth")?cJSON_GetObjectItem(data,"maxWidth")->valueint:800;
 	cJSON *aoi = cJSON_GetObjectItem(data,"aoi");
 	if( aoi ) {
-		config_x1 = cJSON_GetObjectItem(aoi,"x1")->valueint;
-		config_x2 = cJSON_GetObjectItem(aoi,"x2")->valueint;
-		config_y1 = cJSON_GetObjectItem(aoi,"y1")->valueint;
-		config_y2 = cJSON_GetObjectItem(aoi,"y2")->valueint;
+		config_x1 = cJSON_GetObjectItem(aoi,"x1")?cJSON_GetObjectItem(aoi,"x1")->valueint:0;
+		config_x2 = cJSON_GetObjectItem(aoi,"x2")?cJSON_GetObjectItem(aoi,"x2")->valueint:1000;
+		config_y1 = cJSON_GetObjectItem(aoi,"y1")?cJSON_GetObjectItem(aoi,"y1")->valueint:0;
+		config_y2 = cJSON_GetObjectItem(aoi,"y2")?cJSON_GetObjectItem(aoi,"y2")->valueint:1000;
 	}
-	
+}
+
+void
+ObjectDetection_Reset(){
+	if( activeDetections ) {
+		cJSON_Delete(activeDetections);
+		activeDetections = cJSON_CreateObject();
+	}
 }
 
 int

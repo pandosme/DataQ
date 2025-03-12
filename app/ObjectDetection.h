@@ -12,6 +12,7 @@ typedef void (*ObjectDetection_Callback)( cJSON *detections  );
 
 int		ObjectDetection_Init( ObjectDetection_Callback callback );
 void	ObjectDetection_Config( cJSON* data );
+void	ObjectDetection_Reset();
 int		ObjectDetection_CacheSize();
 
 #endif

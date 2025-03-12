@@ -21,6 +21,7 @@
 			<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
 			<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
 			<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
+			<a href="geospace.html" class="list-group-item list-group-item-action">GeoSpace</a>
 			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
 			<a href="about.html" class="list-group-item list-group-item-action">About</a>
 		</div>
@@ -71,6 +72,11 @@
 									<td><input type="checkbox" class="form-check-input publish-check" data-type="path"></td>
 									<td>Paths</td>
 									<td><span id="PathsTopic"></span></td>
+								</tr>
+								<tr>
+									<td><input type="checkbox" class="form-check-input publish-check" data-type="geospace"></td>
+									<td>Geospace</td>
+									<td><span id="GeoSpaceTopic"></span></td>
 								</tr>
 								<tr>
 									<td><input type="checkbox" class="form-check-input publish-check" data-type="status"></td>
@@ -125,6 +131,7 @@ $(document).ready(function() {
 			$('#DetectionsTopic').text(pretopic + '/detections/' + serial);
 			$('#TrackerTopic').text(pretopic + '/tracker/' + serial);
 			$('#PathsTopic').text(pretopic + '/path/' + serial);
+			$('#GeoSpaceTopic').text(pretopic + '/geospace/' + serial);
 			$('#StatusTopic').text(pretopic + '/status/' + serial);
 
 			// Change these lines in the AJAX success callback
@@ -133,6 +140,7 @@ $(document).ready(function() {
 			$('.publish-check[data-type="detections"]').prop('checked', app.settings.publish.detections);
 			$('.publish-check[data-type="tracker"]').prop('checked', app.settings.publish.tracker);
 			$('.publish-check[data-type="path"]').prop('checked', app.settings.publish.path);
+			$('.publish-check[data-type="geospace"]').prop('checked', app.settings.publish.geospace);
 			$('.publish-check[data-type="status"]').prop('checked', app.settings.publish.status);
 		},
         error: function(response) {

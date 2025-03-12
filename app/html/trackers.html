@@ -22,6 +22,7 @@
 			<a href="trackers.html" class="list-group-item list-group-item-action active">Trackers</a>
 			<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
 			<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
+			<a href="geospace.html" class="list-group-item list-group-item-action">GeoSpace</a>
 			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
 			<a href="about.html" class="list-group-item list-group-item-action">About</a>
         </div>
@@ -201,24 +202,7 @@ $(document).ready(function() {
 	});
 });
 
-function saveFilter() {
-	var payload = {
-		trackerFilter: app.settings.trackerFilter
-	}
-	var url = 'settings?json=' + encodeURI(JSON.stringify(payload));
-	$.ajax({type: "GET",
-		url: url,
-		success: function(response) {
-			showToast("Settings updated",'info');
-		},
-		error: function(xhr, status, error) {
-			showToast("Filter updated failed",'danger');
-		}
-	});
-}
-
-
-$('#scene-save').click(function() {
+$('#btn-save').click(function() {
 	app.settings.trackerFilter.distance = parseInt($("#filter-distance").val()),
 	app.settings.trackerFilter.age = parseInt($("#filter-age").val())
 	saveFilter();

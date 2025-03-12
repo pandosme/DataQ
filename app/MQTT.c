@@ -4,6 +4,7 @@
  * For ACAP SDK 3.5
  * This file implements an MQTT client using the Paho MQTT library.
  * It handles connection, disconnection, reconnection, and message publishing.
+ * Version 1.1
  */
 
 #include <stdio.h>
@@ -196,7 +197,7 @@ int MQTT_Set(cJSON* settings) {
     LOG_TRACE("%s: Entry\n", __func__);
 	
     if (!settings) {
-        ACAP_STATUS_SetString("mqtt", "status", "Cannot set: NULL settings");
+        ACAP_STATUS_SetString("mqtt", "status", "Corrupt settings");
 		LOG_WARN("%s: Settings are NULL\n",__func__);
         return 0;
     }
@@ -259,7 +260,7 @@ int MQTT_Connect() {
     // Check if MQTT is enabled and address is set
     if (g_mqtt_state.config.address[0] == '\0') {
         pthread_mutex_unlock(&g_mqtt_state.mutex);
-        ACAP_STATUS_SetString("mqtt", "status", "MQTT disabled or address not set");
+        ACAP_STATUS_SetString("mqtt", "status", "Not connected");
         return 0;
     }
 
@@ -300,7 +301,7 @@ int MQTT_Connect() {
     
     if (rc != MQTTCLIENT_SUCCESS) {
         char errMsg[256];
-        snprintf(errMsg, sizeof(errMsg), "Failed to create MQTT client: %d", rc);
+        snprintf(errMsg, sizeof(errMsg), "Connection failed.  Error %d", rc);
         LOG_WARN("%s: %s\n", __func__, errMsg);
         ACAP_STATUS_SetString("mqtt", "status", errMsg);
         return 0;
@@ -314,7 +315,7 @@ int MQTT_Connect() {
     
     if (rc != MQTTCLIENT_SUCCESS) {
         char errMsg[256];
-        snprintf(errMsg, sizeof(errMsg), "Failed to set MQTT callbacks: %d", rc);
+        snprintf(errMsg, sizeof(errMsg), "Connection failed.  Error %d", rc);
         LOG_WARN("%s: %s\n", __func__, errMsg);
         ACAP_STATUS_SetString("mqtt", "status", errMsg);
         mqtt_client_destroy(&g_mqtt_state.client);
@@ -702,7 +703,7 @@ int MQTT_Publish_Binary(const char *topic, int payloadlen, void *payload, int qo
     pthread_mutex_lock(&g_mqtt_state.mutex);
     if (!g_mqtt_state.connected || !g_mqtt_state.initialized) {
         pthread_mutex_unlock(&g_mqtt_state.mutex);
-        ACAP_STATUS_SetString("mqtt", "status", "Cannot publish binary: Not connected");
+        LOG_WARN("%s: Cannot publish binary: Not connected",__func__);
         return 0;
     }
     pthread_mutex_unlock(&g_mqtt_state.mutex);
@@ -730,7 +731,6 @@ int MQTT_Publish_Binary(const char *topic, int payloadlen, void *payload, int qo
         char errMsg[256];
         snprintf(errMsg, sizeof(errMsg), "Failed to publish binary message: %d", result);
         LOG_WARN("%s: %s\n", __func__, errMsg);
-        ACAP_STATUS_SetString("mqtt", "status", errMsg);
     }
     
     return (result == MQTTCLIENT_SUCCESS) ? 1 : 0;
@@ -746,7 +746,7 @@ int MQTT_Subscribe(const char *topic, MQTT_Callback_Message callback) {
     pthread_mutex_lock(&g_mqtt_state.mutex);
     if (!g_mqtt_state.connected || !g_mqtt_state.initialized) {
         pthread_mutex_unlock(&g_mqtt_state.mutex);
-        ACAP_STATUS_SetString("mqtt", "status", "Cannot subscribe: Not connected");
+        ACAP_STATUS_SetString("mqtt", "status", "Disconnected");
 		LOG_WARN("%s: Mutex lock failed\n",__func__);
         return 0;
     }
@@ -770,7 +770,6 @@ int MQTT_Subscribe(const char *topic, MQTT_Callback_Message callback) {
         char errMsg[256];
         snprintf(errMsg, sizeof(errMsg), "Failed to subscribe to topic: %d", result);
         LOG_WARN("%s: %s\n", __func__, errMsg);
-        ACAP_STATUS_SetString("mqtt", "status", errMsg);
     }
     
     return (result == MQTTCLIENT_SUCCESS) ? 1 : 0;
@@ -784,7 +783,7 @@ int MQTT_Unsubscribe(const char *topic) {
     pthread_mutex_lock(&g_mqtt_state.mutex);
     if (!g_mqtt_state.connected || !g_mqtt_state.initialized) {
         pthread_mutex_unlock(&g_mqtt_state.mutex);
-        ACAP_STATUS_SetString("mqtt", "status", "Cannot unsubscribe: Not connected");
+        LOG_WARN("%s: Cannot unsubscribe: Not connected",__func__);
         return 0;
     }
     pthread_mutex_unlock(&g_mqtt_state.mutex);
@@ -804,7 +803,6 @@ int MQTT_Unsubscribe(const char *topic) {
         char errMsg[256];
         snprintf(errMsg, sizeof(errMsg), "Failed to unsubscribe from topic: %d", result);
         LOG_WARN("%s\n", errMsg);
-        ACAP_STATUS_SetString("mqtt", "status", errMsg);
     }
     
     return (result == MQTTCLIENT_SUCCESS) ? 1 : 0;

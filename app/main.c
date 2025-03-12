@@ -11,6 +11,8 @@
 #include "ACAP.h"
 #include "MQTT.h"
 #include "ObjectDetection.h"
+#include "GeoSpace.h"
+
 
 #define APP_PACKAGE	"DataQ"
 
@@ -26,6 +28,15 @@ cJSON* pathsCache = 0;
 cJSON* occupancyDetectionCounter = 0;
 cJSON* classCounterArrays = 0;
 cJSON* previousOccupancy = 0;
+int lastDetectionListWasEmpty = 0;
+int publishEvents = 1;
+int publishDetections = 1;
+int publishTracker = 1;
+int publishPath = 1;
+int publishOccupancy = 0;
+int publishStatus = 1;
+int publishGeospace = 0;
+int shouldReset = 0;
 
 
 cJSON*
@@ -42,10 +53,20 @@ ProcessDetections( cJSON* detections ) {
 			cJSON_AddItemReferenceToArray( response, item );
 		item = item->next;
 	}
+	
+	
+	if( cJSON_GetArraySize( response ) > 0 ) {
+		lastDetectionListWasEmpty = 0;
+		return response;
+	}
+	
+	if( lastDetectionListWasEmpty == 1 )
+		return 0;
+	lastDetectionListWasEmpty = 1;
+	
 	LOG_TRACE("%s: Exit\n",__func__);
 	return response;
 }
-
 
 cJSON*
 ProcessTrackers( cJSON* detections ) {
@@ -104,9 +125,12 @@ ProcessTrackers( cJSON* detections ) {
 						cJSON_ReplaceItemInObject(item,"topVelocity",cJSON_CreateNumber(velocity));
 					cJSON_ReplaceItemInObject(position,"cx",cJSON_CreateNumber(cx));
 					cJSON_ReplaceItemInObject(position,"cy",cJSON_CreateNumber(cy));
+					if( cJSON_GetObjectItem(item,"ignore")->type == cJSON_True ) {
+						cJSON_GetObjectItem(item,"ignore")->type = cJSON_False;
+						cJSON_ReplaceItemInObject(position,"birth",cJSON_CreateNumber(cJSON_GetObjectItem(item,"timestamp")->valuedouble));
+					}
 					cJSON_ReplaceItemInObject(position,"timestamp",cJSON_CreateNumber(cJSON_GetObjectItem(item,"timestamp")->valuedouble));
 					cJSON_ReplaceItemInObject(item,"idle",cJSON_CreateNumber(0));
-					cJSON_GetObjectItem(item,"ignore")->type = cJSON_False;
 					
 					int previousDistance = cJSON_GetObjectItem(item,"distance")->valueint;
 					cJSON_ReplaceItemInObject(item,"distance",cJSON_CreateNumber(previousDistance+(int)distance));
@@ -196,6 +220,10 @@ ProcessPaths( cJSON* trackers ) {
 				cJSON* position = cJSON_CreateObject();
 				cJSON_AddNumberToObject(position,"x",cJSON_GetObjectItem(tracker,"cx")->valuedouble);
 				cJSON_AddNumberToObject(position,"y",cJSON_GetObjectItem(tracker,"cy")->valuedouble);
+				if( cJSON_GetObjectItem(tracker,"lat") )
+					cJSON_AddNumberToObject(position,"lat", cJSON_GetObjectItem(tracker,"lat")->valuedouble );
+				if( cJSON_GetObjectItem(tracker,"lon") )
+					cJSON_AddNumberToObject(position,"lon", cJSON_GetObjectItem(tracker,"lon")->valuedouble );
 				cJSON_AddNumberToObject(position,"d",0);
 				cJSON* pathList = cJSON_CreateArray();
 				cJSON_AddItemToArray(pathList,position);
@@ -225,6 +253,10 @@ ProcessPaths( cJSON* trackers ) {
 			cJSON_AddNumberToObject(position,"x",cJSON_GetObjectItem(tracker,"cx")->valuedouble);
 			cJSON_AddNumberToObject(position,"y",cJSON_GetObjectItem(tracker,"cy")->valuedouble);
 			cJSON_AddNumberToObject(position,"d",0);
+			if( cJSON_GetObjectItem(tracker,"lat") )
+				cJSON_AddNumberToObject(position,"lat", cJSON_GetObjectItem(tracker,"lat")->valuedouble );
+			if( cJSON_GetObjectItem(tracker,"lon") )
+				cJSON_AddNumberToObject(position,"lon", cJSON_GetObjectItem(tracker,"lon")->valuedouble );
 			cJSON_AddItemToArray(pathList,position);
 		}
 
@@ -365,44 +397,56 @@ ProcessOccupancy( cJSON* detections ) {
 	return response;
 }
 
+void
+Reset() {
+	if( activeTrackers ) cJSON_Delete(activeTrackers);
+	if( PreviousPosition ) cJSON_Delete(PreviousPosition);
+	if( lastPublishedTracker ) cJSON_Delete(lastPublishedTracker);
+	if( pathsCache ) cJSON_Delete(pathsCache);
+	if( occupancyDetectionCounter ) cJSON_Delete(occupancyDetectionCounter);
+	if( classCounterArrays ) cJSON_Delete(classCounterArrays);
+	if( previousOccupancy ) cJSON_Delete(previousOccupancy);
 
-int lastDetectionListWasEmpty = 0;
+	ObjectDetection_Reset();
+	activeTrackers = cJSON_CreateObject();
+	PreviousPosition = cJSON_CreateObject();
+	lastPublishedTracker = cJSON_CreateObject();
+	pathsCache = cJSON_CreateObject();
+	occupancyDetectionCounter = 0;
+	classCounterArrays =  cJSON_CreateObject();
+	previousOccupancy = cJSON_CreateObject();
+
+}
 
 void
-Detections_Callback(cJSON *list ) {
+Process_ObjectDetections(cJSON *list ) {
 	char topic[128];
 	cJSON* item = 0;
-	cJSON* settings = ACAP_Get_Config("settings");
-	if( !settings )
-		return;
 	LOG_TRACE("%s:\n",__func__);
 
-	cJSON* publish = cJSON_GetObjectItem(settings,"publish");
+	if( !lastPublishedTracker )
+		lastPublishedTracker = cJSON_CreateObject();
+
+	if( shouldReset ) {
+		Reset();
+		shouldReset = 0;
+	}
 
 	//Detections
 	cJSON* detections = ProcessDetections( list );
-
-	int shouldPublish = (cJSON_GetObjectItem(publish,"detections") && cJSON_GetObjectItem(publish,"detections")->type == cJSON_True);
-	if( shouldPublish ) {
-		if( cJSON_GetArraySize( detections ) > 0 ) {
-			lastDetectionListWasEmpty = 0;
-		} else {
-			if( lastDetectionListWasEmpty == 1 )
-				shouldPublish = 0;
-			lastDetectionListWasEmpty = 1;
-		}
-	}
-	if( shouldPublish ) {
+	if( publishDetections && detections ) {
 		sprintf(topic,"detections/%s", ACAP_DEVICE_Prop("serial") );
 		cJSON* payload = cJSON_CreateObject();
 		cJSON_AddItemReferenceToObject( payload, "list", detections );
 		MQTT_Publish_JSON(topic,payload,0,0);
 		cJSON_Delete( payload );
 	}
+	if( detections )
+		cJSON_Delete(detections);
 
 	//Occupancy
 	cJSON* occupancy = ProcessOccupancy( list );
-	if( occupancy && cJSON_GetObjectItem(publish,"occupancy") && cJSON_GetObjectItem(publish,"occupancy")->type == cJSON_True ) {
+	if( publishOccupancy && occupancy ) {
 		cJSON* payload = cJSON_CreateObject();
 		cJSON_AddItemReferenceToObject(payload,"occupancy",occupancy);
 		sprintf(topic,"occupancy/%s", ACAP_DEVICE_Prop("serial") );
@@ -412,11 +456,8 @@ Detections_Callback(cJSON *list ) {
 
 	//Trackers
 	cJSON* trackers = ProcessTrackers( list );
-	
-	if( !lastPublishedTracker )
-		lastPublishedTracker = cJSON_CreateObject();
 	double now = ACAP_DEVICE_Timestamp();
-	if( cJSON_GetObjectItem(publish,"tracker") && cJSON_GetObjectItem(publish,"tracker")->type == cJSON_True ) {
+	if( publishTracker ) {
 		item = trackers->child;
 		while( item ) {
 			sprintf(topic,"tracker/%s", ACAP_DEVICE_Prop("serial") );
@@ -453,13 +494,46 @@ Detections_Callback(cJSON *list ) {
 		}
 	}
 
-//	LOG_TRACE("%s: Process Paths\n",__func__);
+	//GeoSpace locations
+	if( publishGeospace ) {
+		item = trackers->child;
+		while( item ) {
+			sprintf(topic,"geospace/%s", ACAP_DEVICE_Prop("serial") );
+			cJSON* payload = cJSON_CreateObject();
+			cJSON_AddStringToObject(payload,"id",cJSON_GetObjectItem(item,"id")->valuestring);
+			cJSON_AddTrueToObject(payload,"active");
+			if( cJSON_GetObjectItem(item,"active")->type == cJSON_False || cJSON_GetObjectItem(item,"ignore")->type == cJSON_True)
+				cJSON_AddFalseToObject(payload,"active")->type = cJSON_False;
+			double lat = 0;
+			double lon = 0;
+			GeoSpace_transform(cJSON_GetObjectItem(item,"cx")->valueint,
+			                   cJSON_GetObjectItem(item,"cy")->valueint
+							   ,&lat,
+							   &lon);
+			if( cJSON_GetObjectItem( item,"lat" ) )
+				cJSON_ReplaceItemInObject(item,"lat",cJSON_CreateNumber(lat));
+			else
+				cJSON_AddNumberToObject(item,"lat",lat);
+			if( cJSON_GetObjectItem( item,"llon" ) )
+				cJSON_ReplaceItemInObject(item,"lon",cJSON_CreateNumber(lon));
+			else
+				cJSON_AddNumberToObject(item,"lon",lon);
+			cJSON_AddNumberToObject(payload,"lat",lat);
+			cJSON_AddNumberToObject(payload,"lon",lon);
+			cJSON_AddStringToObject(payload,"class",cJSON_GetObjectItem(item,"class")->valuestring);
+			cJSON_AddNumberToObject(payload,"age",cJSON_GetObjectItem(item,"age")->valuedouble);
+			MQTT_Publish_JSON(topic,payload,0,0);
+			cJSON_Delete(payload);
+			item = item->next;
+		}
+	}
+	//Paths
 	cJSON* paths = ProcessPaths( trackers );
-
+	//Paths displayed in Path user interface
 	cJSON* statusPaths = ACAP_STATUS_Object("detections", "paths");
-//	LOG_TRACE("%s: Publish Paths\n",__func__);
 	statusPaths = ACAP_STATUS_Object("detections", "paths");
-	if( cJSON_GetObjectItem(publish,"path") && cJSON_GetObjectItem(publish,"path")->type == cJSON_True ) {
+
+	if( publishPath ) {
 		item = paths->child;
 		while( item ) {
 			cJSON_AddItemToArray(statusPaths,cJSON_Duplicate(item, 1));
@@ -468,12 +542,12 @@ Detections_Callback(cJSON *list ) {
 			item = item->next;
 		}
 	}
+
 	while( cJSON_GetArraySize(statusPaths) > 10 )
 		cJSON_DeleteItemFromArray(statusPaths,0);
 
 	cJSON_Delete(trackers);
 	cJSON_Delete(paths);
-	cJSON_Delete(detections);
 	LOG_TRACE("%s: Exit\n",__func__);
 }
 
@@ -556,24 +630,16 @@ MQTT_Subscription(const char *topic, const char *payload) {
 }
 
 static gboolean
-Config_Update_Callback(gpointer user_data) {
-	
-	cJSON* settings = ACAP_Get_Config("settings");
-	if( !settings )
-		return G_SOURCE_CONTINUE;
-	cJSON* publish = cJSON_GetObjectItem(settings,"publish");
-	if(!publish)
+MQTT_Publish_Device_Status(gpointer user_data) {
+
+
+	if(!publishStatus)
 		return G_SOURCE_CONTINUE;
 	
 	cJSON* payload = cJSON_CreateObject();
 	cJSON_AddNumberToObject(payload,"Network_Kbps",(int)ACAP_DEVICE_Network_Average());
 	cJSON_AddNumberToObject(payload,"CPU_average",(int)(ACAP_DEVICE_CPU_Average()*100));
 	cJSON_AddNumberToObject(payload,"Uptime_Hours",(int)(ACAP_DEVICE_Uptime()/3600));
-	
-	if( !cJSON_GetObjectItem(publish,"status") || cJSON_GetObjectItem(publish,"status")->type != cJSON_True ) {
-		cJSON_Delete(payload);
-		return G_SOURCE_CONTINUE;
-	}
 
 	char topic[256];
 	sprintf(topic,"status/%s",ACAP_DEVICE_Prop("serial"));
@@ -604,8 +670,22 @@ Settings_Updated_Callback( const char* service, cJSON* data) {
 		LOG_WARN("%s: JSON Parse error\n",__func__);
 	}
 
+	if( strcmp( service, "publish" ) == 0 ) {
+		publishEvents = cJSON_IsTrue( cJSON_GetObjectItem(data,"events"));
+		publishDetections = cJSON_IsTrue(cJSON_GetObjectItem(data,"detections"));
+		publishTracker = cJSON_IsTrue(cJSON_GetObjectItem(data,"tracker"));
+		publishPath = cJSON_IsTrue(cJSON_GetObjectItem(data,"path"));
+		publishOccupancy = cJSON_IsTrue(cJSON_GetObjectItem(data,"occupancy"));
+		publishStatus = cJSON_IsTrue(cJSON_GetObjectItem(data,"status"));
+		publishGeospace = cJSON_IsTrue(cJSON_GetObjectItem(data,"geospace"));
+	}
+
 	if( strcmp( service,"scene" ) == 0 )
 		ObjectDetection_Config( data );
+
+	if( strcmp( service,"matrix" ) == 0 )
+		GeoSpace_Matrix( data );
+	
 }
 
 static gboolean
@@ -624,12 +704,46 @@ MemoryMonitor(gpointer user_data) {
     return G_SOURCE_CONTINUE;  // Return TRUE to continue the timer
 }
 
+void
+HandleVersionUpdateConfigurations(cJSON* settings ) {
+	cJSON* scene = cJSON_GetObjectItem(settings,"scene");
+	if(!cJSON_GetObjectItem(scene,"maxIdle"))
+		cJSON_AddNumberToObject(scene,"maxIdle",0);
+	if(!cJSON_GetObjectItem(scene,"tracker_confidence"))
+		cJSON_AddTrueToObject(scene,"tracker_confidence");
+
+	if(!cJSON_GetObjectItem(scene,"minWidth"))
+		cJSON_AddNumberToObject(scene,"minWidth",10);
+	if(!cJSON_GetObjectItem(scene,"minHeight"))
+		cJSON_AddNumberToObject(scene,"minHeight",10);
+	if(!cJSON_GetObjectItem(scene,"maxWidth"))
+		cJSON_AddNumberToObject(scene,"maxWidth",800);
+	if(!cJSON_GetObjectItem(scene,"maxHeight"))
+		cJSON_AddNumberToObject(scene,"maxHeight",10);
+	if(!cJSON_GetObjectItem(scene,"aoi")) {
+		cJSON* aoi = cJSON_CreateObject();
+		cJSON_AddNumberToObject(aoi,"x1",50);
+		cJSON_AddNumberToObject(aoi,"x2",950);
+		cJSON_AddNumberToObject(aoi,"y1",50);
+		cJSON_AddNumberToObject(aoi,"y2",950);
+		cJSON_AddItemToObject(scene,"aoi",aoi);
+	}
+	if(!cJSON_GetObjectItem(scene,"ignoreClass"))
+		cJSON_AddArrayToObject(scene,"ignoreClass");
+
+	cJSON* publish = cJSON_GetObjectItem(settings,"publish");
+	if(!cJSON_GetObjectItem(publish,"geospace"))
+		cJSON_AddFalseToObject(publish,"geospace");
+}
+
 int
 main(void) {
 	openlog(APP_PACKAGE, LOG_PID|LOG_CONS, LOG_USER);
 	LOG("------ Starting ACAP Service ------\n");
 	
-	ACAP( APP_PACKAGE, Settings_Updated_Callback );
+	cJSON* settings = ACAP( APP_PACKAGE, Settings_Updated_Callback );
+	HandleVersionUpdateConfigurations(settings);
+
 	MQTT_Init( APP_PACKAGE, MQTT_Status_Callback );
 	ACAP_Set_Config("mqtt", MQTT_Settings());
 	MQTT_Subscribe( "mqtt", MQTT_Subscription );
@@ -643,9 +757,10 @@ main(void) {
 		subscription = subscription->next;
 	}
 
-
-	ObjectDetection_Init( Detections_Callback );
-	g_timeout_add_seconds(15 * 60, Config_Update_Callback, NULL);
+	GeoSpace_Init();
+	
+	ObjectDetection_Init( Process_ObjectDetections );
+	g_timeout_add_seconds(15 * 60, MQTT_Publish_Device_Status, NULL);
 //	g_timeout_add_seconds(60, MemoryMonitor, NULL);
 	
 	main_loop = g_main_loop_new(NULL, FALSE);

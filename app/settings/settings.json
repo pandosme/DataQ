@@ -8,10 +8,11 @@
 		"tracker": true,
 		"path": true,
 		"occupancy": true,
-		"status": true
+		"status": true,
+		"geospace": false
 	},
 	"scene": {
-		"confidence": 40,
+		"confidence": 30,
 		"rotation": 0,
 		"cog": 1,
 		"maxIdle": 0,
@@ -21,10 +22,16 @@
 		"maxWidth": 800,
 		"maxHeight": 800,
 		"aoi": {
-			"x1": 100,
-			"y1": 100,
-			"x2": 900,
-			"y2": 900
+			"x1": 50,
+			"y1": 50,
+			"x2": 950,
+			"y2": 950
+		},
+		"ignoreArea": {
+			"x1": 475,
+			"x2": 525,
+			"y1": 475,
+			"y2": 525
 		},
 		"ignoreClass": []
 	},
@@ -56,13 +63,14 @@
 	},
 	"pathFilter": {
 		"distance": 15,
-		"age": 1,
+		"age": 2,
 		"aoi": {
 			"x1": 0,
 			"y1": 0,
 			"x2": 1000,
 			"y2": 1000
-		}
+		},
+		"ignoreClass": []
 	},
 	"occupancyFilter": {
 		"integration": 20,
@@ -90,11 +98,6 @@
 			"enabled": false
 		},
 		{
-			"name": "Digital Input",
-			"topic": "Device/Trigger/DigitalInput",
-			"enabled": false
-		},
-		{
 			"name": "Digital Port",
 			"topic": "Device/IO/Port",
 			"enabled": false
@@ -112,11 +115,6 @@
 		{
 			"name": "Virtual Port",
 			"topic": "Device/IO/VirtualPort",
-			"enabled": false
-		},
-		{
-			"name": "Device Temperature",
-			"topic": "Device/Sensor/Temperature/",
 			"enabled": false
 		},
 		{
@@ -146,7 +144,6 @@
 		}
 	],
 	"userTopics": [],
-	"geolocation": false,
 	"markers": [],
 	"matrix": []
 }
