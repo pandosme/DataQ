@@ -68,6 +68,7 @@ You may add more than 4 markers if needed, but it may also make things worse.
 
 Geospace data uses Trackers for the transformations. Trackers do not need to be published but you may need to adjust both "Detections" and "Trackers".  
 Recommended settings:  
+* Enable the cameras Barrel distortion correction.
 * Set Detections "Max idle" to 5 or 10 seconds to prevent sending location for stationary objects.
 * Set Detection COG (Center-of-Gravity) to bottom-center.
 * Disable all labels under Detections you are not interested in.
