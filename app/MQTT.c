@@ -638,10 +638,31 @@ MQTT_HTTP_callback(const ACAP_HTTP_Response response, const ACAP_HTTP_Request re
         return;
     }
 
+	cJSON* payload = cJSON_GetObjectItem(settings,"payload");
+
+	if( payload ) {  //Just update the helper pyaload properties
+		const char* name = cJSON_GetObjectItem(payload,"name")?cJSON_GetObjectItem(payload,"name")->valuestring:"";
+		const char* location = cJSON_GetObjectItem(payload,"location")?cJSON_GetObjectItem(payload,"location")->valuestring:"";
+		cJSON* mqttPayload = cJSON_GetObjectItem(MQTTSettings,"payload");
+		if(!mqttPayload) {
+			mqttPayload = cJSON_CreateObject();
+			cJSON_AddStringToObject( payload,"name",name);
+			cJSON_AddStringToObject( payload,"location",location);
+			cJSON_AddItemToObject(MQTTSettings,"payload",mqttPayload);
+		}
+		cJSON_ReplaceItemInObject(mqttPayload,"name",cJSON_CreateString(name));	
+		cJSON_ReplaceItemInObject(mqttPayload,"location",cJSON_CreateString(location));	
+		ACAP_FILE_Write( "localdata/mqtt.json", MQTTSettings );
+		ACAP_HTTP_Respond_Text(response,"Payload properties updated");
+		return;
+	}
+
+LOG("%s\n",json);
+
 	cJSON* setting = settings->child;
 	while(setting) {
-		if( cJSON_GetObjectItem(MQTTSettings,settings->string) )
-			cJSON_ReplaceItemInObject(MQTTSettings,settings->string, cJSON_Duplicate(setting,1) );
+		if( cJSON_GetObjectItem(MQTTSettings,setting->string) )
+			cJSON_ReplaceItemInObject(MQTTSettings,setting->string, cJSON_Duplicate(setting,1) );
 		setting = setting->next;
 	}
 	ACAP_FILE_Write( "localdata/mqtt.json", MQTTSettings );
