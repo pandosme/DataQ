@@ -30,7 +30,7 @@ static GeoSpace_Matrix_t gMatrix = {
 int GeoSpace_Matrix(cJSON* matrix) {
 	LOG_TRACE("%s: Entry\n",__func__);
     if (!matrix || !cJSON_IsArray(matrix) || cJSON_GetArraySize(matrix) != 9) {
-        LOG_WARN("%s: Invalid matrix format\n", __func__);
+        LOG("%s: Matrix not configured\n", __func__);
         return 0;
     }
 

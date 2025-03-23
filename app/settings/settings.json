@@ -17,6 +17,7 @@
 		"cog": 1,
 		"maxIdle": 0,
 		"tracker_confidence": true,
+		"hanging_objects": 5,
 		"minWidth": 10,
 		"minHeight": 10,
 		"maxWidth": 800,

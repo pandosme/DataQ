@@ -70,7 +70,7 @@
 												<button type="button" class="btn btn-outline-primary col-3" id="btn-area">Set Area of Interest</button>
 												<button type="button" class="btn btn-outline-primary col-3" id="btn-min-size">Set minimum size (w and h)</button>
 												<button type="button" class="btn btn-outline-primary col-3" id="btn-max-size">Set maximum size (w and h)</button>
-												<button type="button" class="btn btn-success col-2" id="btn-save-settings">Save</button>
+												<button type="button" class="btn btn-success col-2" id="btn-save-area">Save</button>
 											</div>
 										</div>
 									</div>
@@ -125,13 +125,6 @@
 													<option value="2700">45m</option>
 													<option value="3600">1h</option>
 													<option value="7200">2h</option>
-												</select>
-											</div>
-											<div class="form-group mb-3">
-												<label for="scene-tracker" class="form-label">Tracker</label>
-												<select class="form-select" id="scene-tracker">
-													<option value="0">Allow low confidence</option>
-													<option value="1">Require high confidence</option>
 												</select>
 											</div>
 											<div class="form-group mb-3">
@@ -234,7 +227,6 @@ $(document).ready(function() {
 			$("#scene-rotation").val(app.settings.scene.rotation);
 			$("#scene-cog").val(app.settings.scene.cog);
 			$("#scene-maxIdle").val(app.settings.scene.maxIdle);
-			$("#scene-tracker").val(app.settings.scene.tracker_confidence?"1":"0");
 
 			const labelSelector = new LabelSelector('labelSelector', app.settings.scene.ignoreClass, labelsUpdated);
 
@@ -280,7 +272,7 @@ function selectArea( area ) {
 	areaMode = area;
 }
 
-$('#btn-save').click(function() {
+$('#btn-save-area').click(function() {
 	$('.btn-outline-primary').removeClass('active');
 	saveFilter();
 	areaHandler.setOptions({hide:true});
@@ -500,11 +492,10 @@ function saveFilter() {
 	});
 }
 
-$('#btn-save-settings').click(function() {
+$('#btn-save').click(function() {
 	app.settings.scene.confidence = parseInt($("#scene-confidence").val());
 	app.settings.scene.rotation = parseInt($("#scene-rotation").val());
 	app.settings.scene.cog = parseInt($("#scene-cog").val());
-	app.settings.scene.tracker_confidence = ($("#scene-tracker").val()==="1");
 	app.settings.scene.maxIdle = parseInt($("#scene-maxIdle").val());
 	saveFilter();
 });

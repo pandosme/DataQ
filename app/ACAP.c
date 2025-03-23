@@ -236,7 +236,7 @@ ACAP_HTTP_Node( const char *name, ACAP_HTTP_Callback callback ) {
     return 0;
   }
   
-LOG_TRACE("%s:%s", __func__, path );
+LOG_TRACE("%s:%s\n", __func__, path );
 
   if( !ACAP_HTTP_node_table )
     ACAP_HTTP_node_table = g_hash_table_new_full(g_str_hash, g_str_equal,g_free, NULL);
