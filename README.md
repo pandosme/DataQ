@@ -143,6 +143,9 @@ MQTT Heartbeat published every 15 minutes
 
 # History
 
+### 1.4.2	March XX, 2025
+- Suppress hanging objects
+
 ### 1.4.1	March 13, 2025
 - Added Geospace data (Check documentation above).
 - Added web page MQTT connection message box to know if the web page is connected or not.

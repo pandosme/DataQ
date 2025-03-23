@@ -31,6 +31,7 @@ video_object_detection_subscriber_class_t **classifications;
 
 cJSON* activeDetections = 0;
 cJSON* detectionsFilter = 0;
+cJSON* detectionCounters = 0;
 
 int config_tracker_confidence = 1;
 int config_min_confidence = 50;
@@ -45,6 +46,7 @@ int config_x1 = 0;
 int config_x2 = 1000;
 int config_y1 = 0;
 int config_y2 = 1000;
+int config_hanging_objects = 5;
 cJSON* config_blacklist = 0;
 int lastDetectionWasEmpty = 0;
 cJSON* attributes = 0;
@@ -66,6 +68,7 @@ ObjectDetection_Config( cJSON* data ) {
 	config_max_height = cJSON_GetObjectItem(data,"maxHeight")?cJSON_GetObjectItem(data,"maxHeight")->valueint:800;
 	config_min_width = cJSON_GetObjectItem(data,"minWidth")?cJSON_GetObjectItem(data,"minWidth")->valueint:10;
 	config_max_width = cJSON_GetObjectItem(data,"maxWidth")?cJSON_GetObjectItem(data,"maxWidth")->valueint:800;
+	config_hanging_objects = cJSON_GetObjectItem(data,"hanging_objects")?cJSON_GetObjectItem(data,"hanging_objects")->valueint:5;
 	cJSON *aoi = cJSON_GetObjectItem(data,"aoi");
 	if( aoi ) {
 		config_x1 = cJSON_GetObjectItem(aoi,"x1")?cJSON_GetObjectItem(aoi,"x1")->valueint:0;
@@ -221,10 +224,21 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 	char idString[16];
 	double x1,y1,x2,y2;
 
+	LOG_TRACE("%s: Entry\n",__func__);
+
 	if(!activeDetections)
 		activeDetections = cJSON_CreateObject();
 
-	LOG_TRACE("Scene:\n");
+	if(!detectionCounters)
+		detectionCounters = cJSON_CreateObject();
+
+	//Detection counters are used to detect if an object id is not included
+	// in the detection list but not recived a kill message (hanging object).
+	detection = detectionCounters->child;
+	while( config_hanging_objects && detection  ) {
+		detection->valueint--;
+		detection = detection->next;
+	}
 
 	if( !data_size || !detection_data )
 		return;
@@ -329,9 +343,14 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 				cJSON_AddFalseToObject(detection,"face");
 				cJSON_AddItemToObject(detection,"attributes",cJSON_CreateArray());
 				cJSON_AddItemToObject( activeDetections, idString, detection);
+				if( config_hanging_objects > 0 )
+					cJSON_AddNumberToObject(detectionCounters,idString,config_hanging_objects);
 			}
 		} else {
 			LOG_TRACE("Found\n");
+			if( cJSON_GetObjectItem(detectionCounters,idString) )
+				cJSON_GetObjectItem(detectionCounters,idString)->valueint = config_hanging_objects;
+
 			cJSON_ReplaceItemInObject(detection,"timestamp",cJSON_CreateNumber(timestamp));
 			if( classID != cJSON_GetObjectItem(detection,"type")->valueint ) {
 				cJSON_ReplaceItemInObject(detection,"class",cJSON_CreateString(video_object_detection_subscriber_det_class_name(classifications[classID])));
@@ -409,6 +428,17 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 
     vod__scene__free_unpacked(recv_scene, NULL);
 
+	//Check hanging objects
+	detection = detectionCounters->child;
+	while( detection ) {
+		if( detection->valueint <= 0 ) {
+			cJSON* hangingObject = cJSON_GetObjectItem(activeDetections,detection->string);
+			if( hangingObject )
+				cJSON_GetObjectItem(hangingObject,"active")->type = cJSON_False;
+		}
+		detection = detection->next;
+	}
+
 	//Make List
 	cJSON* list = cJSON_CreateArray();
 	detection = activeDetections->child;
@@ -434,6 +464,7 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 		const char * id = cJSON_GetObjectItem(detection,"id")->valuestring;
 		if( cJSON_GetObjectItem(detection,"active")->type == cJSON_False ) {
 			cJSON_DeleteItemFromObject(activeDetections, id );
+			cJSON_DeleteItemFromObject(detectionCounters, id);
 		}
 		detection = nextObject;
 	}

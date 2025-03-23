@@ -605,20 +605,50 @@ Event_Callback(cJSON *event, void* userdata) {
 
 void 
 MQTT_Status_Callback (int state) {
+	char topic[64];
+	cJSON* connection = 0;
+
 	switch( state ) {
-		case MQTT_CONNECT:
-			LOG_TRACE("%s: Connect\n",__func__);
-			char topic[64];
+		case MQTT_INITIALIZING:
+			LOG("%s: Initializing\n",__func__);
+			ACAP_STATUS_SetString("mqtt","status","Initializing");
+			ACAP_STATUS_SetBool("mqtt","connected",0);
+			break;
+		case MQTT_CONNECTING:
+			ACAP_STATUS_SetString("mqtt","status","Connecting");
+			ACAP_STATUS_SetBool("mqtt","connected",0);
+			LOG("%s: Connecting\n",__func__);
+			break;
+		case MQTT_CONNECTED:
+			ACAP_STATUS_SetString("mqtt","status","Connected");
+			ACAP_STATUS_SetBool("mqtt","connected",1);
+			LOG("%s: Connected\n",__func__);
 			sprintf(topic,"connect/%s",ACAP_DEVICE_Prop("serial"));
-			cJSON* connection = cJSON_CreateObject();
+			connection = cJSON_CreateObject();
 			cJSON_AddTrueToObject(connection,"connected");
 			cJSON_AddStringToObject(connection,"address",ACAP_DEVICE_Prop("IPv4"));
-			MQTT_Publish_JSON(topic,connection,0,1);
+			if(!MQTT_Publish_JSON(topic,connection,0,1) )
+				LOG_WARN("%s: Announce messaged failed\n",__func__);
+			cJSON_Delete(connection);
 			break;
-		case MQTT_RECONNECT:
-			LOG("%s: Reconnect\n",__func__);
+		case MQTT_DISCONNECTING:
+			sprintf(topic,"connect/%s",ACAP_DEVICE_Prop("serial"));
+			connection = cJSON_CreateObject();
+			cJSON_AddFalseToObject(connection,"connected");
+			cJSON_AddStringToObject(connection,"address",ACAP_DEVICE_Prop("IPv4"));
+			if(!MQTT_Publish_JSON(topic,connection,0,1) )
+				LOG_WARN("%s: Disconnect messaged failed\n",__func__);
+			cJSON_Delete(connection);
 			break;
-		case MQTT_DISCONNECT:
+		
+		case MQTT_RECONNECTING:
+			ACAP_STATUS_SetString("mqtt","status","Reconnecting");
+			ACAP_STATUS_SetBool("mqtt","connected",0);
+			LOG("%s: Reconnecting\n",__func__);
+			break;
+		case MQTT_DISCONNECTED:
+			ACAP_STATUS_SetString("mqtt","status","Disconnected");
+			ACAP_STATUS_SetBool("mqtt","connected",0);
 			LOG("%s: Disconnect\n",__func__);
 			break;
 	}
@@ -711,6 +741,8 @@ HandleVersionUpdateConfigurations(cJSON* settings ) {
 		cJSON_AddNumberToObject(scene,"maxIdle",0);
 	if(!cJSON_GetObjectItem(scene,"tracker_confidence"))
 		cJSON_AddTrueToObject(scene,"tracker_confidence");
+	if(!cJSON_GetObjectItem(scene,"hanging_objects"))
+		cJSON_AddNumberToObject(scene,"hanging_objects", 5);
 
 	if(!cJSON_GetObjectItem(scene,"minWidth"))
 		cJSON_AddNumberToObject(scene,"minWidth",10);
@@ -740,15 +772,19 @@ int
 main(void) {
 	openlog(APP_PACKAGE, LOG_PID|LOG_CONS, LOG_USER);
 	LOG("------ Starting ACAP Service ------\n");
-	
+
 	cJSON* settings = ACAP( APP_PACKAGE, Settings_Updated_Callback );
 	HandleVersionUpdateConfigurations(settings);
 
-	MQTT_Init( APP_PACKAGE, MQTT_Status_Callback );
+	//MQTT
+	ACAP_STATUS_SetString("mqtt","status","No initialized");
+	ACAP_STATUS_SetBool("mqtt","connected",0);
+	MQTT_Init( MQTT_Status_Callback, MQTT_Subscription );
 	ACAP_Set_Config("mqtt", MQTT_Settings());
-	MQTT_Subscribe( "mqtt", MQTT_Subscription );
+	MQTT_Subscribe( "dataq/test" );
 	ACAP_STATUS_SetObject("detections", "paths", cJSON_CreateArray());
 
+	//Events
 	ACAP_EVENTS_SetCallback( Event_Callback );
 	cJSON* eventSubscriptions = ACAP_FILE_Read( "settings/subscriptions.json" );
 	cJSON* subscription = eventSubscriptions?eventSubscriptions->child:0;
@@ -756,10 +792,11 @@ main(void) {
 		ACAP_EVENTS_Subscribe( subscription, NULL );
 		subscription = subscription->next;
 	}
-
-	GeoSpace_Init();
 	
+	//Object detection
 	ObjectDetection_Init( Process_ObjectDetections );
+	GeoSpace_Init();
+
 	g_timeout_add_seconds(15 * 60, MQTT_Publish_Device_Status, NULL);
 //	g_timeout_add_seconds(60, MemoryMonitor, NULL);
 	
@@ -773,9 +810,19 @@ main(void) {
 	}
 
 	g_main_loop_run(main_loop);
+
 	LOG("Terminating and cleaning up %s\n",APP_PACKAGE);
-	ACAP_Cleanup();
+
+	char topic[256];
+	sprintf(topic,"connect/%s",ACAP_DEVICE_Prop("serial"));
+	cJSON* connection = cJSON_CreateObject();
+	cJSON_AddFalseToObject(connection,"connected");
+	cJSON_AddStringToObject(connection,"address",ACAP_DEVICE_Prop("IPv4"));
+	MQTT_Publish_JSON(topic,connection,0,1);
+	cJSON_Delete(connection);
+
 	MQTT_Cleanup();
+	ACAP_Cleanup();
 	
     return 0;
 }
