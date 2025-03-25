@@ -275,7 +275,7 @@ MQTT_SetupClient() {
     }
     snprintf(serverURI, 256, "%s://%s:%s", useTLS ? "ssl" : "tcp", address, port);
 	
-LOG("mqtt_client_create(%s, %s)\n",serverURI,clientId);
+	LOG("MQTT Connection address: %s Client Id: %s\n",serverURI,clientId);
 	int rc = mqtt_client_create(&g_mqtt_client, serverURI, clientId, MQTTCLIENT_PERSISTENCE_NONE, NULL);
 
 	free(clientId);
