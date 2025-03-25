@@ -10,7 +10,6 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <dlfcn.h>
-#include <pthread.h>
 #include <time.h>
 #include <errno.h>
 #include <syslog.h>
@@ -52,27 +51,16 @@ static MQTTClient_free_func mqtt_client_free = NULL;
 static MQTTClient_yield_func mqtt_client_yield = NULL;
 
 
-typedef struct {
-    char* username;
-    char* password;
-    int use_tls;
-    char* ca_cert_path;
-    char* client_cert_path;
-    char* client_key_path;
-    int verify_tls;
-    MQTT_Callback_Message messageCallback;
-} MQTT_State;
+void* 			MQTT_libHandle = 0;
+static cJSON* 	MQTTSettings = NULL;
+static char		MQTT_PackackeName[16];
+static char 	LastWillTopic[64];
+static char 	LastWillMessage[512];
+void*			MQTTlibHandle = 0;
 
-static MQTT_State g_mqtt_state = {0};
-void* MQTT_libHandle = 0;
-
-static 		cJSON* MQTTSettings = NULL;
-MQTT_Callback_Connection connectionMessgage;
-static char	MQTT_PackackeName[16];
-static char LastWillTopic[64];
-static char LastWillMessage[512];
-void 		*MQTTlibHandle = 0;
-static MQTTClient g_mqtt_client = NULL;
+static MQTTClient 			g_mqtt_client = NULL;
+MQTT_Callback_Message 		userSubscriptionCallback;
+MQTT_Callback_Connection 	connectionMessgage;
 
 cJSON* MQTT_Settings() {
 	return MQTTSettings;
@@ -84,26 +72,85 @@ MQTT_Connect() {
     
     if (!g_mqtt_client) {
         LOG_TRACE("%s: MQTT client not initialized\n", __func__);
-		LOG_TRACE("%s: Exit error\n", __func__);
         return 0;
     }
 
+    const char* user = cJSON_GetObjectItem(MQTTSettings, "user") ? cJSON_GetObjectItem(MQTTSettings, "user")->valuestring : "";
+    const char* password = cJSON_GetObjectItem(MQTTSettings, "password") ? cJSON_GetObjectItem(MQTTSettings, "password")->valuestring : "";
+
     MQTTClient_connectOptions conn_opts = MQTTClient_connectOptions_initializer;
     conn_opts.keepAliveInterval = 20;
+	conn_opts.connectTimeout = 10;	
     conn_opts.cleansession = 1;
-    conn_opts.username = g_mqtt_state.username;
-    conn_opts.password = g_mqtt_state.password;
+	if( strlen( user ) && strlen( password) ) {
+		conn_opts.username = user;
+		conn_opts.password = password;
+	}
 
-    if (g_mqtt_state.use_tls) {
-        MQTTClient_SSLOptions ssl_opts = MQTTClient_SSLOptions_initializer;
-        ssl_opts.trustStore = g_mqtt_state.ca_cert_path;
-        ssl_opts.keyStore = g_mqtt_state.client_cert_path;
-        ssl_opts.privateKey = g_mqtt_state.client_key_path;
-        ssl_opts.enableServerCertAuth = g_mqtt_state.verify_tls;
+    // Setup TLS if enabled
+    MQTTClient_SSLOptions ssl_opts = MQTTClient_SSLOptions_initializer;	
+    int useTLS = 0;
+	int verifyTLS = 0;
+	if( cJSON_GetObjectItem(MQTTSettings,"tls") && cJSON_GetObjectItem(MQTTSettings,"tls")->type == cJSON_True )
+		useTLS = 1;
+	if( cJSON_GetObjectItem(MQTTSettings,"verify") && cJSON_GetObjectItem(MQTTSettings,"verify")->type == cJSON_True )
+		verifyTLS = 1;
+    if (useTLS) {
+		ssl_opts.enabledCipherSuites = NULL;  //Let client negotiate
+		ssl_opts.sslVersion = ssl_opts.sslVersion;
+		if( CERTS_Get_CA() )
+			ssl_opts.trustStore = CERTS_Get_CA();
+		if( CERTS_Get_Cert() )
+			ssl_opts.keyStore = CERTS_Get_Cert();
+		if( CERTS_Get_Key() )
+			ssl_opts.privateKey = CERTS_Get_Key();
+		if( CERTS_Get_Password() )
+			ssl_opts.privateKeyPassword = CERTS_Get_Password();
+		if( verifyTLS ) {
+			ssl_opts.enableServerCertAuth = 1;
+			ssl_opts.verify = 1;
+		} else {
+			ssl_opts.enableServerCertAuth = 0;
+			ssl_opts.verify = 0;
+		}
         conn_opts.ssl = &ssl_opts;
     }
 
+    // Setup last-will testament
+    MQTTClient_willOptions will_opts = MQTTClient_willOptions_initializer;
+    cJSON* lwt = cJSON_CreateObject();
+    cJSON_AddFalseToObject(lwt, "connected");
+    cJSON_AddStringToObject(lwt, "address", ACAP_DEVICE_Prop("IPv4"));
+    cJSON* additionalProperties = cJSON_GetObjectItem(MQTTSettings, "payload");
+    if (additionalProperties) {
+        const char* name = cJSON_GetObjectItem(additionalProperties, "name") ? cJSON_GetObjectItem(additionalProperties, "name")->valuestring : NULL;
+        const char* location = cJSON_GetObjectItem(additionalProperties, "location") ? cJSON_GetObjectItem(additionalProperties, "location")->valuestring : NULL;
+        if (name && strlen(name))
+            cJSON_AddStringToObject(lwt, "name", name);
+        if (location && strlen(location))
+            cJSON_AddStringToObject(lwt, "location", location);
+    }
+    cJSON_AddStringToObject(lwt, "serial", ACAP_DEVICE_Prop("serial"));
+
+	if( cJSON_GetObjectItem(MQTTSettings, "preTopic") && cJSON_GetObjectItem(MQTTSettings, "preTopic")->type == cJSON_String && strlen(cJSON_GetObjectItem(MQTTSettings, "preTopic")->valuestring ))
+		sprintf(LastWillTopic,"%s/connect",cJSON_GetObjectItem(MQTTSettings, "preTopic")->valuestring);
+	else
+		sprintf(LastWillTopic,"connect");
+	
+    char* json = cJSON_PrintUnformatted(lwt);
+    if (json) {
+        snprintf(LastWillMessage, sizeof(LastWillMessage), "%s", json);
+        will_opts.topicName = LastWillTopic;
+        will_opts.message = LastWillMessage;
+        will_opts.retained = 1;
+        conn_opts.will = &will_opts;
+        free(json);
+    }
+    cJSON_Delete(lwt);
+
+	//Connect
     connectionMessgage(MQTT_CONNECTING);
+
     int rc = mqtt_client_connect(g_mqtt_client, &conn_opts);
     if (rc != MQTTCLIENT_SUCCESS) {
         LOG_WARN("%s: Failed to connect, return code %d\n", __func__, rc);
@@ -164,8 +211,8 @@ int
 messageArrivedCallback(void *context, char *topicName, int topicLen, MQTTClient_message *message) {
     LOG_TRACE("%s: Entr - topic = %s\n", __func__, topicName);
     
-    if (g_mqtt_state.messageCallback) {
-        g_mqtt_state.messageCallback(topicName, message->payload);
+    if (userSubscriptionCallback) {
+        userSubscriptionCallback(topicName, message->payload);
     } else {
         LOG_WARN("%s: No message callback registered\n", __func__);
     }
@@ -198,8 +245,6 @@ MQTT_SetupClient() {
 
     const char* address = cJSON_GetObjectItem(MQTTSettings, "address") ? cJSON_GetObjectItem(MQTTSettings, "address")->valuestring : NULL;
     const char* port = cJSON_GetObjectItem(MQTTSettings, "port") ? cJSON_GetObjectItem(MQTTSettings, "port")->valuestring : "1883";
-    const char* user = cJSON_GetObjectItem(MQTTSettings, "user") ? cJSON_GetObjectItem(MQTTSettings, "user")->valuestring : NULL;
-    const char* password = cJSON_GetObjectItem(MQTTSettings, "password") ? cJSON_GetObjectItem(MQTTSettings, "password")->valuestring : NULL;
 
 	int useTLS = 0;
 	int verifyTLS = 0;
@@ -229,7 +274,8 @@ MQTT_SetupClient() {
         return 0;
     }
     snprintf(serverURI, 256, "%s://%s:%s", useTLS ? "ssl" : "tcp", address, port);
-
+	
+LOG("mqtt_client_create(%s, %s)\n",serverURI,clientId);
 	int rc = mqtt_client_create(&g_mqtt_client, serverURI, clientId, MQTTCLIENT_PERSISTENCE_NONE, NULL);
 
 	free(clientId);
@@ -239,51 +285,6 @@ MQTT_SetupClient() {
 		LOG_WARN("%s: Failed to create MQTT client, rc=%d\n", __func__, rc);
 		return 0;
 	}
-	
-    MQTTClient_connectOptions conn_opts = MQTTClient_connectOptions_initializer;
-    conn_opts.keepAliveInterval = 20;
-    conn_opts.cleansession = 1;
-    conn_opts.username = user;
-    conn_opts.password = password;
-
-    // Setup last-will testament
-    MQTTClient_willOptions will_opts = MQTTClient_willOptions_initializer;
-    cJSON* lwt = cJSON_CreateObject();
-    cJSON_AddFalseToObject(lwt, "connected");
-    cJSON_AddStringToObject(lwt, "address", ACAP_DEVICE_Prop("IPv4"));
-    cJSON* additionalProperties = cJSON_GetObjectItem(MQTTSettings, "payload");
-    if (additionalProperties) {
-        const char* name = cJSON_GetObjectItem(additionalProperties, "name") ? cJSON_GetObjectItem(additionalProperties, "name")->valuestring : NULL;
-        const char* location = cJSON_GetObjectItem(additionalProperties, "location") ? cJSON_GetObjectItem(additionalProperties, "location")->valuestring : NULL;
-        if (name && strlen(name))
-            cJSON_AddStringToObject(lwt, "name", name);
-        if (location && strlen(location))
-            cJSON_AddStringToObject(lwt, "location", location);
-    }
-    cJSON_AddStringToObject(lwt, "serial", ACAP_DEVICE_Prop("serial"));
-    char* json = cJSON_PrintUnformatted(lwt);
-    if (json) {
-        snprintf(LastWillTopic, sizeof(LastWillTopic), "%s/status", clientId);
-        snprintf(LastWillMessage, sizeof(LastWillMessage), "%s", json);
-        will_opts.topicName = LastWillTopic;
-        will_opts.message = LastWillMessage;
-        will_opts.retained = 1;
-        will_opts.qos = 1;
-        conn_opts.will = &will_opts;
-        free(json);
-    }
-    cJSON_Delete(lwt);
-
-    // Setup TLS if enabled
-    if (useTLS) {
-        MQTTClient_SSLOptions ssl_opts = MQTTClient_SSLOptions_initializer;
-        ssl_opts.trustStore = CERTS_Get_CA();
-        ssl_opts.keyStore = CERTS_Get_Cert();
-        ssl_opts.privateKey = CERTS_Get_Key();
-        ssl_opts.privateKeyPassword = CERTS_Get_Password();
-        ssl_opts.enableServerCertAuth = verifyTLS;
-        conn_opts.ssl = &ssl_opts;
-    }
 
     // Set callbacks
     rc = mqtt_client_setCallbacks(g_mqtt_client, NULL, connectionLostCallback, messageArrivedCallback, deliveryCompleteCallback);
@@ -299,9 +300,8 @@ MQTT_SetupClient() {
 
 int
 MQTT_Publish(const char *topic, const char *payload, int qos, int retained) {
-    if (!g_mqtt_client || !mqtt_client_isConnected(g_mqtt_client)) {
+    if (!g_mqtt_client || !mqtt_client_isConnected(g_mqtt_client))
         return 0;
-    }
 
     LOG_TRACE("%s: Entry\n", __func__);
 
@@ -343,10 +343,8 @@ MQTT_Publish(const char *topic, const char *payload, int qos, int retained) {
 
 int
 MQTT_Publish_JSON(const char *topic, cJSON *payload, int qos, int retained) {
-
-    if (!payload || !g_mqtt_client || !mqtt_client_isConnected(g_mqtt_client)) {
+    if (!payload || !g_mqtt_client || !mqtt_client_isConnected(g_mqtt_client))
         return 0;
-    }
 
 	LOG_TRACE("%s: Entry\n",__func__);
     
@@ -367,10 +365,10 @@ MQTT_Publish_JSON(const char *topic, cJSON *payload, int qos, int retained) {
 	char *json = cJSON_PrintUnformatted(publish);
 	if(!json) {
 		LOG_TRACE("%s: Exit error\n",__func__);
+		cJSON_Delete(publish);
 		return 0;
 	}
 	cJSON_Delete(publish);
-	
 	int result = MQTT_Publish(topic, json, qos, retained );
 	free(json);
 
@@ -657,8 +655,6 @@ MQTT_HTTP_callback(const ACAP_HTTP_Response response, const ACAP_HTTP_Request re
 		return;
 	}
 
-LOG("%s\n",json);
-
 	cJSON* setting = settings->child;
 	while(setting) {
 		if( cJSON_GetObjectItem(MQTTSettings,setting->string) )
@@ -691,7 +687,7 @@ int MQTT_Init( MQTT_Callback_Connection stateCallback, MQTT_Callback_Message mes
     LOG_TRACE("%s: Entry\n", __func__);
 
     connectionMessgage = stateCallback;
-    g_mqtt_state.messageCallback = messageCallback;
+    userSubscriptionCallback = messageCallback;
     connectionMessgage(MQTT_INITIALIZING);
 
     if (!MQTT_Load_Settings()) {

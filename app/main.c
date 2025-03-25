@@ -40,7 +40,7 @@ int shouldReset = 0;
 
 
 cJSON*
-ProcessDetections( cJSON* detections ) {
+Process_Detections( cJSON* detections ) {
 	cJSON* response = cJSON_CreateArray();
 	int accept;
 	LOG_TRACE("%s: Entry\n",__func__);
@@ -69,7 +69,7 @@ ProcessDetections( cJSON* detections ) {
 }
 
 cJSON*
-ProcessTrackers( cJSON* detections ) {
+Process_Trackers( cJSON* detections ) {
 	const char* id = 0;
 
 	LOG_TRACE("%s: Entry\n",__func__);
@@ -167,6 +167,9 @@ ProcessTrackers( cJSON* detections ) {
 					cJSON_AddItemToObject(PreviousPosition,id,position);
 					cJSON_AddItemReferenceToArray(response,item);
 				}
+				//Handle case when exisitng objects does not pass the minimum distance
+				if( maxIdle > 0 && cJSON_GetObjectItem(item,"age")->valuedouble > maxIdle && cJSON_GetObjectItem(item,"ignore")->type == cJSON_False )
+					cJSON_GetObjectItem(item,"ignore")->type = cJSON_True;
 			}
 		}
 		item = item->next;
@@ -176,7 +179,7 @@ ProcessTrackers( cJSON* detections ) {
 }
 
 cJSON*
-ProcessPaths( cJSON* trackers ) {
+Process_Paths( cJSON* trackers ) {
 	//Important to free the return JSON
 
 	LOG_TRACE("%s: Entry\n",__func__);
@@ -308,7 +311,7 @@ ProcessPaths( cJSON* trackers ) {
 }
 
 cJSON*
-ProcessOccupancy( cJSON* detections ) {
+Process_Occupancy( cJSON* detections ) {
 	//Will return 0 if there is no occupancy change;
 	//Do NOT free return JSON
 
@@ -398,28 +401,7 @@ ProcessOccupancy( cJSON* detections ) {
 }
 
 void
-Reset() {
-	if( activeTrackers ) cJSON_Delete(activeTrackers);
-	if( PreviousPosition ) cJSON_Delete(PreviousPosition);
-	if( lastPublishedTracker ) cJSON_Delete(lastPublishedTracker);
-	if( pathsCache ) cJSON_Delete(pathsCache);
-	if( occupancyDetectionCounter ) cJSON_Delete(occupancyDetectionCounter);
-	if( classCounterArrays ) cJSON_Delete(classCounterArrays);
-	if( previousOccupancy ) cJSON_Delete(previousOccupancy);
-
-	ObjectDetection_Reset();
-	activeTrackers = cJSON_CreateObject();
-	PreviousPosition = cJSON_CreateObject();
-	lastPublishedTracker = cJSON_CreateObject();
-	pathsCache = cJSON_CreateObject();
-	occupancyDetectionCounter = 0;
-	classCounterArrays =  cJSON_CreateObject();
-	previousOccupancy = cJSON_CreateObject();
-
-}
-
-void
-Process_ObjectDetections(cJSON *list ) {
+Process_VOD_Data(cJSON *list ) {
 	char topic[128];
 	cJSON* item = 0;
 	LOG_TRACE("%s:\n",__func__);
@@ -427,13 +409,8 @@ Process_ObjectDetections(cJSON *list ) {
 	if( !lastPublishedTracker )
 		lastPublishedTracker = cJSON_CreateObject();
 
-	if( shouldReset ) {
-		Reset();
-		shouldReset = 0;
-	}
-
 	//Detections
-	cJSON* detections = ProcessDetections( list );
+	cJSON* detections = Process_Detections( list );
 	if( publishDetections && detections ) {
 		sprintf(topic,"detections/%s", ACAP_DEVICE_Prop("serial") );
 		cJSON* payload = cJSON_CreateObject();
@@ -443,9 +420,9 @@ Process_ObjectDetections(cJSON *list ) {
 	}
 	if( detections )
 		cJSON_Delete(detections);
-
+	
 	//Occupancy
-	cJSON* occupancy = ProcessOccupancy( list );
+	cJSON* occupancy = Process_Occupancy( list );
 	if( publishOccupancy && occupancy ) {
 		cJSON* payload = cJSON_CreateObject();
 		cJSON_AddItemReferenceToObject(payload,"occupancy",occupancy);
@@ -455,7 +432,7 @@ Process_ObjectDetections(cJSON *list ) {
 	}	
 
 	//Trackers
-	cJSON* trackers = ProcessTrackers( list );
+	cJSON* trackers = Process_Trackers( list );
 	double now = ACAP_DEVICE_Timestamp();
 	if( publishTracker ) {
 		item = trackers->child;
@@ -514,7 +491,7 @@ Process_ObjectDetections(cJSON *list ) {
 				cJSON_ReplaceItemInObject(item,"lat",cJSON_CreateNumber(lat));
 			else
 				cJSON_AddNumberToObject(item,"lat",lat);
-			if( cJSON_GetObjectItem( item,"llon" ) )
+			if( cJSON_GetObjectItem( item,"lon" ) )
 				cJSON_ReplaceItemInObject(item,"lon",cJSON_CreateNumber(lon));
 			else
 				cJSON_AddNumberToObject(item,"lon",lon);
@@ -528,7 +505,7 @@ Process_ObjectDetections(cJSON *list ) {
 		}
 	}
 	//Paths
-	cJSON* paths = ProcessPaths( trackers );
+	cJSON* paths = Process_Paths( trackers );
 	//Paths displayed in Path user interface
 	cJSON* statusPaths = ACAP_STATUS_Object("detections", "paths");
 	statusPaths = ACAP_STATUS_Object("detections", "paths");
@@ -720,7 +697,6 @@ Settings_Updated_Callback( const char* service, cJSON* data) {
 
 static gboolean
 MemoryMonitor(gpointer user_data) {
-
 	int c2 = cJSON_GetArraySize(activeTrackers);
 	int c3 = cJSON_GetArraySize(PreviousPosition);
 	int c4 = cJSON_GetArraySize(lastPublishedTracker);
@@ -729,7 +705,7 @@ MemoryMonitor(gpointer user_data) {
 	int c7 = cJSON_GetArraySize(classCounterArrays);
 	int c8 = cJSON_GetArraySize(previousOccupancy);
 	int c9 = ObjectDetection_CacheSize();
-	LOG_TRACE("%d %d %d %d %d %d %d %d\n",c2,c3,c4,c5,c6,c7,c8,c9);
+	LOG("%d %d %d %d %d %d %d %d\n",c2,c3,c4,c5,c6,c7,c8,c9);
 
     return G_SOURCE_CONTINUE;  // Return TRUE to continue the timer
 }
@@ -781,7 +757,6 @@ main(void) {
 	ACAP_STATUS_SetBool("mqtt","connected",0);
 	MQTT_Init( MQTT_Status_Callback, MQTT_Subscription );
 	ACAP_Set_Config("mqtt", MQTT_Settings());
-	MQTT_Subscribe( "dataq/test" );
 	ACAP_STATUS_SetObject("detections", "paths", cJSON_CreateArray());
 
 	//Events
@@ -792,13 +767,11 @@ main(void) {
 		ACAP_EVENTS_Subscribe( subscription, NULL );
 		subscription = subscription->next;
 	}
-	
 	//Object detection
-	ObjectDetection_Init( Process_ObjectDetections );
+	ObjectDetection_Init( Process_VOD_Data );
 	GeoSpace_Init();
-
 	g_timeout_add_seconds(15 * 60, MQTT_Publish_Device_Status, NULL);
-//	g_timeout_add_seconds(60, MemoryMonitor, NULL);
+//	g_timeout_add_seconds(120, MemoryMonitor, NULL);
 	
 	main_loop = g_main_loop_new(NULL, FALSE);
     GSource *signal_source = g_unix_signal_source_new(SIGTERM);

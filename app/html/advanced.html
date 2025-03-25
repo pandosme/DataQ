@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title></title>
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/app.css">
+    <script src="js/jquery-3.7.1.min.js"></script>
+    <script src="js/bootstrap.bundle.min.js"></script>
+</head>
+
+<body>
+    <div class="d-flex" id="wrapper">
+        <!-- Sidebar -->
+        <div class="bg-light border-right" id="sidebar-wrapper">
+            <div class="sidebar-heading">&nbsp;</div>
+            <div class="list-group list-group-flush">
+				<a href="index.html" class="list-group-item list-group-item-action">Publish</a>
+				<a href="events.html" class="list-group-item list-group-item-action">Events</a>
+				<a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
+				<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
+				<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
+				<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
+				<a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
+				<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
+				<a href="about.html" class="list-group-item list-group-item-action  active">About</a>
+            </div>
+        </div>
+		<div id="page-content-wrapper" class="p-5">
+			<div class="container">
+				<div class="col-4">
+					<div class="card">
+						<div class="card-header">
+							<h5 class="card-title mb-0">Scene behaviour</h5>
+						</div>
+						<div class="card-body" id="settings-form">
+							<div class="form-group mb-3">
+								<label for="scene-tracker" class="form-label">Tracker</label>
+								<select class="form-select" id="scene-tracker">
+									<option value="0">Allow low confidence</option>
+									<option value="1">Require high confidence</option>
+								</select>
+							</div>
+							<div class="form-group mb-3">
+								<label for="scene-hanging_objects" class="form-label">Hanging opjects</label>
+								<select class="form-select" id="scene-hanging_objects">
+									<option value="0">Allow</option>
+									<option value="1">Supress</option>
+								</select>
+							</div>
+							<div class="d-grid mt-3">
+								<button type="button" class="btn btn-success" id="btn-save">Save</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+<script>
+
+$(document).ready(function() {
+
+	$.ajax({
+		type: "GET",
+		url: 'app',
+		dataType: 'json',
+		cache: false,
+		success: function(app) {
+			document.title = app.manifest.acapPackageConf.setup.friendlyName;
+			$('.sidebar-heading').text(app.manifest.acapPackageConf.setup.friendlyName);
+			$("#scene-tracker").val(app.settings.scene.tracker_confidence?"1":"0");
+			$("#scene-hanging_objects").val(app.settings.scene.hanging_objects>0?"1":"0");
+		},
+		error: function(response) {
+			alert(response.statusText);
+		}
+	});
+
+	// Menu toggle handler
+	$("#menu-toggle").click(function(e) {
+		e.preventDefault();
+		$("#wrapper").toggleClass("toggled");
+	});
+
+});	
+
+
+function saveScene() {
+	var payload = {
+		scene: app.settings.scene
+	}
+	var url = 'settings?json=' + encodeURI(JSON.stringify(payload));
+	$.ajax({type: "GET",
+		url: url,
+		success: function(response) {
+			showToast("Settings updated",'info');
+		},
+		error: function(xhr, status, error) {
+			showToast("Filter updated failed",'danger');
+		}
+	});
+}
+
+$('#btn-save').click(function() {
+	app.settings.scene.tracker_confidence = ($("#scene-tracker").val()==="1");
+	if( $("#scene-hanging_objects").val()==="1" )
+		app.settings.scene.hanging_objects = 5;
+	else
+		app.settings.scene.hanging_objects = 0;
+	saveFilter();
+});
+
+
+
+</script>
+</body>
+
+</html>
