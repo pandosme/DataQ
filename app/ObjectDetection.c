@@ -46,13 +46,17 @@ int config_x1 = 0;
 int config_x2 = 1000;
 int config_y1 = 0;
 int config_y2 = 1000;
-int config_hanging_objects = 5;
+int config_hanging_objects = 0;
 cJSON* config_blacklist = 0;
 int lastDetectionWasEmpty = 0;
 cJSON* attributes = 0;
 
 void
 ObjectDetection_Config( cJSON* data ) {
+	LOG_TRACE("%s: Entry\n",__func__);
+	if(!activeDetections)
+		activeDetections = cJSON_CreateObject();
+
 	if( !data ) {
 		LOG_WARN("%s: Invlaid input\n",__func__);
 		return;
@@ -68,7 +72,7 @@ ObjectDetection_Config( cJSON* data ) {
 	config_max_height = cJSON_GetObjectItem(data,"maxHeight")?cJSON_GetObjectItem(data,"maxHeight")->valueint:800;
 	config_min_width = cJSON_GetObjectItem(data,"minWidth")?cJSON_GetObjectItem(data,"minWidth")->valueint:10;
 	config_max_width = cJSON_GetObjectItem(data,"maxWidth")?cJSON_GetObjectItem(data,"maxWidth")->valueint:800;
-	config_hanging_objects = cJSON_GetObjectItem(data,"hanging_objects")?cJSON_GetObjectItem(data,"hanging_objects")->valueint:5;
+	config_hanging_objects = 0; //cJSON_GetObjectItem(data,"hanging_objects")?cJSON_GetObjectItem(data,"hanging_objects")->valueint:5;
 	cJSON *aoi = cJSON_GetObjectItem(data,"aoi");
 	if( aoi ) {
 		config_x1 = cJSON_GetObjectItem(aoi,"x1")?cJSON_GetObjectItem(aoi,"x1")->valueint:0;
@@ -76,6 +80,15 @@ ObjectDetection_Config( cJSON* data ) {
 		config_y1 = cJSON_GetObjectItem(aoi,"y1")?cJSON_GetObjectItem(aoi,"y1")->valueint:0;
 		config_y2 = cJSON_GetObjectItem(aoi,"y2")?cJSON_GetObjectItem(aoi,"y2")->valueint:1000;
 	}
+
+	//Reset all ignore objects
+
+	cJSON* item = activeDetections->child;
+	while(item) {
+		cJSON_GetObjectItem(item,"ignore")->type = cJSON_False;
+		item = item->next;
+	}
+	LOG_TRACE("%s: Exit\n",__func__);	
 }
 
 void
@@ -101,7 +114,7 @@ ObjectDetection_Blacklisted(char* label) {
 
 int
 ObjectDetection_CacheSize() {
-	return cJSON_GetArraySize(activeDetections);
+	return cJSON_GetArraySize(activeDetections) + cJSON_GetArraySize(detectionCounters);
 }
 
 cJSON*
@@ -229,9 +242,10 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 	if(!activeDetections)
 		activeDetections = cJSON_CreateObject();
 
+
 	if(!detectionCounters)
 		detectionCounters = cJSON_CreateObject();
-
+/*
 	//Detection counters are used to detect if an object id is not included
 	// in the detection list but not recived a kill message (hanging object).
 	detection = detectionCounters->child;
@@ -239,7 +253,7 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 		detection->valueint--;
 		detection = detection->next;
 	}
-
+*/
 	if( !data_size || !detection_data )
 		return;
 
@@ -343,13 +357,12 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 				cJSON_AddFalseToObject(detection,"face");
 				cJSON_AddItemToObject(detection,"attributes",cJSON_CreateArray());
 				cJSON_AddItemToObject( activeDetections, idString, detection);
-				if( config_hanging_objects > 0 )
-					cJSON_AddNumberToObject(detectionCounters,idString,config_hanging_objects);
+//				cJSON_AddNumberToObject(detectionCounters,idString,config_hanging_objects);
 			}
 		} else {
 			LOG_TRACE("Found\n");
-			if( cJSON_GetObjectItem(detectionCounters,idString) )
-				cJSON_GetObjectItem(detectionCounters,idString)->valueint = config_hanging_objects;
+//			if( cJSON_GetObjectItem(detectionCounters,idString) )
+//				cJSON_GetObjectItem(detectionCounters,idString)->valueint = config_hanging_objects;
 
 			cJSON_ReplaceItemInObject(detection,"timestamp",cJSON_CreateNumber(timestamp));
 			if( classID != cJSON_GetObjectItem(detection,"type")->valueint ) {
@@ -429,15 +442,19 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
     vod__scene__free_unpacked(recv_scene, NULL);
 
 	//Check hanging objects
-	detection = detectionCounters->child;
-	while( detection ) {
-		if( detection->valueint <= 0 ) {
-			cJSON* hangingObject = cJSON_GetObjectItem(activeDetections,detection->string);
-			if( hangingObject )
-				cJSON_GetObjectItem(hangingObject,"active")->type = cJSON_False;
+/*	
+	if( config_hanging_objects > 0 ) {
+		detection = detectionCounters->child;
+		while( detection ) {
+			if( detection->valueint <= 0 ) {
+				cJSON* hangingObject = cJSON_GetObjectItem(activeDetections,detection->string);
+				if( hangingObject )
+					cJSON_GetObjectItem(hangingObject,"active")->type = cJSON_False;
+			}
+			detection = detection->next;
 		}
-		detection = detection->next;
 	}
+*/
 
 	//Make List
 	cJSON* list = cJSON_CreateArray();
@@ -464,7 +481,7 @@ ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, 
 		const char * id = cJSON_GetObjectItem(detection,"id")->valuestring;
 		if( cJSON_GetObjectItem(detection,"active")->type == cJSON_False ) {
 			cJSON_DeleteItemFromObject(activeDetections, id );
-			cJSON_DeleteItemFromObject(detectionCounters, id);
+//			cJSON_DeleteItemFromObject(detectionCounters, id);
 		}
 		detection = nextObject;
 	}
@@ -477,6 +494,8 @@ int
 ObjectDetection_Init( ObjectDetection_Callback callback ) {
 	int status = 0;
 
+	LOG_TRACE("%s: Entry\n",__func__);
+	
 	attributes = ACAP_FILE_Read( "settings/attributes.json" );
 	if( !attributes ) {
 		LOG_WARN("Missing attributes\n");
@@ -489,10 +508,12 @@ ObjectDetection_Init( ObjectDetection_Callback callback ) {
 	
 	if( callback == 0 ) {
 		ObjectDetection_UserCallback = 0;
+		LOG_TRACE("%s: Entry\n",__func__);
 		return 1;
 	}
 
 	if( ObjectDetection_UserCallback || ObjectDetection_Handler ) {
+		LOG_TRACE("%s: Entry\n",__func__);		
 		return 1;
 	}
 
@@ -506,7 +527,7 @@ ObjectDetection_Init( ObjectDetection_Callback callback ) {
 	}
 
     if (video_object_detection_subscriber_set_get_detection_callback(ObjectDetection_Handler, ObjectDetection_Scene_Callback) != 0) {
-		LOG_TRACE("Could not set callback\n");
+		LOG_TRACE("%s: Could not set callback\n", __func__);
 		exit(EXIT_FAILURE);
 	}
 
@@ -514,9 +535,9 @@ ObjectDetection_Init( ObjectDetection_Callback callback ) {
 
 	status = video_object_detection_subscriber_subscribe(ObjectDetection_Handler);
     if ( status != 0) {
-		LOG_TRACE("ObjectDetection_Init: Failed to set subscribe. %d\n", status);
+		LOG_TRACE("%s: Failed to set subscribe. %d\n",__func__,  status);
 		exit(EXIT_FAILURE);
     }
-
+	LOG_TRACE("%s: Entry\n",__func__);
 	return 1;
 } 

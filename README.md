@@ -143,8 +143,10 @@ MQTT Heartbeat published every 15 minutes
 
 # History
 
-### 1.4.2	March XX, 2025
-- Suppress hanging objects
+### 1.4.2	March 23, 2025
+- Improved MQTT Reconnection stability
+- Introduce advanced.html to fine tune behaviour.  To access this page you must manually write it in the browser url.
+- Introduced suppress hanging objects (advanced.html).  Default enabled.
 
 ### 1.4.1	March 13, 2025
 - Added Geospace data (Check documentation above).

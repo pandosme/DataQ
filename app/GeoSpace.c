@@ -128,6 +128,7 @@ GeoSpace_HTTP_transform(const ACAP_HTTP_Response response, const ACAP_HTTP_Reque
     cJSON_AddNumberToObject(locationData, "lon", lon);    
 
     ACAP_HTTP_Respond_JSON(response, locationData);
+	cJSON_Delete(locationData);
 	LOG_TRACE("%s: Exit %f, %f\n",__func__,lat,lon);
 }
 
