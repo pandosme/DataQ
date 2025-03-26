@@ -463,13 +463,8 @@ MQTT_Unsubscribe(const char *topic) {
 
 void
 MQTT_Cleanup() {
-    if (g_mqtt_client && mqtt_client_isConnected(g_mqtt_client)) {
-        cJSON* gracefulDisconnect = cJSON_Parse(LastWillMessage);
-        cJSON_GetObjectItem(gracefulDisconnect, "connected")->type = cJSON_False;
-        MQTT_Publish_JSON(LastWillTopic, gracefulDisconnect, 0, 1);
-        cJSON_Delete(gracefulDisconnect);
+    if (g_mqtt_client && mqtt_client_isConnected(g_mqtt_client))
         MQTT_Disconnect();
-    }
     
     if (g_mqtt_client) {
         mqtt_client_destroy(&g_mqtt_client);

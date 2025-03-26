@@ -785,14 +785,7 @@ main(void) {
 	g_main_loop_run(main_loop);
 
 	LOG("Terminating and cleaning up %s\n",APP_PACKAGE);
-
-	char topic[256];
-	sprintf(topic,"connect/%s",ACAP_DEVICE_Prop("serial"));
-	cJSON* connection = cJSON_CreateObject();
-	cJSON_AddFalseToObject(connection,"connected");
-	cJSON_AddStringToObject(connection,"address",ACAP_DEVICE_Prop("IPv4"));
-	MQTT_Publish_JSON(topic,connection,0,1);
-	cJSON_Delete(connection);
+	MQTT_Status_Callback(MQTT_DISCONNECTING); //Send graceful disconnect message
 
 	MQTT_Cleanup();
 	ACAP_Cleanup();
