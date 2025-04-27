@@ -758,7 +758,6 @@ main(void) {
 	MQTT_Init( MQTT_Status_Callback, MQTT_Subscription );
 	ACAP_Set_Config("mqtt", MQTT_Settings());
 	ACAP_STATUS_SetObject("detections", "paths", cJSON_CreateArray());
-
 	//Events
 	ACAP_EVENTS_SetCallback( Event_Callback );
 	cJSON* eventSubscriptions = ACAP_FILE_Read( "settings/subscriptions.json" );
@@ -768,7 +767,15 @@ main(void) {
 		subscription = subscription->next;
 	}
 	//Object detection
-	ObjectDetection_Init( Process_VOD_Data );
+	
+	if( ObjectDetection_Init( Process_VOD_Data ) ) {
+		ACAP_STATUS_SetBool("objectdetection","connected",1);
+		ACAP_STATUS_SetString("objectdetection", "status", "OK");
+	} else {
+		ACAP_STATUS_SetBool("objectdetection","connected",0);
+		ACAP_STATUS_SetString("objectdetection", "status", "Object detection is not avaialble");
+	}
+		
 	GeoSpace_Init();
 	g_timeout_add_seconds(15 * 60, MQTT_Publish_Device_Status, NULL);
 //	g_timeout_add_seconds(120, MemoryMonitor, NULL);

@@ -145,6 +145,10 @@ MQTT Heartbeat published every 15 minutes
 
 # History
 
+### 1.4.3	April 14, 2025
+- Reset the client on re-connect
+- Fixed LWT topic
+
 ### 1.4.2	March 23, 2025
 - Improved MQTT Reconnection stability
 

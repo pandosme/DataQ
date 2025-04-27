@@ -137,5 +137,5 @@ GeoSpace_Init() {
     LOG_TRACE("%s: Enter\n",__func__);
     //Initialize HTTP endpoint
     ACAP_HTTP_Node("geospace", GeoSpace_HTTP_transform);
-    LOG_TRACE("%s: Enter\n",__func__);
+    LOG_TRACE("%s: Exit\n",__func__);
 }

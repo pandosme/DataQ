@@ -508,12 +508,12 @@ ObjectDetection_Init( ObjectDetection_Callback callback ) {
 	
 	if( callback == 0 ) {
 		ObjectDetection_UserCallback = 0;
-		LOG_TRACE("%s: Entry\n",__func__);
-		return 1;
+		LOG_WARN("%s:Invalid input when configuring object detection\n",__func__);
+		return 0;
 	}
 
 	if( ObjectDetection_UserCallback || ObjectDetection_Handler ) {
-		LOG_TRACE("%s: Entry\n",__func__);		
+		LOG_TRACE("%s: Already configured\n",__func__);		
 		return 1;
 	}
 
@@ -521,22 +521,22 @@ ObjectDetection_Init( ObjectDetection_Callback callback ) {
 	activeDetections = cJSON_CreateArray();
 	
 	if( video_object_detection_subscriber_create(&ObjectDetection_Handler, &ObjectDetection_some_user_data, 0) != 0 ) {
-		LOG_TRACE("%s: Cannot open channel to ObjectDetection\n",__func__);
+		LOG_WARN("%s: Cannot open channel to ObjectDetection\n",__func__);
 		ObjectDetection_Handler = 0;
-		exit(EXIT_FAILURE);
+		return 0;
 	}
 
     if (video_object_detection_subscriber_set_get_detection_callback(ObjectDetection_Handler, ObjectDetection_Scene_Callback) != 0) {
-		LOG_TRACE("%s: Could not set callback\n", __func__);
-		exit(EXIT_FAILURE);
+		LOG_WARN("%s: Could not set object detection callback\n", __func__);
+		return 0;
 	}
 
     video_object_detection_subscriber_set_receive_empty_hits(ObjectDetection_Handler, 1);
 
 	status = video_object_detection_subscriber_subscribe(ObjectDetection_Handler);
     if ( status != 0) {
-		LOG_TRACE("%s: Failed to set subscribe. %d\n",__func__,  status);
-		exit(EXIT_FAILURE);
+		LOG_WARN("%s: Object detection subscription failed. Error Code: %d\n",__func__,  status);
+		return 0;
     }
 	LOG_TRACE("%s: Entry\n",__func__);
 	return 1;

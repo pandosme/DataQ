@@ -61,6 +61,7 @@ void*			MQTTlibHandle = 0;
 static MQTTClient 			g_mqtt_client = NULL;
 MQTT_Callback_Message 		userSubscriptionCallback;
 MQTT_Callback_Connection 	connectionMessgage;
+int MQTT_SetupClient();
 
 cJSON* MQTT_Settings() {
 	return MQTTSettings;
@@ -133,9 +134,9 @@ MQTT_Connect() {
     cJSON_AddStringToObject(lwt, "serial", ACAP_DEVICE_Prop("serial"));
 
 	if( cJSON_GetObjectItem(MQTTSettings, "preTopic") && cJSON_GetObjectItem(MQTTSettings, "preTopic")->type == cJSON_String && strlen(cJSON_GetObjectItem(MQTTSettings, "preTopic")->valuestring ))
-		sprintf(LastWillTopic,"%s/connect",cJSON_GetObjectItem(MQTTSettings, "preTopic")->valuestring);
+		sprintf(LastWillTopic,"%s/connect/%s",cJSON_GetObjectItem(MQTTSettings, "preTopic")->valuestring, ACAP_DEVICE_Prop("serial"));
 	else
-		sprintf(LastWillTopic,"connect");
+		sprintf(LastWillTopic,"connect/%s", ACAP_DEVICE_Prop("serial"));
 	
     char* json = cJSON_PrintUnformatted(lwt);
     if (json) {
@@ -185,9 +186,9 @@ MQTT_Disconnect() {
 
 static gboolean
 reconnectAttempt(gpointer user_data) {
-    LOG_TRACE("%s: Attempting to reconnect...\n", __func__);
+    LOG("%s: Attempting to reconnect...\n", __func__);
     connectionMessgage(MQTT_RECONNECTING);
-    
+    MQTT_SetupClient();
     if (MQTT_Connect()) {
         LOG_TRACE("%s: Reconnected successfully\n", __func__);
         return G_SOURCE_REMOVE; // Stop the timer
