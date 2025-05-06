@@ -581,7 +581,7 @@ Event_Callback(cJSON *event, void* userdata) {
 }
 
 void 
-MQTT_Status_Callback (int state) {
+Main_MQTT_Status (int state) {
 	char topic[64];
 	cJSON* connection = 0;
 
@@ -632,8 +632,8 @@ MQTT_Status_Callback (int state) {
 }
 
 void
-MQTT_Subscription(const char *topic, const char *payload) {
-	LOG("Subscription: %s %s\n",topic,payload);
+Main_MQTT_Subscription_Message(const char *topic, const char *payload) {
+	LOG("Message arrived: %s %s\n",topic,payload);
 }
 
 static gboolean
@@ -755,7 +755,7 @@ main(void) {
 	//MQTT
 	ACAP_STATUS_SetString("mqtt","status","No initialized");
 	ACAP_STATUS_SetBool("mqtt","connected",0);
-	MQTT_Init( MQTT_Status_Callback, MQTT_Subscription );
+	MQTT_Init( Main_MQTT_Status, Main_MQTT_Subscription_Message );
 	ACAP_Set_Config("mqtt", MQTT_Settings());
 	ACAP_STATUS_SetObject("detections", "paths", cJSON_CreateArray());
 	//Events
@@ -792,7 +792,7 @@ main(void) {
 	g_main_loop_run(main_loop);
 
 	LOG("Terminating and cleaning up %s\n",APP_PACKAGE);
-	MQTT_Status_Callback(MQTT_DISCONNECTING); //Send graceful disconnect message
+	Main_MQTT_Status(MQTT_DISCONNECTING); //Send graceful disconnect message
 
 	MQTT_Cleanup();
 	ACAP_Cleanup();

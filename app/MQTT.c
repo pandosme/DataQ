@@ -20,8 +20,8 @@
 
 #define LOG(fmt, args...)    { syslog(LOG_INFO, fmt, ## args);  printf(fmt, ## args); }
 #define LOG_WARN(fmt, args...)    { syslog(LOG_WARNING, fmt, ## args); printf(fmt, ## args);}
-//#define LOG_TRACE(fmt, args...)    { syslog(LOG_INFO, fmt, ## args); printf(fmt, ## args);}
-#define LOG_TRACE(fmt, args...)    { }
+#define LOG_TRACE(fmt, args...)    { syslog(LOG_INFO, fmt, ## args); printf(fmt, ## args);}
+//#define LOG_TRACE(fmt, args...)    { }
 
 // Function pointers for dynamically loaded Paho MQTT library
 typedef int (*MQTTClient_create_func)(MQTTClient*, const char*, const char*, int, void*);
@@ -62,6 +62,9 @@ static MQTTClient 			g_mqtt_client = NULL;
 MQTT_Callback_Message 		userSubscriptionCallback;
 MQTT_Callback_Connection 	connectionMessgage;
 int MQTT_SetupClient();
+void connectionLostCallback(void *context, char *cause);
+int  messageArrivedCallback(void *context, char *topicName, int topicLen, MQTTClient_message *message);
+void deliveryCompleteCallback(void *context, MQTTClient_deliveryToken dt);
 
 cJSON* MQTT_Settings() {
 	return MQTTSettings;
@@ -72,8 +75,13 @@ MQTT_Connect() {
     LOG_TRACE("%s: Entry\n", __func__);
     
     if (!g_mqtt_client) {
-        LOG_TRACE("%s: MQTT client not initialized\n", __func__);
+        LOG_WARN("%s: MQTT client not initialized\n", __func__);
         return 0;
+    }
+
+	if( g_mqtt_client && mqtt_client_isConnected(g_mqtt_client) ) {
+        LOG("%s: MQTT client already connected\n", __func__);
+        return 1;
     }
 
     const char* user = cJSON_GetObjectItem(MQTTSettings, "user") ? cJSON_GetObjectItem(MQTTSettings, "user")->valuestring : "";
@@ -152,13 +160,20 @@ MQTT_Connect() {
 	//Connect
     connectionMessgage(MQTT_CONNECTING);
 
-    int rc = mqtt_client_connect(g_mqtt_client, &conn_opts);
+    // Set callbacks
+    int rc = mqtt_client_setCallbacks(g_mqtt_client, NULL, connectionLostCallback, messageArrivedCallback, deliveryCompleteCallback);
+    if (rc != MQTTCLIENT_SUCCESS)
+        LOG_WARN("%s: Failed to set callbacks, rc=%d\n", __func__, rc);
+
+    rc = mqtt_client_connect(g_mqtt_client, &conn_opts);
     if (rc != MQTTCLIENT_SUCCESS) {
         LOG_WARN("%s: Failed to connect, return code %d\n", __func__, rc);
         connectionMessgage(MQTT_DISCONNECTED);
         return 0;
     }
     connectionMessgage(MQTT_CONNECTED);
+	cJSON_GetObjectItem(MQTTSettings,"connect")->type = cJSON_True;
+	ACAP_FILE_Write( "localdata/mqtt.json", MQTTSettings );
 
     LOG_TRACE("%s: Exit\n", __func__);
     return 1;
@@ -169,8 +184,13 @@ MQTT_Disconnect() {
     LOG_TRACE("%s: Entry\n", __func__);
     
     if (!g_mqtt_client) {
-        LOG_TRACE("%s: MQTT client not initialized\n", __func__);
+        LOG_WARN("%s: MQTT client not initialized\n", __func__);
         return 0;
+    }
+
+    if (g_mqtt_client && !mqtt_client_isConnected(g_mqtt_client)) {
+        LOG("%s: MQTT client disconnected\n", __func__);
+        return 1;
     }
 
     int rc = mqtt_client_disconnect(g_mqtt_client, 10000);
@@ -179,6 +199,8 @@ MQTT_Disconnect() {
         return 0;
     }
 
+    LOG("%s: MQTT client disconnected\n", __func__);
+
     connectionMessgage(MQTT_DISCONNECTED);
     LOG_TRACE("%s: Exit\n", __func__);
     return 1;
@@ -186,25 +208,35 @@ MQTT_Disconnect() {
 
 static gboolean
 reconnectAttempt(gpointer user_data) {
+	if( cJSON_GetObjectItem(MQTTSettings,"connect")->type == cJSON_False ) {
+		return G_SOURCE_CONTINUE;
+	}
+	
+	if( g_mqtt_client && mqtt_client_isConnected(g_mqtt_client) ) {
+		return G_SOURCE_CONTINUE;
+	}
+
+	if( g_mqtt_client ) {
+		connectionMessgage(MQTT_RECONNECTING);
+		if( !MQTT_Connect() ) {
+			MQTT_SetupClient();
+			MQTT_Connect();
+		}
+		return G_SOURCE_CONTINUE;
+	}
+	
     LOG("%s: Attempting to reconnect...\n", __func__);
     connectionMessgage(MQTT_RECONNECTING);
     MQTT_SetupClient();
-    if (MQTT_Connect()) {
-        LOG_TRACE("%s: Reconnected successfully\n", __func__);
-        return G_SOURCE_REMOVE; // Stop the timer
-    }
-    
+    MQTT_Connect();
     return G_SOURCE_CONTINUE; // Keep trying
 }
+
 
 void
 connectionLostCallback(void *context, char *cause) {
     LOG_WARN("%s: Entry. Cause: %s\n", __func__, cause ? cause : "Unknown");
-    connectionMessgage(MQTT_RECONNECTING);
-    
-    // Schedule reconnection attempt
-    g_timeout_add_seconds(5, reconnectAttempt, NULL);
-    
+    reconnectAttempt(0);
     LOG_TRACE("%s: Exit\n", __func__);
 }
 
@@ -241,7 +273,9 @@ MQTT_SetupClient() {
 
     // Clean up previous client if it exists
     if (g_mqtt_client) {
+		LOG("%s: Previous MQTT instance removed\n",__func__);
         mqtt_client_destroy(&g_mqtt_client);
+		g_mqtt_client = 0;
     }
 
     const char* address = cJSON_GetObjectItem(MQTTSettings, "address") ? cJSON_GetObjectItem(MQTTSettings, "address")->valuestring : NULL;
@@ -287,14 +321,7 @@ MQTT_SetupClient() {
 		return 0;
 	}
 
-    // Set callbacks
-    rc = mqtt_client_setCallbacks(g_mqtt_client, NULL, connectionLostCallback, messageArrivedCallback, deliveryCompleteCallback);
-    if (rc != MQTTCLIENT_SUCCESS) {
-        LOG_WARN("%s: Failed to set callbacks, rc=%d\n", __func__, rc);
-        mqtt_client_destroy(&g_mqtt_client);
-        return 0;
-    }
-
+	LOG("%s: MQTT Client initialized\n",__func__);
     LOG_TRACE("%s: Exit\n", __func__);
     return 1;
 }
@@ -304,7 +331,7 @@ MQTT_Publish(const char *topic, const char *payload, int qos, int retained) {
     if (!g_mqtt_client || !mqtt_client_isConnected(g_mqtt_client))
         return 0;
 
-    LOG_TRACE("%s: Entry\n", __func__);
+//    LOG_TRACE("%s: Entry\n", __func__);
 
     char *preTopic = cJSON_GetObjectItem(MQTTSettings, "preTopic") ? cJSON_GetObjectItem(MQTTSettings, "preTopic")->valuestring : NULL;
     char *fullTopic = NULL;
@@ -338,7 +365,7 @@ MQTT_Publish(const char *topic, const char *payload, int qos, int retained) {
         return 0;
     }
 
-    LOG_TRACE("%s: Exit\n", __func__);
+//    LOG_TRACE("%s: Exit\n", __func__);
     return 1;
 }
 
@@ -347,7 +374,7 @@ MQTT_Publish_JSON(const char *topic, cJSON *payload, int qos, int retained) {
     if (!payload || !g_mqtt_client || !mqtt_client_isConnected(g_mqtt_client))
         return 0;
 
-	LOG_TRACE("%s: Entry\n",__func__);
+//	LOG_TRACE("%s: Entry\n",__func__);
     
 	cJSON* publish = cJSON_Duplicate(payload, 1);
 	cJSON* additionalProperties = cJSON_GetObjectItem(MQTTSettings,"payload");
@@ -373,14 +400,14 @@ MQTT_Publish_JSON(const char *topic, cJSON *payload, int qos, int retained) {
 	int result = MQTT_Publish(topic, json, qos, retained );
 	free(json);
 
-	LOG_TRACE("%s: Exit\n",__func__);
+//	LOG_TRACE("%s: Exit\n",__func__);
     
     return result;
 }
 
 int
 MQTT_Publish_Binary(const char *topic, int payloadlen, void *payload, int qos, int retained) {
-    LOG_TRACE("%s: Entry\n", __func__);
+//    LOG_TRACE("%s: Entry\n", __func__);
     
     if (!g_mqtt_client || !mqtt_client_isConnected(g_mqtt_client)) {
         return 0;
@@ -419,7 +446,7 @@ MQTT_Publish_Binary(const char *topic, int payloadlen, void *payload, int qos, i
         return 0;
     }
 
-    LOG_TRACE("%s: Exit\n", __func__);
+//    LOG_TRACE("%s: Exit\n", __func__);
     return 1;
 }
 
@@ -619,6 +646,8 @@ MQTT_HTTP_callback(const ACAP_HTTP_Response response, const ACAP_HTTP_Request re
 				ACAP_HTTP_Respond_Text( response, "OK" );
 			else
 				ACAP_HTTP_Respond_Error( response, 400, "Failed disconnecting");
+			cJSON_GetObjectItem(MQTTSettings,"connect")->type = cJSON_False;
+			ACAP_FILE_Write( "localdata/mqtt.json", MQTTSettings );
 			return;
 		}
         ACAP_HTTP_Respond_JSON(response, MQTTSettings);
@@ -706,6 +735,7 @@ int MQTT_Init( MQTT_Callback_Connection stateCallback, MQTT_Callback_Message mes
         return 0;
     }
 
+    g_timeout_add_seconds(5, reconnectAttempt, NULL);
     g_timeout_add(100, MQTT_process_messages, NULL);
 
     LOG_TRACE("%s: Exit\n", __func__);
