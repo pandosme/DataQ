@@ -88,7 +88,7 @@ MQTT_Connect() {
     const char* password = cJSON_GetObjectItem(MQTTSettings, "password") ? cJSON_GetObjectItem(MQTTSettings, "password")->valuestring : "";
 
     MQTTClient_connectOptions conn_opts = MQTTClient_connectOptions_initializer;
-    conn_opts.keepAliveInterval = 20;
+    conn_opts.keepAliveInterval = 60;
 	conn_opts.connectTimeout = 10;	
     conn_opts.cleansession = 1;
 	if( strlen( user ) && strlen( password) ) {
@@ -207,28 +207,21 @@ MQTT_Disconnect() {
 }
 
 static gboolean
-reconnectAttempt(gpointer user_data) {
-	if( cJSON_GetObjectItem(MQTTSettings,"connect")->type == cJSON_False ) {
-		return G_SOURCE_CONTINUE;
-	}
-	
-	if( g_mqtt_client && mqtt_client_isConnected(g_mqtt_client) ) {
-		return G_SOURCE_CONTINUE;
-	}
+checkConnection(gpointer user_data) {
+	mqtt_client_yield();
 
-	if( g_mqtt_client ) {
-		connectionMessgage(MQTT_RECONNECTING);
-		if( !MQTT_Connect() ) {
-			MQTT_SetupClient();
-			MQTT_Connect();
-		}
+	if( !g_mqtt_client || cJSON_GetObjectItem(MQTTSettings,"connect")->type == cJSON_False )
 		return G_SOURCE_CONTINUE;
-	}
 	
-    LOG("%s: Attempting to reconnect...\n", __func__);
-    connectionMessgage(MQTT_RECONNECTING);
-    MQTT_SetupClient();
-    MQTT_Connect();
+	if( mqtt_client_isConnected(g_mqtt_client) )
+		return G_SOURCE_CONTINUE;
+
+	connectionMessgage(MQTT_RECONNECTING);
+	if( MQTT_Connect() )
+		return G_SOURCE_CONTINUE;
+		
+	MQTT_SetupClient();
+	MQTT_Connect();
     return G_SOURCE_CONTINUE; // Keep trying
 }
 
@@ -236,7 +229,7 @@ reconnectAttempt(gpointer user_data) {
 void
 connectionLostCallback(void *context, char *cause) {
     LOG_WARN("%s: Entry. Cause: %s\n", __func__, cause ? cause : "Unknown");
-    reconnectAttempt(0);
+//    reconnectAttempt(0);
     LOG_TRACE("%s: Exit\n", __func__);
 }
 
@@ -702,12 +695,6 @@ MQTT_HTTP_callback(const ACAP_HTTP_Response response, const ACAP_HTTP_Request re
     ACAP_HTTP_Respond_Text(response, "MQTT Updated");
 }
 
-static gboolean
-MQTT_process_messages(gpointer user_data) {
-	mqtt_client_yield();
-    return G_SOURCE_CONTINUE;  // Continue calling this function
-}
-
 int MQTT_Init( MQTT_Callback_Connection stateCallback, MQTT_Callback_Message messageCallback) {
     LOG_TRACE("%s: Entry\n", __func__);
 
@@ -735,8 +722,7 @@ int MQTT_Init( MQTT_Callback_Connection stateCallback, MQTT_Callback_Message mes
         return 0;
     }
 
-    g_timeout_add_seconds(5, reconnectAttempt, NULL);
-    g_timeout_add(100, MQTT_process_messages, NULL);
+    g_timeout_add_seconds(15, checkConnection, NULL);
 
     LOG_TRACE("%s: Exit\n", __func__);
     return 1;

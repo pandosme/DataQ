@@ -145,6 +145,9 @@ MQTT Heartbeat published every 15 minutes
 
 # History
 
+### 1.4.6	May 14, 2025
+- Fixed a bug that caused respawn of the ACAP
+
 ### 1.4.5	May 6, 2025
 - Fixed MQTT reconnect issue
 
