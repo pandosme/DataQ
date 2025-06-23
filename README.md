@@ -37,26 +37,24 @@ Event-based triggers for actions, offering streamlined MQTT message publishing c
 ### Object Analytics
 
 **Detection Data**
+Detections are used for analytics visualization, primarily to validate the beaviour and to understand what and how to filter unessesery data before published.
 - Real-time object detection
 - Bounding box information
 - Classification data
-- High data throughput
+- High bandwidth utilization
 
 **Tracker Data**
+Tracker data are typically used for real-time automation, counting or occupnacy based on one or more object class, placement, size, direction, age, distans.
 - Movement-based updates (and 2-second intervals)
-- Direction, speed, and distance metrics
-- Optimized bandwidth usage
+- Includes Age, direction, speed, and distance metrics
+- Optimized bandwidth comapred to Detection Data
 
 **Path Data**
-- Ideal for post-processing applications
-  - Flow heatmaps
-  - Dwell analysis
-  - Forensic searching
-  - Object counting
-- Minimal bandwidth consumption and post processing needs
+Typically used for storing the data in a database.  Properties are otimized for quering.  Typical use are Flow heatmap, Dwell analysis, Forensic search, forensic counting
+- Minimal bandwidth consumption compared to Detections and Path
 
 **Occupancy Data**
-- Provides updates when number of detected objects in the scene changes
+- Provides real-time updates when number of detected objects in the scene changes
 	- Queue management
 	- Loitering
 
