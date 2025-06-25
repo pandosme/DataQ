@@ -1,5 +1,5 @@
 PROG1	= DataQ
-OBJS1	= main.c ACAP.c cJSON.c MQTT.c CERTS.c ObjectDetection.c TIME.c video_object_detection.pb-c.c protobuf-c.c GeoSpace.c \
+OBJS1	= main.c ACAP.c cJSON.c MQTT.c CERTS.c ObjectDetection.c GeoSpace.c \
         linmatrix/src/lm_log.c \
         linmatrix/src/lm_assert.c \
         linmatrix/src/lm_err.c \
@@ -18,11 +18,11 @@ OBJS1	= main.c ACAP.c cJSON.c MQTT.c CERTS.c ObjectDetection.c TIME.c video_obje
         linmatrix/src/lm_symm_eigen.c
 PROGS	= $(PROG1) 
 
-PKGS = glib-2.0 gio-2.0 axevent axhttp video-object-detection-subscriber 
+PKGS = glib-2.0 gio-2.0 fcgi axevent libcurl mdb
 
 CFLAGS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --cflags $(PKGS))
 LDLIBS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs $(PKGS))
-LDLIBS  += -s -lm -ldl -lscene -laxparameter -lpthread
+LDLIBS  += -s -lm -ldl -lpthread
 CFLAGS += -Ilinmatrix/inc
 CFLAGS += -Wno-format-overflow
 

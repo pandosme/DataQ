@@ -21,7 +21,6 @@
 			<a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
 			<a href="trackers.html" class="list-group-item list-group-item-action active">Trackers</a>
 			<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
-			<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
 			<a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
 			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
 			<a href="about.html" class="list-group-item list-group-item-action">About</a>
@@ -77,51 +76,6 @@
 								</div>
 							</div>
 						</div>
-						<div class="row mt-3">
-							<div class="col-4">
-								<div class="card">
-									<div class="card-header">
-										<h5 class="card-title mb-0">Filter</h5>
-									</div>
-									<div class="card-body">
-										<div class="mb-3 d-flex align-items-center">
-											<label for="filter-age" class="form-label text-nowrap me-3 mb-0">
-												Minimum age before tracking
-											</label>
-											<select class="form-select ms-auto" id="filter-age" style="width: 150px;">
-												<option value="0">0.0 s</option>
-												<option value="1">1.0 s</option>
-												<option value="2">2.0 s</option>
-												<option value="3">3.0 s</option>
-												<option value="4">4.0 s</option>
-												<option value="5">5.0 s</option>
-												<option value="6">6.0 s</option>
-												<option value="7">7.0 s</option>
-												<option value="8">8.0 s</option>
-												<option value="9">9.0 s</option>
-												<option value="10">10.0 s</option>
-											</select>
-										</div>
-
-										<div class="mb-3 d-flex align-items-center">
-											<label for="filter-distance" class="form-label text-nowrap me-3 mb-0">
-												Minimum distance before tracking (% of view)
-											</label>
-											<select class="form-select ms-auto" id="filter-distance" style="width: 150px;">
-												<option value="0">0%</option>
-												<option value="5">5%</option>
-												<option value="10">10%</option>
-												<option value="15">15%</option>
-												<option value="20">20%</option>
-												<option value="25">25%</option>
-												<option value="30">30%</option>
-											</select>
-										</div>
-										<button type="button" class="btn btn-success w-100" id="btn-save">Save</button>
-									</div>
-								</div>
-							</div>
-						</div>
 					</div>
 				</div>
 			</div>
@@ -148,9 +102,6 @@ $(document).ready(function() {
 			document.title = app.manifest.acapPackageConf.setup.friendlyName;
 			$('.sidebar-heading').text(app.manifest.acapPackageConf.setup.friendlyName);
 
-			$("#filter-distance").val(app.settings.trackerFilter.distance);
-			$("#filter-age").val(app.settings.trackerFilter.age);
-
 			const aspectRatio = app.device.aspect || '16:9';
 			const [aspectWidth, aspectHeight] = aspectRatio.split(':').map(Number);
 			const paddingPercentage = (aspectHeight / aspectWidth) * 100;
@@ -169,8 +120,10 @@ $(document).ready(function() {
 						publish: app.settings.publish
 					}
 					$.ajax({
-						type: "GET",
-						url: 'settings?json=' + encodeURI(JSON.stringify(payload)),
+						type: "POST",
+						url: 'settings',
+						contentType: 'application/json',
+						data: JSON.stringify(payload),
 						error: function(xhr, status, error) {
 							showToast("Calibration failed", 'danger');
 						}
@@ -204,32 +157,6 @@ $(document).ready(function() {
         }
 	});
 });
-
-function saveFilter() {
-	var payload = { trackerFilter: app.settings.trackerFilter };
-	var url = 'settings?json=' + encodeURI(JSON.stringify(payload));
-	$.ajax({type: "GET",
-		url: url,
-		success: function(response) {
-			showToast("Filter updated",'info');
-		},
-		error: function(xhr, status, error) {
-			showToast("Filter updated failed",'danger');
-		}
-	});
-}
-
-
-$('#btn-save').click(function() {
-	app.settings.trackerFilter.distance = parseInt($("#filter-distance").val()),
-	app.settings.trackerFilter.age = parseInt($("#filter-age").val())
-	saveFilter();
-});
-
-function labelsUpdated(selection) {
-	app.settings.trackerFilter.ignoreClass = selection;
-	saveFilter();
-}
 
 function ConnectWebSocketClient() {
 	updateConnectionStatus('connecting');
@@ -308,7 +235,7 @@ var detections = {};
 
 function onMessageArrived(message) {
 	var detection = JSON.parse(message.payloadString);
-	if( detection.active == false ||  detection.ignore == true )
+	if( detection.active == false )
 		delete detections[detection.id];
 	else
 		detections[detection.id] = detection;

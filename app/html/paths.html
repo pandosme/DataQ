@@ -35,7 +35,6 @@
 			<a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
 			<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
 			<a href="paths.html" class="list-group-item list-group-item-action active">Paths</a>
-			<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
 			<a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
 			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
 			<a href="about.html" class="list-group-item list-group-item-action">About</a>
@@ -204,8 +203,10 @@ $(document).ready(function() {
 						publish: app.settings.publish
 					}
 					$.ajax({
-						type: "GET",
-						url: 'settings?json=' + encodeURI(JSON.stringify(payload)),
+						type: "POST",
+						url: 'settings',
+						contentType: 'application/json',
+						data: JSON.stringify(payload),
 						error: function(xhr, status, error) {
 							showToast("Calibration failed", 'danger');
 						}
@@ -246,9 +247,11 @@ $(document).ready(function() {
 
 function saveFilter() {
 	var payload = { pathFilter: app.settings.pathFilter };
-	var url = 'settings?json=' + encodeURI(JSON.stringify(payload));
-	$.ajax({type: "GET",
-		url: url,
+	$.ajax({
+		type: "POST",
+		url: settings,
+		contentType: 'application/json',
+		data: JSON.stringify(payload),
 		success: function(response) {
 			showToast("Filter updated",'info');
 		},
@@ -558,9 +561,11 @@ function PlayVideo(aspect, rotation) {
 
 function saveTrackerFilter() {
 	var payload = { trackerFilter: app.settings.trackerFilter };
-	var url = 'settings?json=' + encodeURI(JSON.stringify(payload));
-	$.ajax({type: "GET",
-		url: url,
+	$.ajax({
+		type: "POST",
+		url: 'settings',
+		contentType: 'application/json',
+		data: JSON.stringify(payload),
 		success: function(response) {
 			showToast("Filter updated",'info');
 		},

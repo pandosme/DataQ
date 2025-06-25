@@ -12,7 +12,7 @@ function LabelSelector(elementId, ignoreLabels, callback) {
 
   // Define all possible labels
   const allLabels = [
-    "Human", "Head", "Car", "Truck", "Bus", "Vehicle", "Bike", "Animal", "LicensePlate", "Bag", "Backpack", "Suitcase"
+    "Human", "Face", "Car", "Truck", "Bus", "Vehicle", "Bike", "Object"
   ];
 
   // Generate HTML for checkboxes

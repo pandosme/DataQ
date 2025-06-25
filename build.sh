@@ -8,4 +8,3 @@ docker build   --progress=plain --no-cache --tag acap .
 docker cp $(docker create acap):/opt/app ./build
 mv build/*.eap .
 rm -rf build
-

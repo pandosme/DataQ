@@ -7,7 +7,6 @@
 		"detections": false,
 		"tracker": true,
 		"path": true,
-		"occupancy": true,
 		"status": true,
 		"geospace": false
 	},
@@ -36,32 +35,6 @@
 		},
 		"ignoreClass": []
 	},
-	"vehicleAttributeType": 8,
-	"detectionsFilter": {
-		"minWidth": 10,
-		"minHeight": 10,
-		"maxWidth": 800,
-		"maxHeight": 800,
-		"confidence": 30,
-		"aoi": {
-			"x1": 100,
-			"y1": 100,
-			"x2": 900,
-			"y2": 900
-		},
-		"ignoreArea": {
-			"x1": 475,
-			"x2": 525,
-			"y1": 475,
-			"y2": 525
-		},
-		"ignoreClass": []
-	},
-	"trackerFilter": {
-		"distance": 0,
-		"age": 0,
-		"ignoreClass": []
-	},
 	"pathFilter": {
 		"distance": 15,
 		"age": 2,
@@ -71,10 +44,6 @@
 			"x2": 1000,
 			"y2": 1000
 		},
-		"ignoreClass": []
-	},
-	"occupancyFilter": {
-		"integration": 20,
 		"ignoreClass": []
 	},
 	"eventTopics": [

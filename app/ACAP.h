@@ -1,13 +1,15 @@
 /*
+ * ACAP SDK wrapper for verion 12
  * Copyright (c) 2025 Fred Juhlin
  * MIT License - See LICENSE file for details
+ * Version 3.7
  */
 
 #ifndef _ACAP_H_
 #define _ACAP_H_
 
 #include <glib.h>
-#include <gio/gio.h>
+#include "fcgi_stdio.h"
 #include "cJSON.h"
 
 #ifdef __cplusplus
@@ -37,9 +39,18 @@ typedef enum {
 typedef void (*ACAP_Config_Update)(const char* service, cJSON* event );
 typedef void (*ACAP_EVENTS_Callback)(cJSON* event, void* user_data);
 
-typedef GDataOutputStream *ACAP_HTTP_Response;
-typedef GHashTable        *ACAP_HTTP_Request;
+// HTTP Request/Response structures
+typedef struct {
+    FCGX_Request* request;
+    const char* postData;    // Will be NULL for GET requests
+    size_t postDataLength;
+    const char* method;      // Request method (GET, POST, etc.)
+    const char* contentType; // Content-Type header
+    const char* queryString; // Raw query string
+} ACAP_HTTP_Request_DATA;
 
+typedef ACAP_HTTP_Request_DATA* ACAP_HTTP_Request;
+typedef FCGX_Request* ACAP_HTTP_Response;
 typedef void (*ACAP_HTTP_Callback)(ACAP_HTTP_Response response, const ACAP_HTTP_Request request);
 
 /*-----------------------------------------------------
@@ -58,6 +69,9 @@ void		ACAP_Cleanup(void);
 int 		ACAP_HTTP_Node(const char* nodename, ACAP_HTTP_Callback callback);
 
 // HTTP Request helpers
+const char* ACAP_HTTP_Get_Method(const ACAP_HTTP_Request request);
+const char* ACAP_HTTP_Get_Content_Type(const ACAP_HTTP_Request request);
+size_t 		ACAP_HTTP_Get_Content_Length(const ACAP_HTTP_Request request);
 const char* ACAP_HTTP_Request_Param(const ACAP_HTTP_Request request, const char* param);
 cJSON* 		ACAP_HTTP_Request_JSON(const ACAP_HTTP_Request request, const char* param);
 
@@ -105,7 +119,6 @@ int 		ACAP_FILE_Exists(const char* filepath);
  *-----------------------------------------------------*/
 double		ACAP_DEVICE_Longitude();
 double		ACAP_DEVICE_Latitude();
-
 int			ACAP_DEVICE_Set_Location( double lat, double lon);
 //Properties: serial, model, platform, chip, firmware, aspect, 
 const char* ACAP_DEVICE_Prop(const char* name);
@@ -138,6 +151,13 @@ void		ACAP_STATUS_SetNumber(const char* group, const char* name, double value);
 void		ACAP_STATUS_SetString(const char* group, const char* name, const char* string);
 void		ACAP_STATUS_SetObject(const char* group, const char* name, cJSON* data);
 void		ACAP_STATUS_SetNull(const char* group, const char* name);
+
+/*-----------------------------------------------------
+ * VAPIX
+ *-----------------------------------------------------*/
+char*		ACAP_VAPIX_Get(const char *request);
+char*		ACAP_VAPIX_Post(const char *request, const char* body );
+
 
 #ifdef __cplusplus
 }

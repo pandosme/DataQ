@@ -145,6 +145,11 @@ MQTT Heartbeat published every 15 minutes
 
 # History
 
+
+### 1.5.0	May 14, 2025
+- Optimized Detections datastructure by reducing its size (peopertieas removed)
+- Updated MQTT to use the MQTTAsync client.
+
 ### 1.4.6	May 14, 2025
 - Fixed a bug that caused respawn of the ACAP
 

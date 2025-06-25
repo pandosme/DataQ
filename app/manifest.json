@@ -1,5 +1,5 @@
 {
-    "schemaVersion": "1.3",
+    "schemaVersion": "1.7.3",
     "acapPackageConf": {
         "setup": {
             "friendlyName": "DataQ",
@@ -8,23 +8,26 @@
             "embeddedSdkVersion": "3.0",
             "vendorUrl": "https://pandosme.github.io",
             "runMode": "respawn",
-            "version": "1.4.6",
-            "user": {
-                "group": "sdk",
-                "username": "sdk"
-            }
+            "version": "2.0.0"
         },
         "configuration": {
 			"settingPage": "index.html",
 			"httpConfig": [
-				{"name": "app","access": "admin","type": "transferCgi"},
-				{"name": "settings","access": "admin","type": "transferCgi"},
-				{"name": "status","access": "admin","type": "transferCgi"},
-				{"name": "mqtt","access": "admin","type": "transferCgi"},
-				{"name": "certs","access": "admin","type": "transferCgi"},
-				{"name": "objectdetections","access": "admin","type": "transferCgi"},
-				{"name": "geospace","access": "admin","type": "transferCgi"}
+				{"name": "app","access": "admin","type": "fastCgi"},
+				{"name": "settings","access": "admin","type": "fastCgi"},
+				{"name": "status","access": "admin","type": "fastCgi"},
+				{"name": "mqtt","access": "admin","type": "fastCgi"},
+				{"name": "certs","access": "admin","type": "fastCgi"},
+				{"name": "objectdetections","access": "admin","type": "fastCgi"},
+				{"name": "geospace","access": "admin","type": "fastCgi"}
 			]
 		}
-    }
+    },
+	"resources": {
+		"dbus": {
+			"requiredMethods": [
+				"com.axis.HTTPConf1.VAPIXServiceAccounts1.GetCredentials"
+			]
+		}
+	}
 }

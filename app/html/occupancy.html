@@ -148,8 +148,10 @@ $(document).ready(function() {
 						publish: app.settings.publish
 					}
 					$.ajax({
-						type: "GET",
-						url: 'settings?json=' + encodeURI(JSON.stringify(payload)),
+						type: "POST",
+						url: 'settings',
+						contentType: 'application/json',
+						data: JSON.stringify(payload),
 						error: function(xhr, status, error) {
 							showToast("Calibration failed", 'danger');
 						}
@@ -174,10 +176,11 @@ $(document).ready(function() {
 				var payload = {
 					publish: app.settings.publish
 				}
-				var url = 'settings?json=' + encodeURI(JSON.stringify(payload));
 				$.ajax({
-					type: "GET",
-					url: url,
+					type: "POST",
+					url: 'settings',
+					contentType: 'application/json',
+					data: JSON.stringify(payload),
 					success: function( response ) {
 						showToast("Detection messages is temporarily enabled",'info');
 					}
@@ -209,8 +212,12 @@ window.addEventListener("beforeunload", function(event) {
 		var payload = {
 			publish: app.settings.publish
 		}
-		var url = 'settings?json=' + encodeURI(JSON.stringify(payload));
-		$.ajax({type: "GET",url: url});
+		$.ajax({
+			type: "POST",
+			url: 'settings',
+			contentType: 'application/json',
+			data: JSON.stringify(payload)
+		});
 		event.preventDefault();
 	}
 	event.returnValue = '';		
@@ -221,9 +228,10 @@ $('#occupancy-transition').on('change', function() {
 	var payload = {
 		occupancyFilter: app.settings.occupancyFilter
 	}
-	var url = 'settings?json=' + encodeURI(JSON.stringify(payload));
-	$.ajax({type: "GET",
-		url: url,
+	$.ajax({type: "POST",
+		url: 'settings',
+		contentType: 'application/json',
+		data: JSON.stringify(payload),
 		success: function(response) {
 			showToast("Settings updated",'info');
 		},

@@ -24,7 +24,6 @@
 			<a href="detections.html" class="list-group-item list-group-item-action active">Detections</a>
 			<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
 			<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
-			<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
 			<a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
 			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
 			<a href="about.html" class="list-group-item list-group-item-action">About</a>
@@ -134,15 +133,6 @@
 													<option value="1">Bottom-center (feet/wheels)</option>
 												</select>
 											</div>
-											<div class="form-group mb-3">
-												<label for="scene-rotation" class="form-label">Rotation</label>
-												<select class="form-select" id="scene-rotation">
-													<option value="0">0</option>
-													<option value="90">90</option>
-													<option value="180">180</option>
-													<option value="270">270</option>
-												</select>
-											</div>
 											<div class="d-grid mt-3">
 												<button type="button" class="btn btn-success" id="btn-save">Save</button>
 											</div>
@@ -206,8 +196,10 @@ $(document).ready(function() {
 						publish: app.settings.publish
 					}
 					$.ajax({
-						type: "GET",
-						url: 'settings?json=' + encodeURI(JSON.stringify(payload)),
+						type: "POST",
+						url: 'settings',
+						contentType: 'application/json',
+						data: JSON.stringify(payload),
 						error: function(xhr, status, error) {
 							showToast("Calibration failed", 'danger');
 						}
@@ -409,24 +401,22 @@ function onMessageArrived(message) {
 	detections.forEach(function(detection) {
 		// Skip invalid detections
 		if (typeof detection !== 'object' || detection === null) return;
-		if( detection.ignore === false ) {
-			// Draw on canvas
-			ctx.rect(detection.x, detection.y, detection.w, detection.h);
-			var text = detection.class || "Undefined";
-			if (detection.hasOwnProperty("confidence"))
-				text += " " + detection.confidence;
-				
-			var age = "";
-			if (detection.hasOwnProperty("age")) {
-				age = detection.age.toFixed(1) + "s";
-				if (detection.age > 60)
-					age = parseInt(detection.age/60) + "m";
-				if (detection.age > 3600)
-					age = parseInt(detection.age/3600) + "h";
-				text += " " + age;
-			}
-			ctx.fillText(text, detection.x, detection.y-10);
+		// Draw on canvas
+		ctx.rect(detection.x, detection.y, detection.w, detection.h);
+		var text = detection.class || "Undefined";
+		if (detection.hasOwnProperty("confidence"))
+			text += " " + detection.confidence;
+			
+		var age = "";
+		if (detection.hasOwnProperty("age")) {
+			age = detection.age.toFixed(1) + "s";
+			if (detection.age > 60)
+				age = parseInt(detection.age/60) + "m";
+			if (detection.age > 3600)
+				age = parseInt(detection.age/3600) + "h";
+			text += " " + age;
 		}
+		ctx.fillText(text, detection.x, detection.y-10);
 	});
 	ctx.stroke();
 }
@@ -480,9 +470,11 @@ function saveFilter() {
 	var payload = {
 		scene: app.settings.scene
 	}
-	var url = 'settings?json=' + encodeURI(JSON.stringify(payload));
-	$.ajax({type: "GET",
-		url: url,
+	$.ajax({
+		type: "POST",
+		url: 'settings',
+		contentType: 'application/json',
+		data: JSON.stringify(payload),
 		success: function(response) {
 			showToast("Settings updated",'info');
 		},

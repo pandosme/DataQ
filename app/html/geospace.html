@@ -25,7 +25,6 @@
       <a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
       <a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
       <a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
-      <a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
       <a href="geospace.html" class="list-group-item list-group-item-action active">Geospace</a>
       <a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
       <a href="about.html" class="list-group-item list-group-item-action">About</a>
@@ -166,8 +165,10 @@ async function loadAppConfig() {
 					publish: App.settings.publish
 				}
                 $.ajax({
-                    type: "GET",
-                    url: 'settings?json=' + encodeURI(JSON.stringify(payload)),
+                    type: "POST",
+                    url: 'settings',
+					contentType: 'application/json',
+					data: JSON.stringify(payload),
                     error: function(xhr, status, error) {
                         showToast("Calibration failed", 'danger');
                     }
@@ -467,8 +468,10 @@ function saveMarkers() {
     };
     
     $.ajax({
-        type: "GET",
-        url: 'settings?json=' + encodeURI(JSON.stringify(markersPayload)),
+        type: "POST",
+        url: 'settings',
+		contentType: 'application/json',
+		data: JSON.stringify(markersPayload),
         success: function(response) {
             // After markers are saved, calculate and save homography
             try {
@@ -478,8 +481,10 @@ function saveMarkers() {
                 };
                 
                 $.ajax({
-                    type: "GET",
-                    url: 'settings?json=' + encodeURI(JSON.stringify(matrixPayload)),
+                    type: "POST",
+                    url: 'settings',
+					contentType: 'application/json',
+					data: JSON.stringify(matrixPayload),
                     success: function(response) {
                         showToast("Calibration complete", 'success');
                     },
@@ -516,8 +521,10 @@ function calculateAndSaveMatrix(markers) {
     };
     
     $.ajax({
-        type: "GET",
-        url: 'settings?json=' + encodeURI(JSON.stringify(matrixPayload)),
+        type: "POST",
+        url: 'settings',
+		contentType: 'application/json',
+		data: JSON.stringify(matrixPayload),
         success: function(response) {
             showToast("Calibration complete", 'success');
         },
@@ -1020,7 +1027,7 @@ function onMessageArrived(message) {
 	}
 
 	if( topic === "tracker") {
-		if (detection.active && detection.ignore == false )
+		if (detection.active )
 			detections[detection.id] = detection;
 		else
 			delete detections[detection.id];
