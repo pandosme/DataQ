@@ -120,9 +120,9 @@ Process_Paths(cJSON* trackers) {
                 cJSON_AddNumberToObject(path, "distance", 
                     (distance_item && cJSON_IsNumber(distance_item)) ? distance_item->valueint : 0);
                 
-                cJSON* topVelocity_item = cJSON_GetObjectItem(tracker, "topVelocity");
-                cJSON_AddNumberToObject(path, "topVelocity", 
-                    (topVelocity_item && cJSON_IsNumber(topVelocity_item)) ? topVelocity_item->valuedouble : 0);
+//                cJSON* topVelocity_item = cJSON_GetObjectItem(tracker, "topVelocity");
+//                cJSON_AddNumberToObject(path, "topVelocity", 
+//                    (topVelocity_item && cJSON_IsNumber(topVelocity_item)) ? topVelocity_item->valuedouble : 0);
                 
                 cJSON_AddNumberToObject(path, "sampletime", ACAP_DEVICE_Timestamp());
                 cJSON_AddNumberToObject(path, "dwell", 0);
@@ -187,9 +187,9 @@ Process_Paths(cJSON* trackers) {
             if (distance_item && cJSON_IsNumber(distance_item))
                 cJSON_ReplaceItemInObject(path, "distance", cJSON_CreateNumber(distance_item->valueint));
             
-            cJSON* topVelocity_item = cJSON_GetObjectItem(tracker, "topVelocity");
-            if (topVelocity_item && cJSON_IsNumber(topVelocity_item))
-                cJSON_ReplaceItemInObject(path, "topVelocity", cJSON_CreateNumber(topVelocity_item->valuedouble));
+//            cJSON* topVelocity_item = cJSON_GetObjectItem(tracker, "topVelocity");
+//            if (topVelocity_item && cJSON_IsNumber(topVelocity_item))
+//                cJSON_ReplaceItemInObject(path, "topVelocity", cJSON_CreateNumber(topVelocity_item->valuedouble));
             
             cJSON* color_item = cJSON_GetObjectItem(tracker, "color");
             if (color_item && cJSON_IsString(color_item))
@@ -402,6 +402,8 @@ Process_Objection_Data(cJSON *list ) {
 			cJSON_AddNumberToObject( c,"dx", cJSON_GetObjectItem(item,"dx")->valueint);
 			cJSON_AddNumberToObject( c,"dy", cJSON_GetObjectItem(item,"dy")->valueint);
 			cJSON_AddNumberToObject( c,"timestamp", cJSON_GetObjectItem(item,"timestamp")->valuedouble);
+			cJSON_AddNumberToObject( c,"birth", cJSON_GetObjectItem(item,"birth")->valuedouble);
+//			cJSON_AddNumberToObject( c,"topVelocity", cJSON_GetObjectItem(item,"topVelocity")->valuedouble);
 			cJSON_AddStringToObject( c,"id", cJSON_GetObjectItem(item,"id")->valuestring);
 			if( cJSON_GetObjectItem(item,"active")->type == cJSON_True )
 				cJSON_AddTrueToObject(c,"active");

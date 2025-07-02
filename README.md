@@ -145,8 +145,14 @@ MQTT Heartbeat published every 15 minutes
 
 # History
 
+### 2.0.0   June 25
+- Now using the official MessageBroker instead of object detection lib.
+  This update changes some behavior on the data:
+  - Non-moving objects may not be detected causing the need to remove Occpancy functionality
+  - Improved detection for moving objects
+- Cleaned up data structures
 
-### 1.5.0	May 14, 2025
+### 1.5.0	June 14, 2025
 - Optimized Detections datastructure by reducing its size (peopertieas removed)
 - Updated MQTT to use the MQTTAsync client.
 
