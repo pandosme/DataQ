@@ -11,7 +11,6 @@ COPY ./app /opt/app/
 WORKDIR /opt/app
 RUN . /opt/axis/acapsdk/environment-setup* && acap-build . \
 	-a 'settings/settings.json' \
-	-a 'settings/attributes.json' \
 	-a 'settings/events.json' \
 	-a 'settings/subscriptions.json' \
 	-a 'settings/mqtt.json'

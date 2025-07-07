@@ -1020,7 +1020,7 @@ function onMessageArrived(message) {
 	}
 
 	if( topic === "tracker") {
-		if (detection.active && detection.ignore == false )
+		if (detection.active  )
 			detections[detection.id] = detection;
 		else
 			delete detections[detection.id];

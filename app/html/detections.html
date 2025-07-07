@@ -409,24 +409,22 @@ function onMessageArrived(message) {
 	detections.forEach(function(detection) {
 		// Skip invalid detections
 		if (typeof detection !== 'object' || detection === null) return;
-		if( detection.ignore === false ) {
-			// Draw on canvas
-			ctx.rect(detection.x, detection.y, detection.w, detection.h);
-			var text = detection.class || "Undefined";
-			if (detection.hasOwnProperty("confidence"))
-				text += " " + detection.confidence;
+		// Draw on canvas
+		ctx.rect(detection.x, detection.y, detection.w, detection.h);
+		var text = detection.class || "Undefined";
+		if (detection.hasOwnProperty("confidence"))
+			text += " " + detection.confidence;
 				
-			var age = "";
-			if (detection.hasOwnProperty("age")) {
-				age = detection.age.toFixed(1) + "s";
-				if (detection.age > 60)
-					age = parseInt(detection.age/60) + "m";
-				if (detection.age > 3600)
-					age = parseInt(detection.age/3600) + "h";
-				text += " " + age;
-			}
-			ctx.fillText(text, detection.x, detection.y-10);
+		var age = "";
+		if (detection.hasOwnProperty("age")) {
+			age = detection.age.toFixed(1) + "s";
+			if (detection.age > 60)
+				age = parseInt(detection.age/60) + "m";
+			if (detection.age > 3600)
+				age = parseInt(detection.age/3600) + "h";
+			text += " " + age;
 		}
+		ctx.fillText(text, detection.x, detection.y-10);
 	});
 	ctx.stroke();
 }

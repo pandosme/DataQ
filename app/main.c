@@ -21,6 +21,11 @@
 //#define LOG_TRACE(fmt, args...)    { syslog(LOG_INFO, fmt, ## args); printf(fmt, ## args); }
 #define LOG_TRACE(fmt, args...)    {}
 
+#define JGET(obj, key) cJSON_GetObjectItem(obj, key)
+#define JSTR(obj, key) (JGET(obj, key) ? JGET(obj, key)->valuestring : "")
+#define JNUM(obj, key) (JGET(obj, key) ? JGET(obj, key)->valuedouble : 0)
+#define JBOOL(obj, key) (JGET(obj, key) && JGET(obj, key)->type == cJSON_True)
+
 cJSON* activeTrackers = 0;
 cJSON* PreviousPosition = 0;
 cJSON* lastPublishedTracker = 0;
@@ -28,6 +33,8 @@ cJSON* pathsCache = 0;
 cJSON* occupancyDetectionCounter = 0;
 cJSON* classCounterArrays = 0;
 cJSON* previousOccupancy = 0;
+cJSON* blacklist = 0;
+
 int lastDetectionListWasEmpty = 0;
 int publishEvents = 1;
 int publishDetections = 1;
@@ -38,277 +45,153 @@ int publishStatus = 1;
 int publishGeospace = 0;
 int shouldReset = 0;
 
-
-cJSON*
-Process_Detections( cJSON* detections ) {
-	cJSON* response = cJSON_CreateArray();
-	int accept;
-	LOG_TRACE("%s: Entry\n",__func__);
-
-	cJSON* item = detections->child;
-	while(item) {
-		if( cJSON_GetObjectItem(item,"ignore")->type == cJSON_False )
-			cJSON_AddItemReferenceToArray( response, item );
-		if( cJSON_GetObjectItem(item,"active")->type == cJSON_False )
-			cJSON_AddItemReferenceToArray( response, item );
-		item = item->next;
-	}
-	
-	
-	if( cJSON_GetArraySize( response ) > 0 ) {
-		lastDetectionListWasEmpty = 0;
-		return response;
-	}
-	
-	if( lastDetectionListWasEmpty == 1 )
-		return 0;
-	lastDetectionListWasEmpty = 1;
-	
-	LOG_TRACE("%s: Exit\n",__func__);
-	return response;
+int
+Label_Blacklisted(cJSON* detection) {
+    if (!blacklist || !detection) {
+        return 0;
+    }
+	const char* label = cJSON_GetObjectItem(detection,"class")->valuestring;
+    
+    cJSON* item = blacklist->child;
+    while (item) {
+        if (cJSON_IsString(item) && strcmp(label, item->valuestring) == 0) {
+            return 1;
+        }
+        item = item->next;
+    }
+    return 0;
 }
 
-cJSON*
-Process_Trackers( cJSON* detections ) {
-	const char* id = 0;
+cJSON* Process_Paths(cJSON* trackers) {
+    LOG_TRACE("%s: Entry\n", __func__);
 
-	LOG_TRACE("%s: Entry\n",__func__);
-	
-	cJSON* response = cJSON_CreateArray();
-	cJSON* settings = ACAP_Get_Config("settings");
-	if(!settings)
-		return response;
-	
-	cJSON* trackerFilter = cJSON_GetObjectItem(settings,"trackerFilter");
-	if( !trackerFilter )
-		return response;
+    if (!pathsCache)
+        pathsCache = cJSON_CreateObject();
+    cJSON* response = cJSON_CreateArray();
 
-	cJSON* sceneFilter = cJSON_GetObjectItem(settings,"scene");
-	if( !sceneFilter )
-		return response;
-		
-	double minAge = cJSON_GetObjectItem(trackerFilter,"age")->valuedouble;
-	int minDistance = cJSON_GetObjectItem(trackerFilter,"distance")->valuedouble;
-	double maxIdle = cJSON_GetObjectItem(sceneFilter,"maxIdle")->valuedouble;
-	
-	if(!PreviousPosition)
-		PreviousPosition = cJSON_CreateObject();
+    cJSON* settings = ACAP_Get_Config("settings");
+    if (!settings) return response;
+    cJSON* pathFilter = JGET(settings, "pathFilter");
+    if (!pathFilter) return response;
+    cJSON* aoi = JGET(pathFilter, "aoi");
+    if (!aoi) return response;
 
-	if(!activeTrackers)
-		activeTrackers = cJSON_CreateObject();
+    cJSON* tracker = trackers->child;
+    while (tracker) {
+        const char* id = JSTR(tracker, "id");
+        cJSON* path = JGET(pathsCache, id);
 
-	cJSON* item = detections->child;
-	while( item ) {
-		id = cJSON_GetObjectItem(item,"id")->valuestring;
-		cJSON* position = cJSON_GetObjectItem(PreviousPosition,id);
-		if( cJSON_GetObjectItem(item,"active")->type == cJSON_False ) {
-			cJSON_DeleteItemFromObject(PreviousPosition,id);
-			cJSON_DeleteItemFromObject(activeTrackers,id);
-			if( position )
-				cJSON_AddItemReferenceToArray(response,item);
-		} else {
-			if( position ) {
-				double cx = cJSON_GetObjectItem(item,"cx")->valuedouble;
-				double cy = cJSON_GetObjectItem(item,"cy")->valuedouble;
-				double pcx = cJSON_GetObjectItem(position,"cx")->valuedouble;
-				double pcy = cJSON_GetObjectItem(position,"cy")->valuedouble;
-				double dx = cx - pcx;
-				double dy = cy - pcy;
-				double distance = sqrt( (dx*dx) + (dy*dy) ) / 10.0;
-				double lat = 0;
-				double lng = 0;
-				if( distance >= 5.0 ) {
-					double topVelocity = cJSON_GetObjectItem(item,"topVelocity")->valuedouble;
-					double seconds = (cJSON_GetObjectItem(item,"timestamp")->valuedouble - cJSON_GetObjectItem(position,"timestamp")->valuedouble)/1000.0;
-					double velocity = distance / seconds;
-					if( velocity > topVelocity )
-						cJSON_ReplaceItemInObject(item,"topVelocity",cJSON_CreateNumber(velocity));
-					cJSON_ReplaceItemInObject(position,"cx",cJSON_CreateNumber(cx));
-					cJSON_ReplaceItemInObject(position,"cy",cJSON_CreateNumber(cy));
-					if( cJSON_GetObjectItem(item,"ignore")->type == cJSON_True ) {
-						cJSON_GetObjectItem(item,"ignore")->type = cJSON_False;
-						cJSON_ReplaceItemInObject(position,"birth",cJSON_CreateNumber(cJSON_GetObjectItem(item,"timestamp")->valuedouble));
-					}
-					cJSON_ReplaceItemInObject(position,"timestamp",cJSON_CreateNumber(cJSON_GetObjectItem(item,"timestamp")->valuedouble));
-					cJSON_ReplaceItemInObject(item,"idle",cJSON_CreateNumber(0));
-					
-					int previousDistance = cJSON_GetObjectItem(item,"distance")->valueint;
-					cJSON_ReplaceItemInObject(item,"distance",cJSON_CreateNumber(previousDistance+(int)distance));
-					cJSON_AddItemReferenceToArray(response,item);
-				} else {
-					double currentTime = cJSON_GetObjectItem(item,"timestamp")->valuedouble;
-					double lastMovementTime = cJSON_GetObjectItem(position,"timestamp")->valuedouble;
-					double idle = (currentTime - lastMovementTime)/1000;
-					cJSON_ReplaceItemInObject(item,"idle",cJSON_CreateNumber(idle));
-					if( maxIdle > 0 && idle > maxIdle && cJSON_GetObjectItem(item,"ignore")->type == cJSON_False ) {
-						cJSON_GetObjectItem(item,"ignore")->type = cJSON_True;
-						cJSON_AddItemReferenceToArray(response,item);
-					}
-				}
-			} else {
-				int x = cJSON_GetObjectItem(item,"cx")->valueint;
-				int y = cJSON_GetObjectItem(item,"cy")->valueint;
-				double bx = cJSON_GetObjectItem(item,"bx")->valuedouble;
-				double by = cJSON_GetObjectItem(item,"by")->valuedouble;
-				double dx = x - bx;
-				double dy = y - by;
-				int distance = sqrt( (dx*dx) + (dy*dy) ) / 10.0;
-				int accept = 1;
-				if( accept && cJSON_GetObjectItem(item,"ignore")->type == cJSON_True ) accept = 0;
-				if( accept && cJSON_GetObjectItem(item,"age")->valuedouble < minAge ) accept = 0;
-				if( accept && distance < minDistance ) accept = 0;
-				if( accept ) {
-					cJSON* position = cJSON_CreateObject();
-					cJSON_AddNumberToObject(position,"cx",x);
-					cJSON_AddNumberToObject(position,"cy",y);
-					cJSON_AddNumberToObject(position,"timestamp",cJSON_GetObjectItem(item,"timestamp")->valuedouble);
-					cJSON_ReplaceItemInObject(item,"idle",cJSON_CreateNumber(0));
-					cJSON_AddItemReferenceToObject(activeTrackers,id,item);
-					cJSON_AddItemToObject(PreviousPosition,id,position);
-					cJSON_AddItemReferenceToArray(response,item);
-				}
-				//Handle case when exisitng objects does not pass the minimum distance
-				if( maxIdle > 0 && cJSON_GetObjectItem(item,"age")->valuedouble > maxIdle && cJSON_GetObjectItem(item,"ignore")->type == cJSON_False )
-					cJSON_GetObjectItem(item,"ignore")->type = cJSON_True;
-			}
-		}
-		item = item->next;
-	}
-	LOG_TRACE("%s: Exit\n",__func__);
-	return response;
+        if (!path) {
+            if (JBOOL(tracker, "active") && !JBOOL(tracker, "ignore")) {
+                path = cJSON_CreateObject();
+                cJSON_AddStringToObject(path, "id", id);
+                cJSON_AddStringToObject(path, "class", JSTR(tracker, "class"));
+                cJSON_AddNumberToObject(path, "confidence", JNUM(tracker, "confidence"));
+                cJSON_AddNumberToObject(path, "timestamp", JNUM(tracker, "birth"));
+                cJSON_AddNumberToObject(path, "age", JNUM(tracker, "age"));
+                cJSON_AddNumberToObject(path, "dx", JNUM(tracker, "dx"));
+                cJSON_AddNumberToObject(path, "dy", JNUM(tracker, "dy"));
+                cJSON_AddNumberToObject(path, "distance", JNUM(tracker, "distance"));
+                cJSON_AddNumberToObject(path, "dwell", 0);
+                cJSON_AddStringToObject(path, "color", JSTR(tracker, "color"));
+                cJSON_AddStringToObject(path, "color2", JSTR(tracker, "color2"));
+
+                cJSON* position = cJSON_CreateObject();
+                cJSON_AddNumberToObject(position, "x", JNUM(tracker, "cx"));
+                cJSON_AddNumberToObject(position, "y", JNUM(tracker, "cy"));
+                if (JGET(tracker, "lat"))
+                    cJSON_AddNumberToObject(position, "lat", JNUM(tracker, "lat"));
+                if (JGET(tracker, "lon"))
+                    cJSON_AddNumberToObject(position, "lon", JNUM(tracker, "lon"));
+                cJSON_AddNumberToObject(position, "d", 0);
+
+                cJSON* pathList = cJSON_CreateArray();
+                cJSON_AddItemToArray(pathList, position);
+                cJSON_AddItemToObject(path, "path", pathList);
+                cJSON_AddItemToObject(pathsCache, id, path);
+            }
+        } else {
+            // Update path meta
+            cJSON_ReplaceItemInObject(path, "confidence", cJSON_CreateNumber(JNUM(tracker, "confidence")));
+            cJSON_ReplaceItemInObject(path, "class", cJSON_CreateString(JSTR(tracker, "class")));
+            cJSON_ReplaceItemInObject(path, "age", cJSON_CreateNumber(JNUM(tracker, "age")));
+            cJSON_ReplaceItemInObject(path, "dx", cJSON_CreateNumber(JNUM(tracker, "dx")));
+            cJSON_ReplaceItemInObject(path, "dy", cJSON_CreateNumber(JNUM(tracker, "dy")));
+            cJSON_ReplaceItemInObject(path, "distance", cJSON_CreateNumber(JNUM(tracker, "distance")));
+            cJSON_ReplaceItemInObject(path, "topVelocity", cJSON_CreateNumber(JNUM(tracker, "topVelocity")));
+            cJSON_ReplaceItemInObject(path, "color", cJSON_CreateString(JSTR(tracker, "color")));
+            cJSON_ReplaceItemInObject(path, "color2", cJSON_CreateString(JSTR(tracker, "color2")));
+
+            // Dwell time calculation
+            double duration = JNUM(tracker, "timestamp") - JNUM(path, "sampletime");
+            duration /= 1000.0;
+            if (duration > JNUM(path, "dwell"))
+                cJSON_ReplaceItemInObject(path, "dwell", cJSON_CreateNumber(duration));
+            cJSON_ReplaceItemInObject(path, "sampletime", cJSON_CreateNumber(JNUM(tracker, "timestamp")));
+
+            // Update last position's duration
+            cJSON* pathList = JGET(path, "path");
+            if (pathList && cJSON_GetArraySize(pathList) > 0) {
+                cJSON* lastPosition = cJSON_GetArrayItem(pathList, cJSON_GetArraySize(pathList) - 1);
+                cJSON_ReplaceItemInObject(lastPosition, "d", cJSON_CreateNumber(duration));
+            }
+
+            // Add new position sample
+            cJSON* position = cJSON_CreateObject();
+            cJSON_AddNumberToObject(position, "x", JNUM(tracker, "cx"));
+            cJSON_AddNumberToObject(position, "y", JNUM(tracker, "cy"));
+            cJSON_AddNumberToObject(position, "d", 0);
+            if (JGET(tracker, "lat"))
+                cJSON_AddNumberToObject(position, "lat", JNUM(tracker, "lat"));
+            if (JGET(tracker, "lon"))
+                cJSON_AddNumberToObject(position, "lon", JNUM(tracker, "lon"));
+            cJSON_AddItemToArray(pathList, position);
+        }
+
+        // Finalize and publish if object is dead or ignored
+        if (path && (!JBOOL(tracker, "active") || JBOOL(tracker, "ignore"))) {
+            cJSON* complete = cJSON_DetachItemFromObject(pathsCache, id);
+            int accept = 1;
+            double minAge = JNUM(pathFilter, "age");
+            double minDistance = JNUM(pathFilter, "distance");
+
+            if (JNUM(complete, "distance") < minDistance) accept = 0;
+            if (accept && JNUM(complete, "age") < minAge) accept = 0;
+
+            // AOI check
+            if (accept) {
+                int x1 = JNUM(aoi, "x1"), y1 = JNUM(aoi, "y1");
+                int x2 = JNUM(aoi, "x2"), y2 = JNUM(aoi, "y2");
+                accept = 0;
+                cJSON* pathList = JGET(complete, "path");
+                for (int i = 0; pathList && i < cJSON_GetArraySize(pathList); ++i) {
+                    cJSON* pos = cJSON_GetArrayItem(pathList, i);
+                    int px = JNUM(pos, "x"), py = JNUM(pos, "y");
+                    if (px > x1 && px < x2 && py > y1 && py < y2) { accept = 1; break; }
+                }
+            }
+            if (accept && (cJSON_GetArraySize(JGET(complete, "path")) < 2 || JNUM(complete, "age") < 0.5)) accept = 0;
+
+            if (accept) {
+                if (strcmp(JSTR(tracker, "class"), "Head") == 0) {
+                    if (JGET(tracker, "hat"))
+                        cJSON_AddStringToObject(complete, "hat", JSTR(tracker, "hat"));
+                    if (JGET(tracker, "face"))
+                        cJSON_AddBoolToObject(complete, "face", JBOOL(tracker, "face"));
+                }
+                cJSON_DeleteItemFromObject(complete, "sampleTime");
+                cJSON_AddItemToArray(response, complete);
+            } else {
+                cJSON_Delete(complete);
+            }
+        }
+        tracker = tracker->next;
+    }
+    LOG_TRACE("%s: Exit\n", __func__);
+    return response;
 }
 
-cJSON*
-Process_Paths( cJSON* trackers ) {
-	//Important to free the return JSON
 
-	LOG_TRACE("%s: Entry\n",__func__);
-
-	if( !pathsCache )
-		pathsCache = cJSON_CreateObject();
-	cJSON* response = cJSON_CreateArray();
-	
-	cJSON* settings = ACAP_Get_Config("settings");
-	if(!settings)
-		return response;
-	
-	cJSON* pathFilter = cJSON_GetObjectItem(settings,"pathFilter");
-	if( !pathFilter )
-		return response;
-	cJSON* aoi = cJSON_GetObjectItem(pathFilter,"aoi");
-	if( !aoi )
-		return response;
-
-	
-	cJSON* tracker = trackers->child;
-	while( tracker ) {
-		const char* id = cJSON_GetObjectItem(tracker,"id")->valuestring;
-		cJSON* path = cJSON_GetObjectItem(pathsCache,id);
-		if( !path) {
-			if( cJSON_GetObjectItem(tracker,"active")->type == cJSON_True && cJSON_GetObjectItem(tracker,"ignore")->type == cJSON_False ) {
-				path = cJSON_CreateObject();
-				cJSON_AddStringToObject(path,"id",id);
-				cJSON_AddStringToObject(path,"class",cJSON_GetObjectItem(tracker,"class")->valuestring);
-				cJSON_AddNumberToObject(path,"confidence",cJSON_GetObjectItem(tracker,"confidence")->valuedouble);
-				cJSON_AddNumberToObject(path,"timestamp",cJSON_GetObjectItem(tracker,"birth")->valuedouble);
-				cJSON_AddNumberToObject(path,"age",cJSON_GetObjectItem(tracker,"age")->valuedouble);
-				cJSON_AddNumberToObject(path,"dx",cJSON_GetObjectItem(tracker,"dx")->valuedouble);
-				cJSON_AddNumberToObject(path,"dy",cJSON_GetObjectItem(tracker,"dy")->valuedouble);
-				cJSON_AddNumberToObject(path,"distance",cJSON_GetObjectItem(tracker,"distance")->valuedouble);
-				cJSON_AddNumberToObject(path,"topVelocity",cJSON_GetObjectItem(tracker,"topVelocity")->valuedouble);
-				cJSON_AddNumberToObject(path,"sampletime",ACAP_DEVICE_Timestamp());
-				cJSON_AddNumberToObject(path,"dwell",0);
-				cJSON_AddStringToObject(path,"color",cJSON_GetObjectItem(tracker,"color")->valuestring);
-				cJSON_AddStringToObject(path,"color2",cJSON_GetObjectItem(tracker,"color2")->valuestring);
-				cJSON* position = cJSON_CreateObject();
-				cJSON_AddNumberToObject(position,"x",cJSON_GetObjectItem(tracker,"cx")->valuedouble);
-				cJSON_AddNumberToObject(position,"y",cJSON_GetObjectItem(tracker,"cy")->valuedouble);
-				if( cJSON_GetObjectItem(tracker,"lat") )
-					cJSON_AddNumberToObject(position,"lat", cJSON_GetObjectItem(tracker,"lat")->valuedouble );
-				if( cJSON_GetObjectItem(tracker,"lon") )
-					cJSON_AddNumberToObject(position,"lon", cJSON_GetObjectItem(tracker,"lon")->valuedouble );
-				cJSON_AddNumberToObject(position,"d",0);
-				cJSON* pathList = cJSON_CreateArray();
-				cJSON_AddItemToArray(pathList,position);
-				cJSON_AddItemToObject(path,"path",pathList);
-				cJSON_AddItemToObject(pathsCache,id,path);
-			}
-		} else {
-			cJSON_ReplaceItemInObject(path,"confidence",cJSON_CreateNumber(cJSON_GetObjectItem(tracker,"confidence")->valuedouble));
-			cJSON_ReplaceItemInObject(path,"class",cJSON_CreateString(cJSON_GetObjectItem(tracker,"class")->valuestring));
-			cJSON_ReplaceItemInObject(path,"age",cJSON_CreateNumber(cJSON_GetObjectItem(tracker,"age")->valuedouble));
-			cJSON_ReplaceItemInObject(path,"dx",cJSON_CreateNumber(cJSON_GetObjectItem(tracker,"dx")->valuedouble));
-			cJSON_ReplaceItemInObject(path,"dy",cJSON_CreateNumber(cJSON_GetObjectItem(tracker,"dy")->valuedouble));
-			cJSON_ReplaceItemInObject(path,"distance",cJSON_CreateNumber(cJSON_GetObjectItem(tracker,"distance")->valuedouble));
-			cJSON_ReplaceItemInObject(path,"topVelocity",cJSON_CreateNumber(cJSON_GetObjectItem(tracker,"topVelocity")->valuedouble));
-			cJSON_ReplaceItemInObject(path,"color",cJSON_CreateString(cJSON_GetObjectItem(tracker,"color")->valuestring));
-			cJSON_ReplaceItemInObject(path,"color2",cJSON_CreateString(cJSON_GetObjectItem(tracker,"color2")->valuestring));
-			double duration = cJSON_GetObjectItem(tracker,"timestamp")->valuedouble;
-			duration -= cJSON_GetObjectItem(path,"sampletime")->valuedouble;
-			duration /= 1000;
-			if( duration > cJSON_GetObjectItem(path,"dwell")->valuedouble )
-				cJSON_ReplaceItemInObject(path,"dwell",cJSON_CreateNumber(duration));
-			cJSON_ReplaceItemInObject(path,"sampletime",cJSON_CreateNumber(cJSON_GetObjectItem(tracker,"timestamp")->valuedouble));
-			cJSON* pathList = cJSON_GetObjectItem(path,"path");
-			cJSON* lastPosition = cJSON_GetArrayItem(pathList,cJSON_GetArraySize(pathList)-1);
-				cJSON_ReplaceItemInObject(lastPosition,"d",cJSON_CreateNumber(duration));
-			cJSON* position = cJSON_CreateObject();
-			cJSON_AddNumberToObject(position,"x",cJSON_GetObjectItem(tracker,"cx")->valuedouble);
-			cJSON_AddNumberToObject(position,"y",cJSON_GetObjectItem(tracker,"cy")->valuedouble);
-			cJSON_AddNumberToObject(position,"d",0);
-			if( cJSON_GetObjectItem(tracker,"lat") )
-				cJSON_AddNumberToObject(position,"lat", cJSON_GetObjectItem(tracker,"lat")->valuedouble );
-			if( cJSON_GetObjectItem(tracker,"lon") )
-				cJSON_AddNumberToObject(position,"lon", cJSON_GetObjectItem(tracker,"lon")->valuedouble );
-			cJSON_AddItemToArray(pathList,position);
-		}
-
-		if( path && ( cJSON_GetObjectItem(tracker,"active")->type == cJSON_False ||  cJSON_GetObjectItem(tracker,"ignore")->type == cJSON_True ) ) {
-			cJSON* complete = cJSON_DetachItemFromObject( pathsCache, id );
-			int accept = 1;
-			double minAge = cJSON_GetObjectItem(pathFilter,"age")->valuedouble;
-			double minDistance = cJSON_GetObjectItem(pathFilter,"distance")->valueint;
-			
-			if( cJSON_GetObjectItem(complete,"distance")->valuedouble < minDistance )  accept = 0;
-			if( accept && cJSON_GetObjectItem(complete,"age")->valuedouble < minAge ) accept = 0;
-			if( accept ) {
-				int x1 = cJSON_GetObjectItem(aoi,"x1")->valueint;
-				int y1 = cJSON_GetObjectItem(aoi,"y1")->valueint;
-				int x2 = cJSON_GetObjectItem(aoi,"x2")->valueint;
-				int y2 = cJSON_GetObjectItem(aoi,"y2")->valueint;
-				accept = 0;
-				cJSON* position = cJSON_GetObjectItem(path,"path")->child;
-				if( position && cJSON_GetArraySize(position) > 2 ) {
-					while(position && !accept ) {
-						if( cJSON_GetObjectItem(position,"x")->valueint > x1 && 
-							cJSON_GetObjectItem(position,"x")->valueint < x2 &&
-							cJSON_GetObjectItem(position,"y")->valueint > y1 &&
-							cJSON_GetObjectItem(position,"y")->valueint < y2
-						) accept = 1;
-						position = position->next;
-					}
-				}
-			}
-			if( accept && (cJSON_GetArraySize(cJSON_GetObjectItem(complete,"path")) < 2 || cJSON_GetObjectItem(complete,"age")->valuedouble < 0.5 ) ) accept = 0;
-			if( accept ) {
-				if( strcmp( cJSON_GetObjectItem(tracker,"class")->valuestring,"Head") == 0 ) {
-					cJSON_AddStringToObject( complete,"hat", cJSON_GetObjectItem(tracker,"hat")->valuestring);
-					if( cJSON_GetObjectItem(tracker,"face")->type == cJSON_False )
-						cJSON_AddFalseToObject(complete,"face");
-					else
-						cJSON_AddTrueToObject(complete,"face");
-				}
-				cJSON_DeleteItemFromObject(complete,"sampleTime");
-				cJSON_AddItemToArray( response, complete );
-			} else {
-				cJSON_Delete(complete);
-			}
-		}
-		tracker = tracker->next;
-	}
-	LOG_TRACE("%s: Exit\n",__func__);	
-	return response;
-}
 
 cJSON*
 Process_Occupancy( cJSON* detections ) {
@@ -401,131 +284,129 @@ Process_Occupancy( cJSON* detections ) {
 }
 
 void
-Process_VOD_Data(cJSON *list ) {
-	char topic[128];
-	cJSON* item = 0;
-	LOG_TRACE("%s:\n",__func__);
+Process_VOD_Data(cJSON *list) {
+    char topic[128];
+    LOG_TRACE("%s:\n", __func__);
 
-	if( !lastPublishedTracker )
-		lastPublishedTracker = cJSON_CreateObject();
-
-	//Detections
-	cJSON* detections = Process_Detections( list );
-	if( publishDetections && detections ) {
-		sprintf(topic,"detections/%s", ACAP_DEVICE_Prop("serial") );
+	if( cJSON_GetArraySize(list) ) {
+		sprintf(topic, "raw/%s", ACAP_DEVICE_Prop("serial"));
 		cJSON* payload = cJSON_CreateObject();
-		cJSON_AddItemReferenceToObject( payload, "list", detections );
-		MQTT_Publish_JSON(topic,payload,0,0);
-		cJSON_Delete( payload );
-	}
-	if( detections )
-		cJSON_Delete(detections);
-	
-	//Occupancy
-	cJSON* occupancy = Process_Occupancy( list );
-	if( publishOccupancy && occupancy ) {
-		cJSON* payload = cJSON_CreateObject();
-		cJSON_AddItemReferenceToObject(payload,"occupancy",occupancy);
-		sprintf(topic,"occupancy/%s", ACAP_DEVICE_Prop("serial") );
-		MQTT_Publish_JSON(topic,payload,0,0);
+		cJSON_AddItemReferenceToObject(payload,"list",list);
+		MQTT_Publish_JSON(topic, payload, 0, 0);
 		cJSON_Delete(payload);
-	}	
-
-	//Trackers
-	cJSON* trackers = Process_Trackers( list );
-	double now = ACAP_DEVICE_Timestamp();
-	if( publishTracker ) {
-		item = trackers->child;
-		while( item ) {
-			sprintf(topic,"tracker/%s", ACAP_DEVICE_Prop("serial") );
-			MQTT_Publish_JSON(topic,item,0,0);
-			char* id = cJSON_GetObjectItem(item,"id")->valuestring;
-			cJSON* lastPublished = cJSON_GetObjectItem(lastPublishedTracker,id);
-			if( lastPublished ) {
-				lastPublished->valueint = (int)now;
-				lastPublished->valuedouble = now;
-			} else {
-				cJSON_AddNumberToObject(lastPublishedTracker,id,now);
-			}
-			if( cJSON_GetObjectItem(item,"active")->type == cJSON_False )
-				cJSON_DeleteItemFromObject(lastPublishedTracker,id);
-			item = item->next;
-		}
-		//Publish tracker updates while idle
-		item = activeTrackers?activeTrackers->child:0;
-		while( item ) {
-			char* id = cJSON_GetObjectItem(item,"id")->valuestring;
-			//Check if reach max idle time.  If so, do not publish
-			if( cJSON_GetObjectItem( item,"ignore")->type == cJSON_False ) {
-				cJSON* lastPublished = cJSON_GetObjectItem(lastPublishedTracker,id);
-				if( lastPublished ) {
-					if( now - lastPublished->valuedouble > 2000 ) {
-						sprintf(topic,"tracker/%s", ACAP_DEVICE_Prop("serial") );
-						MQTT_Publish_JSON(topic,item,0,0);
-						lastPublished->valueint = (int)now;
-						lastPublished->valuedouble = now;
-					}
-				}
-			}
-			item = item->next;
-		}
 	}
+	
+	return;
 
-	//GeoSpace locations
-	if( publishGeospace ) {
-		item = trackers->child;
-		while( item ) {
-			sprintf(topic,"geospace/%s", ACAP_DEVICE_Prop("serial") );
-			cJSON* payload = cJSON_CreateObject();
-			cJSON_AddStringToObject(payload,"id",cJSON_GetObjectItem(item,"id")->valuestring);
-			cJSON_AddTrueToObject(payload,"active");
-			if( cJSON_GetObjectItem(item,"active")->type == cJSON_False || cJSON_GetObjectItem(item,"ignore")->type == cJSON_True)
-				cJSON_AddFalseToObject(payload,"active")->type = cJSON_False;
-			double lat = 0;
-			double lon = 0;
-			GeoSpace_transform(cJSON_GetObjectItem(item,"cx")->valueint,
-			                   cJSON_GetObjectItem(item,"cy")->valueint
-							   ,&lat,
-							   &lon);
-			if( cJSON_GetObjectItem( item,"lat" ) )
-				cJSON_ReplaceItemInObject(item,"lat",cJSON_CreateNumber(lat));
-			else
-				cJSON_AddNumberToObject(item,"lat",lat);
-			if( cJSON_GetObjectItem( item,"lon" ) )
-				cJSON_ReplaceItemInObject(item,"lon",cJSON_CreateNumber(lon));
-			else
-				cJSON_AddNumberToObject(item,"lon",lon);
-			cJSON_AddNumberToObject(payload,"lat",lat);
-			cJSON_AddNumberToObject(payload,"lon",lon);
-			cJSON_AddStringToObject(payload,"class",cJSON_GetObjectItem(item,"class")->valuestring);
-			cJSON_AddNumberToObject(payload,"age",cJSON_GetObjectItem(item,"age")->valuedouble);
-			MQTT_Publish_JSON(topic,payload,0,0);
+	return;
+    // Detections (for visualization)
+    if (publishDetections) {
+        sprintf(topic, "detections/%s", ACAP_DEVICE_Prop("serial"));
+        cJSON* payload = cJSON_CreateObject();
+        cJSON* shortList = cJSON_CreateArray();
+        cJSON* item = list->child;
+//		LOG("Detections: %d\n", cJSON_GetArraySize(list) );
+        while (item) {
+            if (!Label_Blacklisted(item)) {
+                cJSON* c = cJSON_CreateObject();
+                cJSON_AddStringToObject(c, "class", JSTR(item, "class"));
+                cJSON_AddNumberToObject(c, "confidence", JNUM(item, "confidence"));
+                cJSON_AddNumberToObject(c, "age", JNUM(item, "age"));
+                cJSON_AddNumberToObject(c, "distance", JNUM(item, "distance"));
+                cJSON_AddNumberToObject(c, "cx", JNUM(item, "cx"));
+                cJSON_AddNumberToObject(c, "cy", JNUM(item, "cy"));
+                cJSON_AddNumberToObject(c, "bx", JNUM(item, "bx"));
+                cJSON_AddNumberToObject(c, "by", JNUM(item, "by"));
+                cJSON_AddNumberToObject(c, "x", JNUM(item, "x"));
+                cJSON_AddNumberToObject(c, "y", JNUM(item, "y"));
+                cJSON_AddNumberToObject(c, "w", JNUM(item, "w"));
+                cJSON_AddNumberToObject(c, "h", JNUM(item, "h"));
+                cJSON_AddStringToObject(c, "color", JSTR(item, "color"));
+                cJSON_AddStringToObject(c, "color2", JSTR(item, "color2"));
+                if (JGET(item, "hat"))
+                    cJSON_AddStringToObject(c, "hat", JSTR(item, "hat"));
+                if (JGET(item, "face"))
+                    cJSON_AddBoolToObject(c, "face", JBOOL(item, "face"));
+                cJSON_AddNumberToObject(c, "timestamp", JNUM(item, "timestamp"));
+                cJSON_AddStringToObject(c, "id", JSTR(item, "id"));
+                cJSON_AddBoolToObject(c, "active", JBOOL(item, "active"));
+				cJSON_AddItemToObject(c,"attributes", cJSON_Duplicate(cJSON_GetObjectItem(item,"attributes"),1));
+                cJSON_AddItemToArray(shortList, c);
+            }
+            item = item->next;
+        }
+
+		if( cJSON_GetArraySize(shortList) != 0 || lastDetectionListWasEmpty == 0 ) {
+			cJSON_AddItemToObject(payload, "list", shortList);
+			MQTT_Publish_JSON(topic, payload, 0, 0);
 			cJSON_Delete(payload);
-			item = item->next;
 		}
-	}
-	//Paths
-	cJSON* paths = Process_Paths( trackers );
-	//Paths displayed in Path user interface
-	cJSON* statusPaths = ACAP_STATUS_Object("detections", "paths");
-	statusPaths = ACAP_STATUS_Object("detections", "paths");
+		lastDetectionListWasEmpty = cJSON_GetArraySize(shortList) == 0;
+    }
+	return;
+    // Trackers (for automations)
+    cJSON* trackers = cJSON_CreateArray();
+    cJSON* item = NULL;
+    cJSON_ArrayForEach(item, list) {
+        if (JBOOL(item, "significantMovement") && !Label_Blacklisted(item)) {
+            cJSON* c = cJSON_CreateObject();
+            cJSON_AddStringToObject(c, "class", JSTR(item, "class"));
+            cJSON_AddNumberToObject(c, "confidence", JNUM(item, "confidence"));
+            cJSON_AddNumberToObject(c, "age", JNUM(item, "age"));
+            cJSON_AddNumberToObject(c, "distance", JNUM(item, "distance"));
+            cJSON_AddStringToObject(c, "color", JSTR(item, "color"));
+            cJSON_AddStringToObject(c, "color2", JSTR(item, "color2"));
+            cJSON_AddNumberToObject(c, "x", JNUM(item, "x"));
+            cJSON_AddNumberToObject(c, "y", JNUM(item, "y"));
+            cJSON_AddNumberToObject(c, "w", JNUM(item, "w"));
+            cJSON_AddNumberToObject(c, "h", JNUM(item, "h"));
+            cJSON_AddNumberToObject(c, "cx", JNUM(item, "cx"));
+            cJSON_AddNumberToObject(c, "cy", JNUM(item, "cy"));
+            cJSON_AddNumberToObject(c, "bx", JNUM(item, "bx"));
+            cJSON_AddNumberToObject(c, "by", JNUM(item, "by"));
+            cJSON_AddNumberToObject(c, "dx", JNUM(item, "dx"));
+            cJSON_AddNumberToObject(c, "dy", JNUM(item, "dy"));
+            if (JGET(item, "hat"))
+                cJSON_AddStringToObject(c, "hat", JSTR(item, "hat"));
+            if (JGET(item, "face"))
+                cJSON_AddBoolToObject(c, "face", JBOOL(item, "face"));
+            cJSON_AddNumberToObject(c, "timestamp", JNUM(item, "timestamp"));
+            cJSON_AddNumberToObject(c, "birth", JNUM(item, "birth"));
+            cJSON_AddStringToObject(c, "id", JSTR(item, "id"));
+            cJSON_AddBoolToObject(c, "active", JBOOL(item, "active"));
+            cJSON_AddItemToArray(trackers, c);
+        }
+    }
 
-	if( publishPath ) {
-		item = paths->child;
-		while( item ) {
-			cJSON_AddItemToArray(statusPaths,cJSON_Duplicate(item, 1));
-			sprintf(topic,"path/%s", ACAP_DEVICE_Prop("serial") );
-			MQTT_Publish_JSON(topic,item,0,0);
-			item = item->next;
-		}
-	}
+    if (publishTracker) {
+        cJSON_ArrayForEach(item, trackers) {
+            if (JNUM(item, "distance") >= 5 && !Label_Blacklisted(item)) {
+                sprintf(topic, "tracker/%s", ACAP_DEVICE_Prop("serial"));
+                MQTT_Publish_JSON(topic, item, 0, 0);
+            }
+        }
+    }
 
-	while( cJSON_GetArraySize(statusPaths) > 10 )
-		cJSON_DeleteItemFromArray(statusPaths,0);
+    // Paths (for forensic/post-processing)
+    cJSON* paths = Process_Paths(trackers);
+    cJSON* statusPaths = ACAP_STATUS_Object("detections", "paths");
 
-	cJSON_Delete(trackers);
-	cJSON_Delete(paths);
-	LOG_TRACE("%s: Exit\n",__func__);
+    if (publishPath) {
+        item = paths->child;
+        while (item) {
+            cJSON_AddItemToArray(statusPaths, cJSON_Duplicate(item, 1));
+            sprintf(topic, "path/%s", ACAP_DEVICE_Prop("serial"));
+            MQTT_Publish_JSON(topic, item, 0, 0);
+            item = item->next;
+        }
+    }
+
+    while (cJSON_GetArraySize(statusPaths) > 10)
+        cJSON_DeleteItemFromArray(statusPaths, 0);
+
+    cJSON_Delete(trackers);
+    cJSON_Delete(paths);
+    LOG_TRACE("%s: Exit\n", __func__);
 }
 
 void
@@ -687,8 +568,10 @@ Settings_Updated_Callback( const char* service, cJSON* data) {
 		publishGeospace = cJSON_IsTrue(cJSON_GetObjectItem(data,"geospace"));
 	}
 
-	if( strcmp( service,"scene" ) == 0 )
+	if( strcmp( service,"scene" ) == 0 ) {
 		ObjectDetection_Config( data );
+	    blacklist = cJSON_GetObjectItem(data, "ignoreClass");
+	}
 
 	if( strcmp( service,"matrix" ) == 0 )
 		GeoSpace_Matrix( data );

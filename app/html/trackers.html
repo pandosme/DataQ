@@ -308,7 +308,7 @@ var detections = {};
 
 function onMessageArrived(message) {
 	var detection = JSON.parse(message.payloadString);
-	if( detection.active == false ||  detection.ignore == true )
+	if( detection.active == false )
 		delete detections[detection.id];
 	else
 		detections[detection.id] = detection;
