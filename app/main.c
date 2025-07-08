@@ -21,8 +21,15 @@
 //#define LOG_TRACE(fmt, args...)    { syslog(LOG_INFO, fmt, ## args); printf(fmt, ## args); }
 #define LOG_TRACE(fmt, args...)    {}
 
+
+cJSON* activeTrackers = 0;
+cJSON* PreviousPosition = 0;
+cJSON* lastPublishedTracker = 0;
 cJSON* pathsCache = 0;
-cJSON* blacklist = 0;
+cJSON* occupancyDetectionCounter = 0;
+cJSON* classCounterArrays = 0;
+cJSON* previousOccupancy = 0;
+int lastDetectionListWasEmpty = 0;
 int publishEvents = 1;
 int publishDetections = 1;
 int publishTracker = 1;
@@ -32,348 +39,27 @@ int publishStatus = 1;
 int publishGeospace = 0;
 int shouldReset = 0;
 
-
-int
-Label_Blacklisted(cJSON* detection) {
-    if (!blacklist || !detection) {
-        return 0;
-    }
-	const char* label = cJSON_GetObjectItem(detection,"class")->valuestring;
-    
-    cJSON* item = blacklist->child;
-    while (item) {
-        if (cJSON_IsString(item) && strcmp(label, item->valuestring) == 0) {
-            return 1;
-        }
-        item = item->next;
-    }
-    return 0;
-}
-
-cJSON*
-Process_Paths(cJSON* trackers) {
-    //Important to free the return JSON
-    
-//    LOG_TRACE("%s: Entry\n", __func__);
-
-    if (!pathsCache)
-        pathsCache = cJSON_CreateObject();
-    cJSON* response = cJSON_CreateArray();
-    
-    cJSON* settings = ACAP_Get_Config("settings");
-    if (!settings)
-        return response;
-    
-    cJSON* pathFilter = cJSON_GetObjectItem(settings, "pathFilter");
-    if (!pathFilter)
-        return response;
-    
-    cJSON* aoi = cJSON_GetObjectItem(pathFilter, "aoi");
-    if (!aoi)
-        return response;
-
-    if (!trackers || !cJSON_IsArray(trackers)) {
-        return response;
-    }
-    
-    cJSON* tracker = trackers->child;
-    while (tracker) {
-        // Safe property access with NULL checks
-        cJSON* id_item = cJSON_GetObjectItem(tracker, "id");
-        if (!id_item || !cJSON_IsString(id_item)) {
-            tracker = tracker->next;
-            continue;
-        }
-        const char* id = id_item->valuestring;
-        
-        cJSON* path = cJSON_GetObjectItem(pathsCache, id);
-        
-        if (!path) {
-            if ( cJSON_GetObjectItem(tracker,"active")->type == cJSON_True ) {
-                path = cJSON_CreateObject();
-                // Safe property extraction with defaults
-                cJSON* class_item = cJSON_GetObjectItem(tracker, "class");
-                cJSON_AddStringToObject(path, "class", 
-                    (class_item && cJSON_IsString(class_item)) ? class_item->valuestring : "Object");
-                
-                cJSON* confidence_item = cJSON_GetObjectItem(tracker, "confidence");
-                cJSON_AddNumberToObject(path, "confidence", 
-                    (confidence_item && cJSON_IsNumber(confidence_item)) ? confidence_item->valuedouble : 30);
-                
-                cJSON* birth_item = cJSON_GetObjectItem(tracker, "birth");
-                cJSON_AddNumberToObject(path, "timestamp", 
-                    (birth_item && cJSON_IsNumber(birth_item)) ? birth_item->valuedouble : 0);
-                
-                cJSON* age_item = cJSON_GetObjectItem(tracker, "age");
-                cJSON_AddNumberToObject(path, "age", 
-                    (age_item && cJSON_IsNumber(age_item)) ? age_item->valuedouble : 0);
-                
-                cJSON* dx_item = cJSON_GetObjectItem(tracker, "dx");
-                cJSON_AddNumberToObject(path, "dx", 
-                    (dx_item && cJSON_IsNumber(dx_item)) ? dx_item->valuedouble : 0);
-                
-                cJSON* dy_item = cJSON_GetObjectItem(tracker, "dy");
-                cJSON_AddNumberToObject(path, "dy", 
-                    (dy_item && cJSON_IsNumber(dy_item)) ? dy_item->valuedouble : 0);
-                
-                cJSON* distance_item = cJSON_GetObjectItem(tracker, "distance");
-                cJSON_AddNumberToObject(path, "distance", 
-                    (distance_item && cJSON_IsNumber(distance_item)) ? distance_item->valueint : 0);
-                
-//                cJSON* topVelocity_item = cJSON_GetObjectItem(tracker, "topVelocity");
-//                cJSON_AddNumberToObject(path, "topVelocity", 
-//                    (topVelocity_item && cJSON_IsNumber(topVelocity_item)) ? topVelocity_item->valuedouble : 0);
-                
-                cJSON_AddNumberToObject(path, "sampletime", ACAP_DEVICE_Timestamp());
-                cJSON_AddNumberToObject(path, "dwell", 0);
-                
-                cJSON* color_item = cJSON_GetObjectItem(tracker, "color");
-                cJSON_AddStringToObject(path, "color", 
-                    (color_item && cJSON_IsString(color_item)) ? color_item->valuestring : "");
-                
-                cJSON* color2_item = cJSON_GetObjectItem(tracker, "color2");
-                cJSON_AddStringToObject(path, "color2", 
-                    (color2_item && cJSON_IsString(color2_item)) ? color2_item->valuestring : "");
-                
-                // Create position object
-                cJSON* position = cJSON_CreateObject();
-                cJSON* cx_item = cJSON_GetObjectItem(tracker, "bx");
-                cJSON* cy_item = cJSON_GetObjectItem(tracker, "by");
-                cJSON_AddNumberToObject(position, "x", 
-                    (cx_item && cJSON_IsNumber(cx_item)) ? cx_item->valuedouble : 0);
-                cJSON_AddNumberToObject(position, "y", 
-                    (cy_item && cJSON_IsNumber(cy_item)) ? cy_item->valuedouble : 0);
-                
-                // Optional lat/lon
-                cJSON* lat_item = cJSON_GetObjectItem(tracker, "lat");
-                if (lat_item && cJSON_IsNumber(lat_item))
-                    cJSON_AddNumberToObject(position, "lat", lat_item->valuedouble);
-                
-                cJSON* lon_item = cJSON_GetObjectItem(tracker, "lon");
-                if (lon_item && cJSON_IsNumber(lon_item))
-                    cJSON_AddNumberToObject(position, "lon", lon_item->valuedouble);
-                
-                cJSON_AddNumberToObject(position, "d", 0);
-                
-                cJSON* pathList = cJSON_CreateArray();
-                cJSON_AddItemToArray(pathList, position);
-                cJSON_AddStringToObject(path, "id", id);
-                cJSON_AddItemToObject(path, "path", pathList);
-                cJSON_AddItemToObject(pathsCache, id, path);
-            }
-        } else {
-            // Update existing path with NULL checks
-            cJSON* confidence_item = cJSON_GetObjectItem(tracker, "confidence");
-            if (confidence_item && cJSON_IsNumber(confidence_item))
-                cJSON_ReplaceItemInObject(path, "confidence", cJSON_CreateNumber(confidence_item->valuedouble));
-            
-            cJSON* class_item = cJSON_GetObjectItem(tracker, "class");
-            if (class_item && cJSON_IsString(class_item))
-                cJSON_ReplaceItemInObject(path, "class", cJSON_CreateString(class_item->valuestring));
-            
-            cJSON* age_item = cJSON_GetObjectItem(tracker, "age");
-            if (age_item && cJSON_IsNumber(age_item))
-                cJSON_ReplaceItemInObject(path, "age", cJSON_CreateNumber(age_item->valuedouble));
-            
-            cJSON* dx_item = cJSON_GetObjectItem(tracker, "dx");
-            if (dx_item && cJSON_IsNumber(dx_item))
-                cJSON_ReplaceItemInObject(path, "dx", cJSON_CreateNumber(dx_item->valuedouble));
-            
-            cJSON* dy_item = cJSON_GetObjectItem(tracker, "dy");
-            if (dy_item && cJSON_IsNumber(dy_item))
-                cJSON_ReplaceItemInObject(path, "dy", cJSON_CreateNumber(dy_item->valuedouble));
-            
-            cJSON* distance_item = cJSON_GetObjectItem(tracker, "distance");
-            if (distance_item && cJSON_IsNumber(distance_item))
-                cJSON_ReplaceItemInObject(path, "distance", cJSON_CreateNumber(distance_item->valueint));
-            
-//            cJSON* topVelocity_item = cJSON_GetObjectItem(tracker, "topVelocity");
-//            if (topVelocity_item && cJSON_IsNumber(topVelocity_item))
-//                cJSON_ReplaceItemInObject(path, "topVelocity", cJSON_CreateNumber(topVelocity_item->valuedouble));
-            
-            cJSON* color_item = cJSON_GetObjectItem(tracker, "color");
-            if (color_item && cJSON_IsString(color_item))
-                cJSON_ReplaceItemInObject(path, "color", cJSON_CreateString(color_item->valuestring));
-            
-            cJSON* color2_item = cJSON_GetObjectItem(tracker, "color2");
-            if (color2_item && cJSON_IsString(color2_item))
-                cJSON_ReplaceItemInObject(path, "color2", cJSON_CreateString(color2_item->valuestring));
-            
-            // Calculate dwell time
-            cJSON* timestamp_item = cJSON_GetObjectItem(tracker, "timestamp");
-            cJSON* sampletime_item = cJSON_GetObjectItem(path, "sampletime");
-            if (timestamp_item && cJSON_IsNumber(timestamp_item) && 
-                sampletime_item && cJSON_IsNumber(sampletime_item)) {
-                double duration = timestamp_item->valuedouble - sampletime_item->valuedouble;
-                duration /= 1000.0;
-                
-                cJSON* dwell_item = cJSON_GetObjectItem(path, "dwell");
-                if (dwell_item && cJSON_IsNumber(dwell_item) && duration > dwell_item->valuedouble)
-                    cJSON_ReplaceItemInObject(path, "dwell", cJSON_CreateNumber(duration));
-                
-                cJSON_ReplaceItemInObject(path, "sampletime", cJSON_CreateNumber(timestamp_item->valuedouble));
-                
-                // Update last position duration
-                cJSON* pathList = cJSON_GetObjectItem(path, "path");
-                if (pathList && cJSON_IsArray(pathList)) {
-                    int pathSize = cJSON_GetArraySize(pathList);
-                    if (pathSize > 0) {
-                        cJSON* lastPosition = cJSON_GetArrayItem(pathList, pathSize - 1);
-                        if (lastPosition)
-                            cJSON_ReplaceItemInObject(lastPosition, "d", cJSON_CreateNumber(duration));
-                    }
-                }
-            }
-            
-            // Add new position
-            cJSON* pathList = cJSON_GetObjectItem(path, "path");
-            if (pathList && cJSON_IsArray(pathList)) {
-                cJSON* position = cJSON_CreateObject();
-                cJSON* cx_item = cJSON_GetObjectItem(tracker, "cx");
-                cJSON* cy_item = cJSON_GetObjectItem(tracker, "cy");
-                cJSON_AddNumberToObject(position, "x", 
-                    (cx_item && cJSON_IsNumber(cx_item)) ? cx_item->valuedouble : 0);
-                cJSON_AddNumberToObject(position, "y", 
-                    (cy_item && cJSON_IsNumber(cy_item)) ? cy_item->valuedouble : 0);
-                cJSON_AddNumberToObject(position, "d", 0);
-                
-                // Optional lat/lon
-                cJSON* lat_item = cJSON_GetObjectItem(tracker, "lat");
-                if (lat_item && cJSON_IsNumber(lat_item))
-                    cJSON_AddNumberToObject(position, "lat", lat_item->valuedouble);
-                
-                cJSON* lon_item = cJSON_GetObjectItem(tracker, "lon");
-                if (lon_item && cJSON_IsNumber(lon_item))
-                    cJSON_AddNumberToObject(position, "lon", lon_item->valuedouble);
-                
-                cJSON_AddItemToArray(pathList, position);
-            }
-        }
-
-        // Handle inactive objects (path completion)
-        if (path && cJSON_GetObjectItem(tracker,"active")->type == cJSON_False) {
-            cJSON* complete = cJSON_DetachItemFromObject(pathsCache, id);
-            if (complete) {
-                int accept = 1;
-                
-                // Apply filters with NULL checks
-                cJSON* minAge_item = cJSON_GetObjectItem(pathFilter, "age");
-                cJSON* minDistance_item = cJSON_GetObjectItem(pathFilter, "distance");
-                
-                double minAge = (minAge_item && cJSON_IsNumber(minAge_item)) ? minAge_item->valuedouble : 0;
-                double minDistance = (minDistance_item && cJSON_IsNumber(minDistance_item)) ? minDistance_item->valuedouble : 0;
-                
-                cJSON* path_distance = cJSON_GetObjectItem(complete, "distance");
-                cJSON* path_age = cJSON_GetObjectItem(complete, "age");
-                
-                if (path_distance && cJSON_IsNumber(path_distance) && path_distance->valuedouble < minDistance)
-                    accept = 0;
-                if (accept && path_age && cJSON_IsNumber(path_age) && path_age->valuedouble < minAge)
-                    accept = 0;
-                
-                // AOI check
-                if (accept) {
-                    cJSON* x1_item = cJSON_GetObjectItem(aoi, "x1");
-                    cJSON* y1_item = cJSON_GetObjectItem(aoi, "y1");
-                    cJSON* x2_item = cJSON_GetObjectItem(aoi, "x2");
-                    cJSON* y2_item = cJSON_GetObjectItem(aoi, "y2");
-                    
-                    if (x1_item && y1_item && x2_item && y2_item &&
-                        cJSON_IsNumber(x1_item) && cJSON_IsNumber(y1_item) &&
-                        cJSON_IsNumber(x2_item) && cJSON_IsNumber(y2_item)) {
-                        
-                        int x1 = x1_item->valueint;
-                        int y1 = y1_item->valueint;
-                        int x2 = x2_item->valueint;
-                        int y2 = y2_item->valueint;
-                        
-                        accept = 0;
-                        cJSON* pathList = cJSON_GetObjectItem(complete, "path");
-                        if (pathList && cJSON_IsArray(pathList) && cJSON_GetArraySize(pathList) > 2) {
-                            cJSON* position = pathList->child;
-                            while (position && !accept) {
-                                cJSON* pos_x = cJSON_GetObjectItem(position, "x");
-                                cJSON* pos_y = cJSON_GetObjectItem(position, "y");
-                                if (pos_x && pos_y && cJSON_IsNumber(pos_x) && cJSON_IsNumber(pos_y)) {
-                                    if (pos_x->valueint > x1 && pos_x->valueint < x2 &&
-                                        pos_y->valueint > y1 && pos_y->valueint < y2) {
-                                        accept = 1;
-                                    }
-                                }
-                                position = position->next;
-                            }
-                        }
-                    }
-                }
-                
-                // Final validation
-                cJSON* pathList = cJSON_GetObjectItem(complete, "path");
-                if (accept && pathList && cJSON_IsArray(pathList)) {
-                    if (cJSON_GetArraySize(pathList) < 2 || 
-                        (path_age && cJSON_IsNumber(path_age) && path_age->valuedouble < 0.5) ||
-						Label_Blacklisted(complete) ) {
-                        accept = 0;
-                    }
-                }
-                
-                if (accept) {
-                    // Remove internal property (note correct case)
-                    cJSON_DeleteItemFromObject(complete, "sampletime");
-                    cJSON_AddItemToArray(response, complete);
-                } else {
-                    cJSON_Delete(complete);
-                }
-            }
-        }
-        tracker = tracker->next;
-    }
-    
-//    LOG_TRACE("%s: Exit\n", __func__);    
-    return response;
+void
+Tracker_Data(cJSON *tracker ) {
+	cJSON_Delete(tracker);
 }
 
 
 void
-Process_Objection_Data(cJSON *list ) {
+Detections_Data (cJSON *list ) {
 	char topic[128];
 	cJSON* item = 0;
-
-	if( !list )
-		return;
-
+	return;
 	//Detections
 	if( publishDetections) {
 		sprintf(topic,"detections/%s", ACAP_DEVICE_Prop("serial") );
 		cJSON* payload = cJSON_CreateObject();
-		//Create a shortlist;
-		cJSON* shortList = cJSON_CreateArray();
-		cJSON* item = list->child;
-		while( item ) {
-			if( !Label_Blacklisted(item) ) {
-				cJSON* c = cJSON_CreateObject();
-				cJSON_AddStringToObject( c,"class", cJSON_GetObjectItem(item,"class")->valuestring);
-				cJSON_AddNumberToObject( c,"confidence", cJSON_GetObjectItem(item,"confidence")->valueint);
-				cJSON_AddNumberToObject( c,"x", cJSON_GetObjectItem(item,"x")->valueint);
-				cJSON_AddNumberToObject( c,"y", cJSON_GetObjectItem(item,"y")->valueint);
-				cJSON_AddNumberToObject( c,"w", cJSON_GetObjectItem(item,"w")->valueint);
-				cJSON_AddNumberToObject( c,"h", cJSON_GetObjectItem(item,"h")->valueint);
-				cJSON_AddStringToObject( c,"color", cJSON_GetObjectItem(item,"color")->valuestring);
-				cJSON_AddStringToObject( c,"color2", cJSON_GetObjectItem(item,"color2")->valuestring);
-				cJSON_AddNumberToObject( c,"timestamp", cJSON_GetObjectItem(item,"timestamp")->valuedouble);
-				cJSON_AddStringToObject( c,"id", cJSON_GetObjectItem(item,"id")->valuestring);
-				if( cJSON_GetObjectItem(item,"active")->type == cJSON_True )
-					cJSON_AddTrueToObject(c,"active");
-				else
-					cJSON_AddFalseToObject(c,"active");
-				cJSON_AddItemToArray(shortList,c);
-			}
-			item = item->next;
-		}
-		cJSON_AddItemToObject( payload, "list", shortList );
+		cJSON_AddItemToObject( payload, "list", list );
 		MQTT_Publish_JSON(topic,payload,0,0);
 		cJSON_Delete( payload );
 	}
-
+	
+/*
 	//Trackers
 	cJSON* trackers = cJSON_CreateArray();
 	cJSON_ArrayForEach(item, list) {
@@ -479,6 +165,7 @@ Process_Objection_Data(cJSON *list ) {
 		cJSON_DeleteItemFromArray(statusPaths,0);
 	cJSON_Delete(paths);
 	cJSON_Delete(trackers);
+*/	
 }
 
 void
@@ -632,7 +319,6 @@ Settings_Updated_Callback( const char* service, cJSON* data) {
 
 	if( strcmp( service,"scene" ) == 0 ) {
 		ObjectDetection_Config( data );
-	    blacklist = cJSON_GetObjectItem(data, "ignoreClass");
 	}
 
 	if( strcmp( service,"matrix" ) == 0 )
@@ -696,7 +382,7 @@ main(void) {
 	}
 	//Object detection
 	
-	if( ObjectDetection_Init( Process_Objection_Data ) ) {
+	if( ObjectDetection_Init( Detections_Data, Tracker_Data ) ) {
 		ACAP_STATUS_SetBool("objectdetection","connected",1);
 		ACAP_STATUS_SetString("objectdetection", "status", "OK");
 	} else {

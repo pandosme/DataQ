@@ -8,11 +8,10 @@
 #include "cJSON.h"
 
 typedef void (*ObjectDetection_Callback)( cJSON *detections  );
-//Consumer needs delete list;
+//Detections are automatically deleted.  Do not delete detections in callback.
 
-int		ObjectDetection_Init( ObjectDetection_Callback callback );
+int		ObjectDetection_Init( ObjectDetection_Callback detections, ObjectDetection_Callback tracker);
 void	ObjectDetection_Config( cJSON* data );
 void	ObjectDetection_Reset();
-int		ObjectDetection_CacheSize();
 
 #endif

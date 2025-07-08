@@ -7,7 +7,7 @@
             "vendor": "Fred Juhlin",
             "embeddedSdkVersion": "3.0",
             "vendorUrl": "https://pandosme.github.io",
-            "runMode": "respawn",
+            "runMode": "once",
             "version": "2.0.0"
         },
         "configuration": {
@@ -27,7 +27,9 @@
 		"dbus": {
 			"requiredMethods": [
 				"com.axis.HTTPConf1.VAPIXServiceAccounts1.GetCredentials",
-				"com.axis.Vipd1.ch0"
+				"com.axis.VideoObjectDetection1.Scene.SubscribeSocket",
+				"com.axis.VideoObjectDetection1.Scene.UnsubscribeSocket",
+				"com.axis.VideoObjectDetection1.Scene.GetAll"
 			]
 		}
 	}

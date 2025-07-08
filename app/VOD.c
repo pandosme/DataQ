@@ -8,8 +8,10 @@
 #include <stdint.h>
 #include <errno.h>
 
-#define LOG(fmt, args...)       { syslog(LOG_INFO, fmt, ## args); }
-#define LOG_WARN(fmt, args...)  { syslog(LOG_WARNING, fmt, ## args); }
+#define LOG(fmt, args...)    { syslog(LOG_INFO, fmt, ## args); printf(fmt, ## args);}
+#define LOG_WARN(fmt, args...)    { syslog(LOG_WARNING, fmt, ## args); printf(fmt, ## args);}
+//#define LOG_TRACE(fmt, args...)    { syslog(LOG_INFO, fmt, ## args); printf(fmt, ## args); }
+#define LOG_TRACE(fmt, args...)    {}
 
 typedef struct {
     uint32_t type_id;
@@ -147,8 +149,11 @@ static void transform_bbox(float left, float top, float right, float bottom, int
 
 static void detection_callback(const uint8_t *data, size_t size, void *user_data) {
     VOD__Scene *scene = vod__scene__unpack(NULL, size, data);
+	LOG_TRACE("<");
+	
     if (!scene) {
-        LOG_WARN("Failed to unpack detection protobuf data");
+        LOG_WARN("%s: Failed to unpack detection protobuf data",__func__);
+		LOG_TRACE(">\n");
         return;
     }
 
@@ -164,6 +169,8 @@ static void detection_callback(const uint8_t *data, size_t size, void *user_data
                 obj.confidence = deleted->confidence;
                 obj.type = deleted->type;
                 strncpy(obj.class_name, deleted->class_name, sizeof(obj.class_name)-1);
+				obj.class_name[sizeof(obj.class_name) - 1] = '\0';
+				if( strlen(obj.class_name) < 1 ) LOG_WARN("%s: Invalid obj.class_name",__func__);
                 obj.x = deleted->x; obj.y = deleted->y; obj.w = deleted->w; obj.h = deleted->h;
                 obj.active = false;
                 obj.num_attributes = deleted->num_attributes;
@@ -203,6 +210,9 @@ static void detection_callback(const uint8_t *data, size_t size, void *user_data
             track->confidence = det->score;
             track->type = det->det_class;
             strncpy(track->class_name, get_class_name(det->det_class), sizeof(track->class_name)-1);
+			track->class_name[sizeof(track->class_name) - 1] = '\0';
+			if( strlen(track->class_name) < 1 ) LOG_WARN("%s: Invalid track->class_name",__func__);
+			
         }
 
         // Transform bbox
@@ -225,14 +235,21 @@ static void detection_callback(const uint8_t *data, size_t size, void *user_data
                 track->attributes = realloc(track->attributes, (track->num_attributes + 1) * sizeof(vod_tracked_attribute_t));
                 track->attributes[idx].type_id = attr->type;
                 strncpy(track->attributes[idx].type_name, type_name, sizeof(track->attributes[idx].type_name)-1);
+				track->attributes[idx].type_name[sizeof(track->attributes[idx].type_name) - 1] = '\0';
+				if( strlen(track->class_name) < 1 ) LOG_WARN("%s: Invalid track->attributes[idx].type_name",__func__);
+				
                 track->attributes[idx].class_id = attr->attr_class;
                 strncpy(track->attributes[idx].class_name, class_name, sizeof(track->attributes[idx].class_name)-1);
+				track->attributes[idx].class_name[sizeof(track->attributes[idx].class_name) - 1] = '\0';
+				if( strlen(track->attributes[idx].class_name) < 1 ) LOG_WARN("%s: track->attributes[idx].class_name",__func__);
                 track->attributes[idx].score = attr->score;
                 track->num_attributes++;
             } else if (attr->score > track->attributes[idx].score) {
                 // Update only if score increases
                 track->attributes[idx].class_id = attr->attr_class;
                 strncpy(track->attributes[idx].class_name, class_name, sizeof(track->attributes[idx].class_name)-1);
+				track->attributes[idx].class_name[sizeof(track->attributes[idx].class_name) - 1] = '\0';
+				if( strlen(track->attributes[idx].class_name) < 1 ) LOG_WARN("%s: track->attributes[idx].class_name",__func__);
                 track->attributes[idx].score = attr->score;
             }
         }
@@ -243,6 +260,9 @@ static void detection_callback(const uint8_t *data, size_t size, void *user_data
         obj->confidence = track->confidence;
         obj->type = track->type;
         strncpy(obj->class_name, track->class_name, sizeof(obj->class_name)-1);
+		obj->class_name[sizeof(obj->class_name) - 1] = '\0';
+		if( strlen(obj->class_name) < 1 ) LOG_WARN("%s: obj->class_name",__func__);
+		
         obj->x = track->x; obj->y = track->y; obj->w = track->w; obj->h = track->h;
         obj->active = true;
         obj->num_attributes = track->num_attributes;
@@ -267,13 +287,13 @@ static void detection_callback(const uint8_t *data, size_t size, void *user_data
     }
     free(out_objs);
     vod__scene__free_unpacked(scene, NULL);
+	LOG_TRACE(">\n");
 }
 
 int VOD_Init(int channel, vod_callback_t cb, void *user_data) {
-    openlog("VOD", LOG_PID | LOG_CONS, LOG_USER);
-
+	LOG_TRACE("%s: Entry\n",__func__);
     if (!cb) {
-        LOG_WARN("Callback function is NULL in VOD_Init");
+        LOG_WARN("%s: Callback function is NULL", __func__);
         return -1;
     }
     memset(&g_ctx, 0, sizeof(g_ctx));
@@ -282,36 +302,36 @@ int VOD_Init(int channel, vod_callback_t cb, void *user_data) {
 
     g_ctx.num_classes = video_object_detection_subscriber_det_classes_get(&g_ctx.det_classes);
     if (g_ctx.num_classes <= 0) {
-        LOG_WARN("No detection classes found");
+        LOG_WARN("%s: No detection classes found", __func__);
         return -2;
     }
 
     uint8_t *buffer = NULL;
     size_t size = 0;
     if (video_object_detection_subscriber_get_detector_information(&buffer, &size) != 0) {
-        LOG_WARN("Failed to get detector information");
+        LOG_WARN("%s: Failed to get detector information", __func__);
         return -3;
     }
     g_ctx.det_info = vod__detector_information__unpack(NULL, size, buffer);
     free(buffer);
     if (!g_ctx.det_info) {
-        LOG_WARN("Failed to unpack detector information");
+        LOG_WARN("%s: Failed to unpack detector information", __func__);
         return -4;
     }
 
     if (video_object_detection_subscriber_create(&subscriber, NULL, channel) != 0) {
-        LOG_WARN("Failed to create subscriber");
+        LOG_WARN("%s: Failed to create subscriber", __func__);
         return -5;
     }
     if (video_object_detection_subscriber_set_get_detection_callback(subscriber, detection_callback) != 0) {
-        LOG_WARN("Failed to set detection callback");
+        LOG_WARN("%s: Failed to set detection callback", __func__);
         return -6;
     }
     if (video_object_detection_subscriber_subscribe(subscriber) != 0) {
-        LOG_WARN("Failed to subscribe to detection service");
+        LOG_WARN("%s: Failed to subscribe to detection service", __func__);
         return -7;
     }
-    LOG("VOD_Init successful on channel %d", channel);
+    LOG_TRACE("%s: Successful on channel %d", __func__, channel);
     return 0;
 }
 

@@ -1,5 +1,6 @@
 /**
  * ObjectDetection.c
+ * Updated for detection state management, occupancy, visualization, perspective, and rotation
  * Fred Juhlin 2025
  */
 
@@ -12,531 +13,393 @@
 #include <syslog.h>
 #include <assert.h>
 #include <glib.h>
+#include <time.h>
 #include "ObjectDetection.h"
 #include "cJSON.h"
 #include "ACAP.h"
-#include "video_object_detection_subscriber.h"
-#include "video_object_detection.pb-c.h"
+#include "VOD.h"
 
 #define LOG(fmt, args...)    { syslog(LOG_INFO, fmt, ## args); printf(fmt, ## args);}
 #define LOG_WARN(fmt, args...)    { syslog(LOG_WARNING, fmt, ## args); printf(fmt, ## args);}
-//#define LOG_TRACE(fmt, args...)    { syslog(LOG_INFO, fmt, ## args); printf(fmt, ## args); }
-#define LOG_TRACE(fmt, args...)    {}
+#define LOG_TRACE(fmt, args...)    { syslog(LOG_INFO, fmt, ## args); printf(fmt, ## args); }
+//#define LOG_TRACE(fmt, args...)    {}
 
-static video_object_detection_subscriber_t *ObjectDetection_Handler = NULL;
-ObjectDetection_Callback ObjectDetection_UserCallback = NULL;
-video_object_detection_subscriber_class_t **classifications;
+#define IDLE_THRESHOLD_PCT 50
 
+typedef struct {
+    char id[32];
+    char class_name[64];
+    float confidence;
+    int x, y, w, h;
+    int bx, by; // Birth position (center)
+    int birthTime; // ms epoch
+    int lastTime;  // ms epoch
+    int prev_cx, prev_cy;
+    float age;     // seconds
+    bool valid;
+    bool idle;
+    float idle_duration; // seconds
+    int idle_start_time; // ms epoch
+    GHashTable *attributes; // key: name, value: strdup(val)
+    bool active;
+} detection_cache_entry_t;
 
-cJSON* activeDetections = 0;
-cJSON* detectionsFilter = 0;
-cJSON* detectionCounters = 0;
+static GHashTable *detectionCache = NULL;
 
-int config_tracker_confidence = 1;
-int config_min_confidence = 50;
-int config_cog = 0;
-int config_rotation = 0;
-int config_max_idle = 0;
-int config_min_height = 10;
-int config_max_height = 10;
-int config_min_width = 800;
-int config_max_width = 800;
-int config_x1 = 0;
-int config_x2 = 1000;
-int config_y1 = 0;
-int config_y2 = 1000;
-int config_hanging_objects = 0;
-cJSON* config_blacklist = 0;
-int lastDetectionWasEmpty = 0;
-cJSON* attributes = 0;
+static int config_tracker_confidence = 1;
+static int config_min_confidence = 50;
+static int config_cog = 0;
+static int config_rotation = 0;
+static int config_max_idle = 0;
+static int config_min_height = 10;
+static int config_max_height = 800;
+static int config_min_width = 10;
+static int config_max_width = 800;
+static int config_x1 = 0;
+static int config_x2 = 1000;
+static int config_y1 = 0;
+static int config_y2 = 1000;
+static int config_hanging_objects = 0;
+static cJSON* config_blacklist = 0;
 
-void
-ObjectDetection_Config( cJSON* data ) {
-	LOG_TRACE("%s: Entry\n",__func__);
-	if(!activeDetections)
-		activeDetections = cJSON_CreateObject();
+static ObjectDetection_Callback detectionsCallback = 0;
+static ObjectDetection_Callback trackerCallback = 0;
 
-	if( !data ) {
-		LOG_WARN("%s: Invlaid input\n",__func__);
-		return;
-	}
-		
-	config_min_confidence = cJSON_GetObjectItem(data,"confidence")?cJSON_GetObjectItem(data,"confidence")->valueint:40;
-	config_cog = cJSON_GetObjectItem(data,"cog")?cJSON_GetObjectItem(data,"cog")->valueint:0;
-	config_rotation = cJSON_GetObjectItem(data,"rotation")?cJSON_GetObjectItem(data,"rotation")->valueint:0;
-	config_tracker_confidence = cJSON_GetObjectItem(data,"tracker_confidence")?cJSON_GetObjectItem(data,"tracker_confidence")->valueint:1;
-	config_max_idle = cJSON_GetObjectItem(data,"maxIdle")?cJSON_GetObjectItem(data,"maxIdle")->valueint:0;
-	config_blacklist = cJSON_GetObjectItem(data,"ignoreClass")?cJSON_GetObjectItem(data,"ignoreClass"):cJSON_CreateArray();
-	config_min_height = cJSON_GetObjectItem(data,"minHeight")?cJSON_GetObjectItem(data,"minHeight")->valueint:10;
-	config_max_height = cJSON_GetObjectItem(data,"maxHeight")?cJSON_GetObjectItem(data,"maxHeight")->valueint:800;
-	config_min_width = cJSON_GetObjectItem(data,"minWidth")?cJSON_GetObjectItem(data,"minWidth")->valueint:10;
-	config_max_width = cJSON_GetObjectItem(data,"maxWidth")?cJSON_GetObjectItem(data,"maxWidth")->valueint:800;
-	config_hanging_objects = 0; //cJSON_GetObjectItem(data,"hanging_objects")?cJSON_GetObjectItem(data,"hanging_objects")->valueint:5;
-	cJSON *aoi = cJSON_GetObjectItem(data,"aoi");
-	if( aoi ) {
-		config_x1 = cJSON_GetObjectItem(aoi,"x1")?cJSON_GetObjectItem(aoi,"x1")->valueint:0;
-		config_x2 = cJSON_GetObjectItem(aoi,"x2")?cJSON_GetObjectItem(aoi,"x2")->valueint:1000;
-		config_y1 = cJSON_GetObjectItem(aoi,"y1")?cJSON_GetObjectItem(aoi,"y1")->valueint:0;
-		config_y2 = cJSON_GetObjectItem(aoi,"y2")?cJSON_GetObjectItem(aoi,"y2")->valueint:1000;
-	}
-
-	//Reset all ignore objects
-
-	cJSON* item = activeDetections->child;
-	while(item) {
-		cJSON_GetObjectItem(item,"ignore")->type = cJSON_False;
-		item = item->next;
-	}
-	LOG_TRACE("%s: Exit\n",__func__);	
+static int get_epoch_ms() {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return (int)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 }
 
-void
-ObjectDetection_Reset(){
-	if( activeDetections ) {
-		cJSON_Delete(activeDetections);
-		activeDetections = cJSON_CreateObject();
-	}
+static float calc_distance(int x1, int y1, int x2, int y2) {
+    int dx = x2 - x1;
+    int dy = y2 - y1;
+    return sqrtf((float)(dx * dx + dy * dy));
 }
 
-int
-ObjectDetection_Blacklisted(char* label) {
-	if(!config_blacklist || !label )
-		return 0;
-	cJSON* item = config_blacklist->child;
-	while( item ){
-		if( strcmp( label, item->valuestring ) == 0 )
-			return 1;
-		item = item->next;
-	}
-	return 0;
+static int ObjectDetection_Blacklisted(const char* label) {
+    if (!config_blacklist || !label)
+        return 0;
+    cJSON* item = config_blacklist->child;
+    while (item) {
+        if (strcmp(label, item->valuestring) == 0)
+            return 1;
+        item = item->next;
+    }
+    return 0;
 }
 
-int
-ObjectDetection_CacheSize() {
-	return cJSON_GetArraySize(activeDetections) + cJSON_GetArraySize(detectionCounters);
+static void rotate_bbox(int x, int y, int w, int h, int *rx, int *ry, int *rw, int *rh, int rotation) {
+    // All coordinates in [0,1000]
+    switch (rotation) {
+        case 0:
+            *rx = x; *ry = y; *rw = w; *rh = h;
+            break;
+        case 90:
+            *rx = y;
+            *ry = 1000 - (x + w);
+            *rw = h;
+            *rh = w;
+            break;
+        case 180:
+            *rx = 1000 - (x + w);
+            *ry = 1000 - (y + h);
+            *rw = w;
+            *rh = h;
+            break;
+        case 270:
+            *rx = 1000 - (y + h);
+            *ry = x;
+            *rw = h;
+            *rh = w;
+            break;
+        default:
+            *rx = x; *ry = y; *rw = w; *rh = h;
+            break;
+    }
 }
 
-cJSON*
-ProcessAttributes( cJSON* item ) {
-	if( !attributes || !item)
-		return item;
-	
-	
-	cJSON* humanColors = cJSON_GetObjectItem(attributes,"humanColors");
-	if( !humanColors ) {
-		LOG_TRACE("%s:Invalid humanColors",__func__);
-		return item;
-	}
-
-	cJSON* vehicleColors = cJSON_GetObjectItem(attributes,"vehicleColors");
-	cJSON* vehicles = cJSON_GetObjectItem(attributes,"vehicles");
-	cJSON* bags = cJSON_GetObjectItem(attributes,"bags");
-	cJSON* hats = cJSON_GetObjectItem(attributes,"hats");
-	cJSON* names = cJSON_GetObjectItem(attributes,"names");
-
-	//Process detections
-	cJSON* lookup = 0;
-	cJSON* attribute = cJSON_GetObjectItem(item,"attributes")?cJSON_GetObjectItem(item,"attributes")->child:0;
-	while( attribute ) {
-		int type = cJSON_GetObjectItem(attribute,"type")?cJSON_GetObjectItem(attribute,"type")->valueint: 0;
-		int value = cJSON_GetObjectItem(attribute,"value")?cJSON_GetObjectItem(attribute,"value")->valueint: 0;
-		int score = cJSON_GetObjectItem(attribute,"value")?cJSON_GetObjectItem(attribute,"value")->valueint: 0;
-		switch( type ) {
-			case 0:  //Undefined type
-				lookup = cJSON_GetArrayItem(vehicles,value);
-				if( lookup )
-					cJSON_ReplaceItemInObject( item,"class", cJSON_CreateString(lookup->valuestring));
-				break;
-			case 1:  //Undefined type
-				lookup = cJSON_GetArrayItem(vehicles,value);
-				if( lookup )
-					cJSON_ReplaceItemInObject( item,"class", cJSON_CreateString(lookup->valuestring));
-				break;
-			case 2: //Vehicle color
-				lookup = cJSON_GetArrayItem(vehicleColors,value);
-				if( lookup ) {
-					if( cJSON_GetObjectItem(item,"color") ) {
-						cJSON_ReplaceItemInObject(item,"color",cJSON_CreateString( lookup->valuestring) );
-					} else {
-						cJSON_AddStringToObject(item,"color",lookup->valuestring);
-					}
-				}
-				break;
-			case 3: //Upper color;
-				lookup = cJSON_GetArrayItem(humanColors,value);
-				if( lookup ) {
-					if( cJSON_GetObjectItem(item,"color") ) {
-						cJSON_ReplaceItemInObject(item,"color",cJSON_CreateString( lookup->valuestring) );
-					} else {
-						cJSON_AddStringToObject(item,"color",lookup->valuestring);
-					}
-				}
-				break;
-			case 4: //Lower color;
-				lookup = cJSON_GetArrayItem(humanColors,value);
-				if( lookup ) {
-					if( cJSON_GetObjectItem(item,"color") ) {
-						cJSON_ReplaceItemInObject(item,"color",cJSON_CreateString( lookup->valuestring) );
-					} else {
-						cJSON_AddStringToObject(item,"color",lookup->valuestring);
-					}
-				}
-				break;
-			case 5: //Bag type
-				lookup = cJSON_GetArrayItem(bags,value);
-				if( lookup )
-					cJSON_ReplaceItemInObject( item,"class", cJSON_CreateString(lookup->valuestring));
-				break;
-			case 6: //Hat type 
-				lookup = cJSON_GetArrayItem(hats,value);
-				cJSON* hat = cJSON_GetObjectItem(item,"hat");
-				if( lookup && hat )
-					cJSON_ReplaceItemInObject( item, "hat", cJSON_CreateString(lookup->valuestring));
-				if( lookup && !hat )
-					cJSON_AddStringToObject( item, "hat", lookup->valuestring);
-				break;
-				case 7: //human_face_visibility
-				if( cJSON_GetObjectItem(item,"face") ) {
-					if( value == 0 )
-						cJSON_GetObjectItem(item,"face")->type = cJSON_False;
-					else
-						cJSON_GetObjectItem(item,"face")->type = cJSON_True;
-				} else {
-					if( value == 0 )
-						cJSON_AddFalseToObject(item,"face");
-					else
-						cJSON_AddTrueToObject(item,"face");
-				}
-				break;
-			case 8:
-				lookup = cJSON_GetArrayItem(vehicles,value);
-				if( lookup )
-					cJSON_ReplaceItemInObject( item,"class", cJSON_CreateString(lookup->valuestring));
-				break;
-			case 9:
-				break;
-			case 10:
-				break;
-				
-		}
-		attribute = attribute->next;
-	}
-	lookup = cJSON_GetObjectItem(names, cJSON_GetObjectItem(item,"class")->valuestring);
-	if( lookup )
-		cJSON_ReplaceItemInObject( item,"class", cJSON_CreateString(lookup->valuestring));
-	return item;
+void ObjectDetection_Config(cJSON* data) {
+    LOG_TRACE("%s: Entry\n", __func__);
+    if (!data) {
+        LOG_WARN("%s: Invalid input\n", __func__);
+        return;
+    }
+    config_min_confidence = cJSON_GetObjectItem(data, "confidence") ? cJSON_GetObjectItem(data, "confidence")->valueint : 40;
+    config_cog = cJSON_GetObjectItem(data, "cog") ? cJSON_GetObjectItem(data, "cog")->valueint : 0;
+    config_rotation = cJSON_GetObjectItem(data, "rotation") ? cJSON_GetObjectItem(data, "rotation")->valueint : 0;
+    config_tracker_confidence = cJSON_GetObjectItem(data, "tracker_confidence") ? cJSON_GetObjectItem(data, "tracker_confidence")->valueint : 1;
+    config_max_idle = cJSON_GetObjectItem(data, "maxIdle") ? cJSON_GetObjectItem(data, "maxIdle")->valueint : 0;
+    config_blacklist = cJSON_GetObjectItem(data, "ignoreClass") ? cJSON_GetObjectItem(data, "ignoreClass") : cJSON_CreateArray();
+    config_min_height = cJSON_GetObjectItem(data, "minHeight") ? cJSON_GetObjectItem(data, "minHeight")->valueint : 10;
+    config_max_height = cJSON_GetObjectItem(data, "maxHeight") ? cJSON_GetObjectItem(data, "maxHeight")->valueint : 800;
+    config_min_width = cJSON_GetObjectItem(data, "minWidth") ? cJSON_GetObjectItem(data, "minWidth")->valueint : 10;
+    config_max_width = cJSON_GetObjectItem(data, "maxWidth") ? cJSON_GetObjectItem(data, "maxWidth")->valueint : 800;
+    config_hanging_objects = 0;
+    cJSON *aoi = cJSON_GetObjectItem(data, "aoi");
+    if (aoi) {
+        config_x1 = cJSON_GetObjectItem(aoi, "x1") ? cJSON_GetObjectItem(aoi, "x1")->valueint : 0;
+        config_x2 = cJSON_GetObjectItem(aoi, "x2") ? cJSON_GetObjectItem(aoi, "x2")->valueint : 1000;
+        config_y1 = cJSON_GetObjectItem(aoi, "y1") ? cJSON_GetObjectItem(aoi, "y1")->valueint : 0;
+        config_y2 = cJSON_GetObjectItem(aoi, "y2") ? cJSON_GetObjectItem(aoi, "y2")->valueint : 1000;
+    }
+    LOG_TRACE("%s: Exit\n", __func__);
 }
 
+void ObjectDetection_Reset() {
+    if (detectionCache) {
+        g_hash_table_destroy(detectionCache);
+        detectionCache = NULL;
+    }
+    detectionCache = g_hash_table_new_full(g_str_hash, g_str_equal, free, free);
+}
 
-static void
-ObjectDetection_Scene_Callback(const uint8_t *detection_data, size_t data_size, void *user_data) {
-	cJSON*	detection;
-    unsigned int i,objectID;
-	int ignore;
-	char idString[16];
-	double x1,y1,x2,y2;
+static void free_attributes(GHashTable *attrs) {
+    if (!attrs) return;
+    GHashTableIter iter;
+    gpointer key, value;
+    g_hash_table_iter_init(&iter, attrs);
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
+        free(key);
+        free(value);
+    }
+    g_hash_table_destroy(attrs);
+}
 
-	LOG_TRACE("%s: Entry\n",__func__);
+static void free_detection_cache_entry(gpointer data) {
+    detection_cache_entry_t *entry = (detection_cache_entry_t*)data;
+    if (entry->attributes) free_attributes(entry->attributes);
+    free(entry);
+}
 
-	if(!activeDetections)
-		activeDetections = cJSON_CreateObject();
+// Defensive, robust implementation of publish_detections
+static void publish_detections(GHashTable *cache, ObjectDetection_Callback cb) {
+    if (!cb || !cache) return;
 
+    cJSON *arr = cJSON_CreateArray();
+    if (!arr) return;
 
-	if(!detectionCounters)
-		detectionCounters = cJSON_CreateObject();
+    GHashTableIter iter;
+    gpointer key, value;
+    g_hash_table_iter_init(&iter, cache);
+
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
+        detection_cache_entry_t *entry = (detection_cache_entry_t*)value;
+        if (!entry) continue;
+
+        // Defensive: check critical fields
+        if (!entry->class_name || !entry->id) continue;
+
+        cJSON *obj = cJSON_CreateObject();
+        if (!obj) continue;
+
+//LOG("%s %s %f %d",entry->class_name,entry->id,entry->age, entry->active);
 /*
-	//Detection counters are used to detect if an object id is not included
-	// in the detection list but not recived a kill message (hanging object).
-	detection = detectionCounters->child;
-	while( config_hanging_objects && detection  ) {
-		detection->valueint--;
-		detection = detection->next;
-	}
+        cJSON_AddStringToObject(obj, "class", entry->class_name);
+        cJSON_AddNumberToObject(obj, "confidence", entry->confidence);
+        cJSON_AddNumberToObject(obj, "age", entry->age);
+        cJSON_AddNumberToObject(obj, "x", entry->x);
+        cJSON_AddNumberToObject(obj, "y", entry->y);
+        cJSON_AddNumberToObject(obj, "w", entry->w);
+        cJSON_AddNumberToObject(obj, "h", entry->h);
+        cJSON_AddNumberToObject(obj, "cx", entry->prev_cx);
+        cJSON_AddNumberToObject(obj, "cy", entry->prev_cy);
+        cJSON_AddNumberToObject(obj, "bx", entry->bx);
+        cJSON_AddNumberToObject(obj, "by", entry->by);
+        cJSON_AddNumberToObject(obj, "timestamp", entry->lastTime);
+        cJSON_AddNumberToObject(obj, "birthTime", entry->birthTime);
+        cJSON_AddStringToObject(obj, "id", entry->id);
+        cJSON_AddBoolToObject(obj, "active", entry->active);
 */
-	if( !data_size || !detection_data )
-		return;
-
-	double timestamp = ACAP_DEVICE_Timestamp();
-	
-	VOD__Scene *recv_scene;
-	recv_scene = vod__scene__unpack(NULL, data_size, detection_data);
-	if (recv_scene == NULL)
-		return;
-
-    for (i = 0; i < recv_scene->n_detections; i++) {
-		LOG_TRACE("Next");
-
-        VOD__Detection *recv_det = recv_scene->detections[i];
-
-		if( config_tracker_confidence && recv_det->detection_status != VOD__DETECTION__DETECTION_STATUS__TRACKED_CONFIDENT )
-			continue;
-
-		objectID = (int)recv_det->id;
-		x1 = (recv_det->left * 4096) + 4096;
-		y1 = 4096 - (recv_det->top * 4096);
-		x2 = (recv_det->right * 4096) + 4096;
-		y2 = 4096 - (recv_det->bottom * 4096);
-		int x = (x1 * 1000)/8192;
-		int y = (y1 * 1000)/8192;
-		int w = ((x2-x1) * 1000)/8192;
-		int h = ((y2-y1) * 1000)/8192;
-
-		if( config_rotation == 180 ) {
-			x = 1000 - x - w;
-			y = 1000 - y - h;
-		}
-
-		if( config_rotation == 90 ) {
-			int t = h;
-			h = w;
-			w = t;
-			t = x;
-			x = 1000 - y - w;
-			y = t;
-		}
-
-		if( config_rotation == 270 ) {
-			int t = h;
-			h = w;
-			w = t;
-			t = y;
-			y = 1000 - x - h;
-			x = t;
-		}
-
-		int cx = x + (w/2);
-		int cy = y + (h/2);
-		
-		if( config_cog == 1 )
-			cy = y + h;
-
-		int confidence = (unsigned)(recv_det->score);
-		int classID = (int)recv_det->det_class;
-
-		sprintf(idString,"%d",objectID);
-		detection = cJSON_GetObjectItem(activeDetections,idString);
-		if( !detection )  {
-			int accept = 1;
-			if( accept && confidence < config_min_confidence ) accept = 0;
-			if( accept && h < config_min_height ) accept = 0;
-			if( accept && h > config_max_height ) accept = 0;
-			if( accept && w < config_min_width ) accept = 0;
-			if( accept && w > config_max_width ) accept = 0;
-			if( accept && cx < config_x1 ) accept = 0;
-			if( accept && cx > config_x2 ) accept = 0;
-			if( accept && cy < config_y1 ) accept = 0;
-			if( accept && cy > config_y2 ) accept = 0;
-			if( accept ) {
-				detection = cJSON_CreateObject();
-				cJSON_AddStringToObject(detection,"id",idString);
-				cJSON_AddTrueToObject(detection,"active");
-				cJSON_AddFalseToObject(detection,"ignore");
-				cJSON_AddNumberToObject(detection,"type",classID);
-				cJSON_AddStringToObject(detection,"class",video_object_detection_subscriber_det_class_name(classifications[classID]));
-				cJSON_AddNumberToObject(detection,"birth",timestamp);
-				cJSON_AddNumberToObject(detection,"age",0);				
-				cJSON_AddNumberToObject(detection,"bx",cx);
-				cJSON_AddNumberToObject(detection,"by",cy);
-				cJSON_AddNumberToObject(detection,"confidence",confidence);
-				cJSON_AddNumberToObject(detection,"idle", 0);
-				cJSON_AddNumberToObject(detection,"timestamp",timestamp);
-				cJSON_AddNumberToObject(detection,"x",x);
-				cJSON_AddNumberToObject(detection,"y",y);
-				cJSON_AddNumberToObject(detection,"w",w);
-				cJSON_AddNumberToObject(detection,"h",h);
-				cJSON_AddNumberToObject(detection,"cx",cx);
-				cJSON_AddNumberToObject(detection,"cy",cy);
-				cJSON_AddNumberToObject(detection,"dx",0);
-				cJSON_AddNumberToObject(detection,"dy",0);
-				cJSON_AddNumberToObject(detection,"distance",0);
-				cJSON_AddNumberToObject(detection,"topVelocity",0);
-				cJSON_AddStringToObject(detection,"color","");
-				cJSON_AddStringToObject(detection,"color2","");
-				cJSON_AddStringToObject(detection,"hat","");
-				cJSON_AddFalseToObject(detection,"face");
-				cJSON_AddItemToObject(detection,"attributes",cJSON_CreateArray());
-				cJSON_AddItemToObject( activeDetections, idString, detection);
-//				cJSON_AddNumberToObject(detectionCounters,idString,config_hanging_objects);
-			}
-		} else {
-			LOG_TRACE("Found\n");
-//			if( cJSON_GetObjectItem(detectionCounters,idString) )
-//				cJSON_GetObjectItem(detectionCounters,idString)->valueint = config_hanging_objects;
-
-			cJSON_ReplaceItemInObject(detection,"timestamp",cJSON_CreateNumber(timestamp));
-			if( classID != cJSON_GetObjectItem(detection,"type")->valueint ) {
-				cJSON_ReplaceItemInObject(detection,"class",cJSON_CreateString(video_object_detection_subscriber_det_class_name(classifications[classID])));
-				cJSON_ReplaceItemInObject(detection,"type",cJSON_CreateNumber(classID));
-			}
-			cJSON_ReplaceItemInObject(detection,"x",cJSON_CreateNumber(x));
-			cJSON_ReplaceItemInObject(detection,"y",cJSON_CreateNumber(y));
-			cJSON_ReplaceItemInObject(detection,"w",cJSON_CreateNumber(w));
-			cJSON_ReplaceItemInObject(detection,"h",cJSON_CreateNumber(h));
-			cJSON_ReplaceItemInObject(detection,"cx",cJSON_CreateNumber(cx));
-			cJSON_ReplaceItemInObject(detection,"cy",cJSON_CreateNumber(cy));
-			double dx = cx - cJSON_GetObjectItem(detection,"bx")->valueint;
-			double dy = cy - cJSON_GetObjectItem(detection,"by")->valueint;
-			cJSON_ReplaceItemInObject(detection,"dx",cJSON_CreateNumber((int)dx));
-			cJSON_ReplaceItemInObject(detection,"dy",cJSON_CreateNumber((int)dy));
-			if( confidence > cJSON_GetObjectItem(detection,"confidence")->valueint )
-				cJSON_ReplaceItemInObject(detection,"confidence",cJSON_CreateNumber(confidence));
-			double age = round((timestamp - cJSON_GetObjectItem(detection,"birth")->valuedouble)/1000.0);
-			cJSON_ReplaceItemInObject(detection,"age",cJSON_CreateNumber(age));
-		}
-
-		LOG_TRACE("Attributes\n");
-
-		int c;
-		cJSON* attributes = cJSON_GetObjectItem(detection,"attributes");
-		for( c = 0; c < recv_det->n_attributes; c++ ) {
-			VOD__Attribute *attrib = recv_det->attributes[c];
-			if( detection && attrib && attributes ) {
-				int type = attrib->type;
-				int score = -1;
-				int value = -1;
-				if( attrib->has_class_case )
-					value = attrib->attr_class;
-				if( attrib->has_score_case )
-					score = attrib->score;
-				if( score >= 0 && value >= 0 ) {
-					cJSON* attribute = attributes->child;
-					int found = 0;
-					while( attribute ){
-						if( cJSON_GetObjectItem(attribute,"type")->valueint == type ) {
-							found = 1;
-							if( score > cJSON_GetObjectItem(attribute,"score")->valueint ) {
-								cJSON_GetObjectItem(attribute,"score")->valueint = score;
-								cJSON_GetObjectItem(attribute,"score")->valuedouble = score;
-								cJSON_GetObjectItem(attribute,"value")->valueint = value;
-								cJSON_GetObjectItem(attribute,"value")->valuedouble = value;
-							}
-						}
-						attribute = attribute->next;
-					}
-					if( !found ) {
-						cJSON* attribute = cJSON_CreateObject();
-						cJSON_AddNumberToObject( attribute,"type",type );
-						cJSON_AddNumberToObject( attribute,"value",value );
-						cJSON_AddNumberToObject( attribute,"score",score );
-						cJSON_AddItemToArray(attributes,attribute);
-					}
-				}
-			}
-		}
-		ProcessAttributes(detection);
+        // Add attributes, with null checks
+        if (entry->attributes) {
+            GHashTableIter aiter;
+            gpointer ak, av;
+            g_hash_table_iter_init(&aiter, entry->attributes);
+            while (g_hash_table_iter_next(&aiter, &ak, &av)) {
+//LOG("%s %s",(char*)ak,(char*)av);
+//                if (ak && av) 
+//                    cJSON_AddStringToObject(obj, (char*)ak, (char*)av);
+            }
+        }
+//        cJSON_AddItemToArray(arr, obj);
     }
 
-	LOG_TRACE("Events\n");
-
-	for (i = 0; i < recv_scene->n_events; i++) {
-		VOD__Event *recv_event = recv_scene->events[i];
-		if( recv_event->action == 0 ) {
-			sprintf(idString,"%d",(int)recv_event->object_id);
-			detection = cJSON_GetObjectItem(activeDetections,idString);
-			if( detection )
-				cJSON_GetObjectItem(detection,"active")->type = cJSON_False;
-		}
-	}
-
-    vod__scene__free_unpacked(recv_scene, NULL);
-
-	//Check hanging objects
-/*	
-	if( config_hanging_objects > 0 ) {
-		detection = detectionCounters->child;
-		while( detection ) {
-			if( detection->valueint <= 0 ) {
-				cJSON* hangingObject = cJSON_GetObjectItem(activeDetections,detection->string);
-				if( hangingObject )
-					cJSON_GetObjectItem(hangingObject,"active")->type = cJSON_False;
-			}
-			detection = detection->next;
-		}
-	}
-*/
-
-	//Make List
-	cJSON* list = cJSON_CreateArray();
-	detection = activeDetections->child;
-	while(detection) {
-		if( ObjectDetection_Blacklisted( cJSON_GetObjectItem(detection,"class")->valuestring ) == 0 )
-			cJSON_AddItemReferenceToArray(list,detection);
-		detection = detection->next;
-	}
-
-	if( cJSON_GetArraySize( list ) > 0 ) {
-		lastDetectionWasEmpty = 0;
-		ObjectDetection_UserCallback( list );
-	} else {
-		if( lastDetectionWasEmpty == 0 )
-			ObjectDetection_UserCallback( list );
-		lastDetectionWasEmpty = 1;
-	}
-	cJSON_Delete(list);
-
-	detection = activeDetections->child;
-	while(detection) {
-		cJSON* nextObject = detection->next;
-		const char * id = cJSON_GetObjectItem(detection,"id")->valuestring;
-		if( cJSON_GetObjectItem(detection,"active")->type == cJSON_False ) {
-			cJSON_DeleteItemFromObject(activeDetections, id );
-//			cJSON_DeleteItemFromObject(detectionCounters, id);
-		}
-		detection = nextObject;
-	}
-	LOG_TRACE("Done\n");
+    cb(arr);
+    cJSON_Delete(arr);
 }
 
-void *ObjectDetection_some_user_data = 0;
-
-int
-ObjectDetection_Init( ObjectDetection_Callback callback ) {
-	int status = 0;
-
-	LOG_TRACE("%s: Entry\n",__func__);
-	
-	attributes = ACAP_FILE_Read( "settings/attributes.json" );
-	if( !attributes ) {
-		LOG_WARN("Missing attributes\n");
-	} else {
-		ACAP_Set_Config("attributes", attributes);
-	}
-	
-	int num_classes = video_object_detection_subscriber_det_classes_get(&classifications);
-	LOG_TRACE("%s: Model has %d classes\n",__func__,num_classes);
-	
-	if( callback == 0 ) {
-		ObjectDetection_UserCallback = 0;
-		LOG_WARN("%s:Invalid input when configuring object detection\n",__func__);
-		return 0;
-	}
-
-	if( ObjectDetection_UserCallback || ObjectDetection_Handler ) {
-		LOG_TRACE("%s: Already configured\n",__func__);		
-		return 1;
-	}
-
-	ObjectDetection_UserCallback = callback;
-	activeDetections = cJSON_CreateArray();
-	
-	if( video_object_detection_subscriber_create(&ObjectDetection_Handler, &ObjectDetection_some_user_data, 0) != 0 ) {
-		LOG_WARN("%s: Cannot open channel to ObjectDetection\n",__func__);
-		ObjectDetection_Handler = 0;
-		return 0;
-	}
-
-    if (video_object_detection_subscriber_set_get_detection_callback(ObjectDetection_Handler, ObjectDetection_Scene_Callback) != 0) {
-		LOG_WARN("%s: Could not set object detection callback\n", __func__);
-		return 0;
-	}
-
-    video_object_detection_subscriber_set_receive_empty_hits(ObjectDetection_Handler, 1);
-
-	status = video_object_detection_subscriber_subscribe(ObjectDetection_Handler);
-    if ( status != 0) {
-		LOG_WARN("%s: Object detection subscription failed. Error Code: %d\n",__func__,  status);
-		return 0;
+static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user_data) {
+    if (!detectionCache) {
+        detectionCache = g_hash_table_new_full(g_str_hash, g_str_equal, free, free_detection_cache_entry);
+        if (!detectionCache) {
+            LOG_WARN("Failed to allocate detectionCache");
+            return;
+        }
     }
+    int now = get_epoch_ms();
+    GHashTableIter iter;
+    gpointer key, value;
+
+    // Process current detections
+    for (size_t i = 0; i < num_objects; ++i) {
+        const vod_object_t *obj = &objects[i];
+        if (!obj || !obj->class_name) continue;
+
+        // Apply rotation to bbox
+        int rx, ry, rw, rh;
+        rotate_bbox(obj->x, obj->y, obj->w, obj->h, &rx, &ry, &rw, &rh, config_rotation);
+
+        // Calculate cx, cy based on config_cog
+        int cx, cy;
+        if (config_cog == 0) {
+            cx = rx + rw / 2;
+            cy = ry + rh / 2;
+        } else {
+            cx = rx + rw / 2;
+            cy = ry + rh;
+        }
+
+        // Validity criteria
+        bool valid = true;
+        if (obj->confidence < config_min_confidence) valid = false;
+        if (cx < config_x1 || cx > config_x2) valid = false;
+        if (cy < config_y1 || cy > config_y2) valid = false;
+        if (ObjectDetection_Blacklisted(obj->class_name)) valid = false;
+        if (rw < config_min_width || rh < config_min_height) valid = false;
+        detection_cache_entry_t *entry = (detection_cache_entry_t*)g_hash_table_lookup(detectionCache, obj->id);
+        if (!entry) {
+            entry = calloc(1, sizeof(detection_cache_entry_t));
+            if (!entry) {
+                LOG_WARN("Failed to allocate detection_cache_entry_t");
+                continue;
+            }
+            if (!obj->id) {
+                free(entry);
+                continue;
+            }
+            strncpy(entry->id, obj->id, sizeof(entry->id)-1);
+            entry->id[sizeof(entry->id) - 1] = '\0';
+            if (strlen(entry->id) < 1) LOG_WARN("%s: entry->id", __func__);
+            strncpy(entry->class_name, obj->class_name, sizeof(entry->class_name)-1);
+            entry->class_name[sizeof(entry->class_name) - 1] = '\0';
+            if (strlen(entry->class_name) < 1) LOG_WARN("%s: entry->class_name", __func__);
+            entry->confidence = obj->confidence;
+            entry->x = rx;
+            entry->y = ry;
+            entry->w = rw;
+            entry->h = rh;
+            entry->bx = cx;
+            entry->by = cy;
+            entry->birthTime = now;
+            entry->lastTime = now;
+            entry->prev_cx = cx;
+            entry->prev_cy = cy;
+            entry->age = 0.0f;
+            entry->valid = valid;
+            entry->idle = false;
+            entry->idle_duration = 0.0f;
+            entry->idle_start_time = now;
+            entry->attributes = g_hash_table_new_full(g_str_hash, g_str_equal, free, free);
+            entry->active = obj->active;
+            // Defensive attribute copy
+            if (obj->num_attributes > 0 && obj->attributes) {
+                for (size_t a = 0; a < obj->num_attributes; ++a) {
+                    if (!obj->attributes[a].name || !obj->attributes[a].value) continue;
+                    char *aname = strdup(obj->attributes[a].name);
+                    char *aval = strdup(obj->attributes[a].value);
+                    if (aname && aval) {
+                        g_hash_table_insert(entry->attributes, aname, aval);
+                    } else {
+                        free(aname);
+                        free(aval);
+                    }
+                }
+            }
+            char *keycopy = strdup(entry->id);
+            if (!keycopy) {
+                free_detection_cache_entry(entry);
+                continue;
+            }
+            g_hash_table_insert(detectionCache, keycopy, entry);
+        } else {
+            // Update existing entry
+            float dist = calc_distance(entry->prev_cx, entry->prev_cy, cx, cy);
+            if (dist < IDLE_THRESHOLD_PCT) {
+                if (!entry->idle) {
+                    entry->idle = true;
+                    entry->idle_start_time = now;
+                }
+                entry->idle_duration = (now - entry->idle_start_time) / 1000.0f;
+                if (config_max_idle > 0 && entry->idle_duration > config_max_idle) {
+                    entry->idle = true;
+                }
+            } else {
+                entry->idle = false;
+                entry->idle_duration = 0.0f;
+                entry->idle_start_time = now;
+                entry->prev_cx = cx;
+                entry->prev_cy = cy;
+            }
+			entry->confidence = obj->confidence;
+            entry->x = rx;
+            entry->y = ry;
+            entry->w = rw;
+            entry->h = rh;
+            entry->age = (now - entry->birthTime) / 1000.0f;
+            entry->lastTime = now;
+            entry->valid = valid;
+            // Replace Attributes
+            if (entry->attributes) g_hash_table_destroy(entry->attributes);
+            entry->attributes = g_hash_table_new_full(g_str_hash, g_str_equal, free, free);
+            if (obj->num_attributes > 0 && obj->attributes) {
+                for (size_t a = 0; a < obj->num_attributes; ++a) {
+                    if (!obj->attributes[a].name || !obj->attributes[a].value) continue;
+                    char *aname = strdup(obj->attributes[a].name);
+                    char *aval = strdup(obj->attributes[a].value);
+                    if (aname && aval) {
+                        g_hash_table_insert(entry->attributes, aname, aval);
+                    } else {
+                        free(aname);
+                        free(aval);
+                    }
+                }
+            }
+            entry->active = obj->active;
+        }
+    }
+
+    publish_detections(detectionCache, detectionsCallback);
+    // Remove all objects with active == false after publishing
+    g_hash_table_iter_init(&iter, detectionCache);
+    GList *remove_list = NULL;
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
+        detection_cache_entry_t *entry = (detection_cache_entry_t*)value;
+        if (!entry->active) {
+            remove_list = g_list_prepend(remove_list, key);
+        }
+    }
+    for (GList *l = remove_list; l != NULL; l = l->next) {
+if( remove_list ) LOG("<");
+        g_hash_table_remove(detectionCache, l->data);
+if( remove_list ) LOG(">");
+    }
+if( remove_list ) LOG("[");
+    g_list_free(remove_list);
+if( remove_list ) LOG("]");
+}
+
+int ObjectDetection_Init(ObjectDetection_Callback detections, ObjectDetection_Callback tracker) {
 	LOG_TRACE("%s: Entry\n",__func__);
-	return 1;
-} 
+    detectionsCallback = detections;
+    trackerCallback = tracker;
+    if (!detectionCache)
+        detectionCache = g_hash_table_new_full(g_str_hash, g_str_equal, free, free_detection_cache_entry);
+    if (VOD_Init(0, VOD_Data, NULL) != 0) {
+        LOG_WARN("%s: Object detection service failed\n", __func__);
+		LOG_TRACE("%s: Exit\n",__func__);
+        return 0;
+    }
+	LOG_TRACE("%s: Exit\n",__func__);
+    return 1;
+}
