@@ -1,0 +1,331 @@
+#include "VOD.h"
+#include "video_object_detection_subscriber.h"
+#include "video_object_detection.pb-c.h"
+#include <syslog.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdint.h>
+#include <errno.h>
+
+#define LOG(fmt, args...)       { syslog(LOG_INFO, fmt, ## args); }
+#define LOG_WARN(fmt, args...)  { syslog(LOG_WARNING, fmt, ## args); }
+
+typedef struct {
+    uint32_t type_id;
+    char type_name[64];
+    uint32_t class_id;
+    char class_name[64];
+    uint32_t score;
+} vod_tracked_attribute_t;
+
+typedef struct {
+    float confidence;
+    int type;
+    char class_name[64];
+    int x, y, w, h;
+    bool active;
+    vod_tracked_attribute_t *attributes;
+    size_t num_attributes;
+} tracked_object_t;
+
+typedef struct object_map_entry {
+    uint32_t id;
+    tracked_object_t obj;
+    struct object_map_entry *next;
+} object_map_entry_t;
+
+typedef struct {
+    vod_callback_t cb;
+    void *user_data;
+    VOD__DetectorInformation *det_info;
+    video_object_detection_subscriber_class_t **det_classes;
+    int num_classes;
+    object_map_entry_t *object_map;
+} vod_internal_ctx_t;
+
+static vod_internal_ctx_t g_ctx = {0};
+static video_object_detection_subscriber_t *subscriber = NULL;
+
+static void free_tracked_object(tracked_object_t *obj) {
+    if (obj->attributes) free(obj->attributes);
+}
+
+static void clear_object_map(void) {
+    object_map_entry_t *entry = g_ctx.object_map;
+    while (entry) {
+        object_map_entry_t *next = entry->next;
+        free_tracked_object(&entry->obj);
+        free(entry);
+        entry = next;
+    }
+    g_ctx.object_map = NULL;
+}
+
+static tracked_object_t *get_or_create_tracked(uint32_t id) {
+    object_map_entry_t *entry = g_ctx.object_map;
+    while (entry) {
+        if (entry->id == id) return &entry->obj;
+        entry = entry->next;
+    }
+    entry = calloc(1, sizeof(*entry));
+    if (!entry) {
+        LOG_WARN("Memory allocation failed for tracked object id=%u", id);
+        return NULL;
+    }
+    entry->id = id;
+    entry->obj.active = true;
+    entry->next = g_ctx.object_map;
+    g_ctx.object_map = entry;
+    return &entry->obj;
+}
+
+static tracked_object_t *remove_tracked(uint32_t id) {
+    object_map_entry_t **pentry = &g_ctx.object_map;
+    while (*pentry) {
+        if ((*pentry)->id == id) {
+            object_map_entry_t *to_remove = *pentry;
+            *pentry = to_remove->next;
+            tracked_object_t *obj = malloc(sizeof(tracked_object_t));
+            if (obj) {
+                *obj = to_remove->obj;
+                if (to_remove->obj.num_attributes > 0) {
+                    obj->attributes = calloc(obj->num_attributes, sizeof(vod_tracked_attribute_t));
+                    memcpy(obj->attributes, to_remove->obj.attributes, obj->num_attributes * sizeof(vod_tracked_attribute_t));
+                }
+            }
+            free_tracked_object(&to_remove->obj);
+            free(to_remove);
+            return obj;
+        }
+        pentry = &(*pentry)->next;
+    }
+    return NULL;
+}
+
+static const char *get_class_name(int class_id) {
+    for (int i = 0; i < g_ctx.num_classes; ++i) {
+        if (video_object_detection_subscriber_det_class_id(g_ctx.det_classes[i]) == class_id)
+            return video_object_detection_subscriber_det_class_name(g_ctx.det_classes[i]);
+    }
+    return "Unknown";
+}
+
+static VOD__AttributeType *find_attr_type(uint32_t type_id) {
+    for (size_t i = 0; i < g_ctx.det_info->n_attribute_types; ++i) {
+        if (g_ctx.det_info->attribute_types[i]->id == type_id)
+            return g_ctx.det_info->attribute_types[i];
+    }
+    return NULL;
+}
+
+static const char *get_attr_type_name(uint32_t type_id) {
+    VOD__AttributeType *type = find_attr_type(type_id);
+    return (type && type->name) ? type->name : "UnknownType";
+}
+
+static const char *get_attr_class_name(uint32_t type_id, uint32_t class_id) {
+    VOD__AttributeType *type = find_attr_type(type_id);
+    if (!type) return "UnknownClass";
+    for (size_t i = 0; i < type->n_classes; ++i) {
+        if (type->classes[i]->id == class_id)
+            return type->classes[i]->name ? type->classes[i]->name : "UnknownClass";
+    }
+    return "UnknownClass";
+}
+
+static void transform_bbox(float left, float top, float right, float bottom, int *x, int *y, int *w, int *h) {
+    int x1 = (int)(left * 4096) + 4096;
+    int y1 = 4096 - (int)(top * 4096);
+    int x2 = (int)(right * 4096) + 4096;
+    int y2 = 4096 - (int)(bottom * 4096);
+    *x = (x1 * 1000) / 8192;
+    *y = (y1 * 1000) / 8192;
+    *w = ((x2 - x1) * 1000) / 8192;
+    *h = ((y2 - y1) * 1000) / 8192;
+}
+
+static void detection_callback(const uint8_t *data, size_t size, void *user_data) {
+    VOD__Scene *scene = vod__scene__unpack(NULL, size, data);
+    if (!scene) {
+        LOG_WARN("Failed to unpack detection protobuf data");
+        return;
+    }
+
+    // Handle DeleteOperation events
+    for (size_t e = 0; e < scene->n_events; ++e) {
+        VOD__Event *ev = scene->events[e];
+        if (ev->action == VOD__EVENT_ACTION__EVENT_DELETE) {
+            tracked_object_t *deleted = remove_tracked((uint32_t)ev->object_id);
+            if (deleted) {
+                deleted->active = false;
+                vod_object_t obj = {0};
+                snprintf(obj.id, sizeof(obj.id), "%u", ev->object_id);
+                obj.confidence = deleted->confidence;
+                obj.type = deleted->type;
+                strncpy(obj.class_name, deleted->class_name, sizeof(obj.class_name)-1);
+                obj.x = deleted->x; obj.y = deleted->y; obj.w = deleted->w; obj.h = deleted->h;
+                obj.active = false;
+                obj.num_attributes = deleted->num_attributes;
+                if (obj.num_attributes > 0) {
+                    obj.attributes = calloc(obj.num_attributes, sizeof(vod_attribute_t));
+                    for (size_t j = 0; j < obj.num_attributes; ++j) {
+                        obj.attributes[j].name = strdup(deleted->attributes[j].type_name);
+                        obj.attributes[j].value = strdup(deleted->attributes[j].class_name);
+                    }
+                }
+                g_ctx.cb(&obj, 1, g_ctx.user_data);
+                for (size_t j = 0; j < obj.num_attributes; ++j) {
+                    free(obj.attributes[j].name);
+                    free(obj.attributes[j].value);
+                }
+                free(obj.attributes);
+                free_tracked_object(deleted);
+                free(deleted);
+            } else {
+                LOG_WARN("Delete event for unknown object id=%d", ev->object_id);
+            }
+        }
+    }
+
+    // Process detections
+    size_t max_objs = scene->n_detections;
+    vod_object_t *out_objs = calloc(max_objs, sizeof(vod_object_t));
+    size_t out_count = 0;
+
+    for (size_t i = 0; i < scene->n_detections; ++i) {
+        VOD__Detection *det = scene->detections[i];
+        tracked_object_t *track = get_or_create_tracked(det->id);
+        if (!track) continue;
+
+        // Update max confidence and type
+        if (det->score > track->confidence) {
+            track->confidence = det->score;
+            track->type = det->det_class;
+            strncpy(track->class_name, get_class_name(det->det_class), sizeof(track->class_name)-1);
+        }
+
+        // Transform bbox
+        transform_bbox(det->left, det->top, det->right, det->bottom, &track->x, &track->y, &track->w, &track->h);
+
+        // Track attributes: for each type, keep max score
+        for (size_t a = 0; a < det->n_attributes; ++a) {
+            VOD__Attribute *attr = det->attributes[a];
+            if (attr->has_score_case != VOD__ATTRIBUTE__HAS_SCORE_SCORE) continue;
+
+            // Find if attribute type is already tracked
+            size_t idx = 0;
+            while (idx < track->num_attributes && track->attributes[idx].type_id != attr->type) idx++;
+
+            const char *type_name = get_attr_type_name(attr->type);
+            const char *class_name = get_attr_class_name(attr->type, attr->attr_class);
+
+            if (idx == track->num_attributes) {
+                // New attribute type
+                track->attributes = realloc(track->attributes, (track->num_attributes + 1) * sizeof(vod_tracked_attribute_t));
+                track->attributes[idx].type_id = attr->type;
+                strncpy(track->attributes[idx].type_name, type_name, sizeof(track->attributes[idx].type_name)-1);
+                track->attributes[idx].class_id = attr->attr_class;
+                strncpy(track->attributes[idx].class_name, class_name, sizeof(track->attributes[idx].class_name)-1);
+                track->attributes[idx].score = attr->score;
+                track->num_attributes++;
+            } else if (attr->score > track->attributes[idx].score) {
+                // Update only if score increases
+                track->attributes[idx].class_id = attr->attr_class;
+                strncpy(track->attributes[idx].class_name, class_name, sizeof(track->attributes[idx].class_name)-1);
+                track->attributes[idx].score = attr->score;
+            }
+        }
+
+        // Prepare output object for callback
+        vod_object_t *obj = &out_objs[out_count++];
+        snprintf(obj->id, sizeof(obj->id), "%u", det->id);
+        obj->confidence = track->confidence;
+        obj->type = track->type;
+        strncpy(obj->class_name, track->class_name, sizeof(obj->class_name)-1);
+        obj->x = track->x; obj->y = track->y; obj->w = track->w; obj->h = track->h;
+        obj->active = true;
+        obj->num_attributes = track->num_attributes;
+        if (obj->num_attributes > 0) {
+            obj->attributes = calloc(obj->num_attributes, sizeof(vod_attribute_t));
+            for (size_t j = 0; j < obj->num_attributes; ++j) {
+                obj->attributes[j].name = strdup(track->attributes[j].type_name);
+                obj->attributes[j].value = strdup(track->attributes[j].class_name);
+            }
+        }
+    }
+
+    if (out_count > 0)
+        g_ctx.cb(out_objs, out_count, g_ctx.user_data);
+
+    for (size_t i = 0; i < out_count; ++i) {
+        for (size_t j = 0; j < out_objs[i].num_attributes; ++j) {
+            free(out_objs[i].attributes[j].name);
+            free(out_objs[i].attributes[j].value);
+        }
+        free(out_objs[i].attributes);
+    }
+    free(out_objs);
+    vod__scene__free_unpacked(scene, NULL);
+}
+
+int VOD_Init(int channel, vod_callback_t cb, void *user_data) {
+    openlog("VOD", LOG_PID | LOG_CONS, LOG_USER);
+
+    if (!cb) {
+        LOG_WARN("Callback function is NULL in VOD_Init");
+        return -1;
+    }
+    memset(&g_ctx, 0, sizeof(g_ctx));
+    g_ctx.cb = cb;
+    g_ctx.user_data = user_data;
+
+    g_ctx.num_classes = video_object_detection_subscriber_det_classes_get(&g_ctx.det_classes);
+    if (g_ctx.num_classes <= 0) {
+        LOG_WARN("No detection classes found");
+        return -2;
+    }
+
+    uint8_t *buffer = NULL;
+    size_t size = 0;
+    if (video_object_detection_subscriber_get_detector_information(&buffer, &size) != 0) {
+        LOG_WARN("Failed to get detector information");
+        return -3;
+    }
+    g_ctx.det_info = vod__detector_information__unpack(NULL, size, buffer);
+    free(buffer);
+    if (!g_ctx.det_info) {
+        LOG_WARN("Failed to unpack detector information");
+        return -4;
+    }
+
+    if (video_object_detection_subscriber_create(&subscriber, NULL, channel) != 0) {
+        LOG_WARN("Failed to create subscriber");
+        return -5;
+    }
+    if (video_object_detection_subscriber_set_get_detection_callback(subscriber, detection_callback) != 0) {
+        LOG_WARN("Failed to set detection callback");
+        return -6;
+    }
+    if (video_object_detection_subscriber_subscribe(subscriber) != 0) {
+        LOG_WARN("Failed to subscribe to detection service");
+        return -7;
+    }
+    LOG("VOD_Init successful on channel %d", channel);
+    return 0;
+}
+
+void VOD_Shutdown(void) {
+    if (subscriber) {
+        video_object_detection_subscriber_unsubscribe(subscriber);
+        video_object_detection_subscriber_delete(&subscriber);
+        subscriber = NULL;
+    }
+    if (g_ctx.det_classes)
+        video_object_detection_subscriber_det_classes_free(g_ctx.det_classes, g_ctx.num_classes);
+    if (g_ctx.det_info)
+        vod__detector_information__free_unpacked(g_ctx.det_info, NULL);
+    clear_object_map();
+    closelog();
+    LOG("VOD_Shutdown completed");
+}
