@@ -288,6 +288,7 @@ Process_VOD_Data(cJSON *list) {
     char topic[128];
     LOG_TRACE("%s:\n", __func__);
 
+/*
 	if( cJSON_GetArraySize(list) ) {
 		sprintf(topic, "raw/%s", ACAP_DEVICE_Prop("serial"));
 		cJSON* payload = cJSON_CreateObject();
@@ -297,8 +298,7 @@ Process_VOD_Data(cJSON *list) {
 	}
 	
 	return;
-
-	return;
+*/
     // Detections (for visualization)
     if (publishDetections) {
         sprintf(topic, "detections/%s", ACAP_DEVICE_Prop("serial"));
@@ -307,7 +307,7 @@ Process_VOD_Data(cJSON *list) {
         cJSON* item = list->child;
 //		LOG("Detections: %d\n", cJSON_GetArraySize(list) );
         while (item) {
-            if (!Label_Blacklisted(item)) {
+            if (!Label_Blacklisted(item) && (JNUM(item, "distance") > 0 || JNUM(item, "age") > 0 )) {
                 cJSON* c = cJSON_CreateObject();
                 cJSON_AddStringToObject(c, "class", JSTR(item, "class"));
                 cJSON_AddNumberToObject(c, "confidence", JNUM(item, "confidence"));
