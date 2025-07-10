@@ -44,19 +44,22 @@ Tracker_Data(cJSON *tracker ) {
 	cJSON_Delete(tracker);
 }
 
+int lastDetectionsWasEmpty = 0;
 
 void
 Detections_Data (cJSON *list ) {
 	char topic[128];
 	cJSON* item = 0;
-	return;
 	//Detections
 	if( publishDetections) {
-		sprintf(topic,"detections/%s", ACAP_DEVICE_Prop("serial") );
-		cJSON* payload = cJSON_CreateObject();
-		cJSON_AddItemToObject( payload, "list", list );
-		MQTT_Publish_JSON(topic,payload,0,0);
-		cJSON_Delete( payload );
+		if( cJSON_GetArraySize(list) != 0 || lastDetectionsWasEmpty == 0) {
+			sprintf(topic,"detections/%s", ACAP_DEVICE_Prop("serial") );
+			cJSON* payload = cJSON_CreateObject();
+//			cJSON_AddItemReferenceToObject( payload, "list", list );
+//			MQTT_Publish_JSON(topic,payload,0,0);
+			cJSON_Delete( payload );
+		}
+		lastDetectionsWasEmpty = cJSON_GetArraySize(list) == 0;
 	}
 	
 /*

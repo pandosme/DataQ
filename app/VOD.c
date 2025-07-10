@@ -7,10 +7,11 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <errno.h>
+#include <stdbool.h>
+#include <glib.h>
 
 #define LOG(fmt, args...)    { syslog(LOG_INFO, fmt, ## args); printf(fmt, ## args);}
 #define LOG_WARN(fmt, args...)    { syslog(LOG_WARNING, fmt, ## args); printf(fmt, ## args);}
-//#define LOG_TRACE(fmt, args...)    { syslog(LOG_INFO, fmt, ## args); printf(fmt, ## args); }
 #define LOG_TRACE(fmt, args...)    {}
 
 typedef struct {
@@ -49,10 +50,12 @@ typedef struct {
 static vod_internal_ctx_t g_ctx = {0};
 static video_object_detection_subscriber_t *subscriber = NULL;
 
+// --- Helper to free a tracked object ---
 static void free_tracked_object(tracked_object_t *obj) {
     if (obj->attributes) free(obj->attributes);
 }
 
+// --- Helper to clear the entire object map ---
 static void clear_object_map(void) {
     object_map_entry_t *entry = g_ctx.object_map;
     while (entry) {
@@ -64,6 +67,7 @@ static void clear_object_map(void) {
     g_ctx.object_map = NULL;
 }
 
+// --- Get or create a tracked object by id ---
 static tracked_object_t *get_or_create_tracked(uint32_t id) {
     object_map_entry_t *entry = g_ctx.object_map;
     while (entry) {
@@ -82,29 +86,22 @@ static tracked_object_t *get_or_create_tracked(uint32_t id) {
     return &entry->obj;
 }
 
-static tracked_object_t *remove_tracked(uint32_t id) {
+// --- Remove all inactive objects from the cache ---
+static void remove_inactive_objects_from_cache(void) {
     object_map_entry_t **pentry = &g_ctx.object_map;
     while (*pentry) {
-        if ((*pentry)->id == id) {
+        if (!(*pentry)->obj.active) {
             object_map_entry_t *to_remove = *pentry;
             *pentry = to_remove->next;
-            tracked_object_t *obj = malloc(sizeof(tracked_object_t));
-            if (obj) {
-                *obj = to_remove->obj;
-                if (to_remove->obj.num_attributes > 0) {
-                    obj->attributes = calloc(obj->num_attributes, sizeof(vod_tracked_attribute_t));
-                    memcpy(obj->attributes, to_remove->obj.attributes, obj->num_attributes * sizeof(vod_tracked_attribute_t));
-                }
-            }
             free_tracked_object(&to_remove->obj);
             free(to_remove);
-            return obj;
+        } else {
+            pentry = &(*pentry)->next;
         }
-        pentry = &(*pentry)->next;
     }
-    return NULL;
 }
 
+// --- Attribute/class utilities ---
 static const char *get_class_name(int class_id) {
     for (int i = 0; i < g_ctx.num_classes; ++i) {
         if (video_object_detection_subscriber_det_class_id(g_ctx.det_classes[i]) == class_id)
@@ -136,6 +133,7 @@ static const char *get_attr_class_name(uint32_t type_id, uint32_t class_id) {
     return "UnknownClass";
 }
 
+// --- Bounding box transformation ---
 static void transform_bbox(float left, float top, float right, float bottom, int *x, int *y, int *w, int *h) {
     int x1 = (int)(left * 4096) + 4096;
     int y1 = 4096 - (int)(top * 4096);
@@ -147,59 +145,31 @@ static void transform_bbox(float left, float top, float right, float bottom, int
     *h = ((y2 - y1) * 1000) / 8192;
 }
 
+// --- Main detection callback ---
 static void detection_callback(const uint8_t *data, size_t size, void *user_data) {
     VOD__Scene *scene = vod__scene__unpack(NULL, size, data);
-	LOG_TRACE("<");
-	
+    LOG_TRACE("<");
+
     if (!scene) {
         LOG_WARN("%s: Failed to unpack detection protobuf data",__func__);
-		LOG_TRACE(">\n");
+        LOG_TRACE(">\n");
         return;
     }
 
-    // Handle DeleteOperation events
+    // 1. Handle DeleteOperation events: just mark as inactive
     for (size_t e = 0; e < scene->n_events; ++e) {
         VOD__Event *ev = scene->events[e];
         if (ev->action == VOD__EVENT_ACTION__EVENT_DELETE) {
-            tracked_object_t *deleted = remove_tracked((uint32_t)ev->object_id);
-            if (deleted) {
-                deleted->active = false;
-                vod_object_t obj = {0};
-                snprintf(obj.id, sizeof(obj.id), "%u", ev->object_id);
-                obj.confidence = deleted->confidence;
-                obj.type = deleted->type;
-                strncpy(obj.class_name, deleted->class_name, sizeof(obj.class_name)-1);
-				obj.class_name[sizeof(obj.class_name) - 1] = '\0';
-				if( strlen(obj.class_name) < 1 ) LOG_WARN("%s: Invalid obj.class_name",__func__);
-                obj.x = deleted->x; obj.y = deleted->y; obj.w = deleted->w; obj.h = deleted->h;
-                obj.active = false;
-                obj.num_attributes = deleted->num_attributes;
-                if (obj.num_attributes > 0) {
-                    obj.attributes = calloc(obj.num_attributes, sizeof(vod_attribute_t));
-                    for (size_t j = 0; j < obj.num_attributes; ++j) {
-                        obj.attributes[j].name = strdup(deleted->attributes[j].type_name);
-                        obj.attributes[j].value = strdup(deleted->attributes[j].class_name);
-                    }
-                }
-                g_ctx.cb(&obj, 1, g_ctx.user_data);
-                for (size_t j = 0; j < obj.num_attributes; ++j) {
-                    free(obj.attributes[j].name);
-                    free(obj.attributes[j].value);
-                }
-                free(obj.attributes);
-                free_tracked_object(deleted);
-                free(deleted);
+            tracked_object_t *track = get_or_create_tracked((uint32_t)ev->object_id);
+            if (track) {
+                track->active = false;
             } else {
                 LOG_WARN("Delete event for unknown object id=%d", ev->object_id);
             }
         }
     }
 
-    // Process detections
-    size_t max_objs = scene->n_detections;
-    vod_object_t *out_objs = calloc(max_objs, sizeof(vod_object_t));
-    size_t out_count = 0;
-
+    // 2. Process detections (update/create objects, mark as active)
     for (size_t i = 0; i < scene->n_detections; ++i) {
         VOD__Detection *det = scene->detections[i];
         tracked_object_t *track = get_or_create_tracked(det->id);
@@ -210,9 +180,9 @@ static void detection_callback(const uint8_t *data, size_t size, void *user_data
             track->confidence = det->score;
             track->type = det->det_class;
             strncpy(track->class_name, get_class_name(det->det_class), sizeof(track->class_name)-1);
-			track->class_name[sizeof(track->class_name) - 1] = '\0';
-			if( strlen(track->class_name) < 1 ) LOG_WARN("%s: Invalid track->class_name",__func__);
-			
+            track->class_name[sizeof(track->class_name) - 1] = '\0';
+            if (strlen(track->class_name) < 1)
+                LOG_WARN("%s: Invalid track->class_name",__func__);
         }
 
         // Transform bbox
@@ -235,36 +205,55 @@ static void detection_callback(const uint8_t *data, size_t size, void *user_data
                 track->attributes = realloc(track->attributes, (track->num_attributes + 1) * sizeof(vod_tracked_attribute_t));
                 track->attributes[idx].type_id = attr->type;
                 strncpy(track->attributes[idx].type_name, type_name, sizeof(track->attributes[idx].type_name)-1);
-				track->attributes[idx].type_name[sizeof(track->attributes[idx].type_name) - 1] = '\0';
-				if( strlen(track->class_name) < 1 ) LOG_WARN("%s: Invalid track->attributes[idx].type_name",__func__);
-				
+                track->attributes[idx].type_name[sizeof(track->attributes[idx].type_name) - 1] = '\0';
+                if (strlen(track->attributes[idx].type_name) < 1)
+                    LOG_WARN("%s: Invalid track->attributes[idx].type_name",__func__);
+
                 track->attributes[idx].class_id = attr->attr_class;
                 strncpy(track->attributes[idx].class_name, class_name, sizeof(track->attributes[idx].class_name)-1);
-				track->attributes[idx].class_name[sizeof(track->attributes[idx].class_name) - 1] = '\0';
-				if( strlen(track->attributes[idx].class_name) < 1 ) LOG_WARN("%s: track->attributes[idx].class_name",__func__);
+                track->attributes[idx].class_name[sizeof(track->attributes[idx].class_name) - 1] = '\0';
+                if (strlen(track->attributes[idx].class_name) < 1)
+                    LOG_WARN("%s: track->attributes[idx].class_name",__func__);
                 track->attributes[idx].score = attr->score;
                 track->num_attributes++;
             } else if (attr->score > track->attributes[idx].score) {
                 // Update only if score increases
                 track->attributes[idx].class_id = attr->attr_class;
                 strncpy(track->attributes[idx].class_name, class_name, sizeof(track->attributes[idx].class_name)-1);
-				track->attributes[idx].class_name[sizeof(track->attributes[idx].class_name) - 1] = '\0';
-				if( strlen(track->attributes[idx].class_name) < 1 ) LOG_WARN("%s: track->attributes[idx].class_name",__func__);
+                track->attributes[idx].class_name[sizeof(track->attributes[idx].class_name) - 1] = '\0';
+                if (strlen(track->attributes[idx].class_name) < 1)
+                    LOG_WARN("%s: track->attributes[idx].class_name",__func__);
                 track->attributes[idx].score = attr->score;
             }
         }
+        // Mark as active on detection
+        track->active = true;
+    }
 
-        // Prepare output object for callback
+    // 3. Prepare ALL objects in cache for callback
+    //    Count objects
+    size_t count = 0;
+    for (object_map_entry_t *entry = g_ctx.object_map; entry; entry = entry->next)
+        ++count;
+
+    vod_object_t *out_objs = calloc(count, sizeof(vod_object_t));
+    size_t out_count = 0;
+
+    for (object_map_entry_t *entry = g_ctx.object_map; entry; entry = entry->next) {
+        tracked_object_t *track = &entry->obj;
         vod_object_t *obj = &out_objs[out_count++];
-        snprintf(obj->id, sizeof(obj->id), "%u", det->id);
+        snprintf(obj->id, sizeof(obj->id), "%u", entry->id);
         obj->confidence = track->confidence;
         obj->type = track->type;
         strncpy(obj->class_name, track->class_name, sizeof(obj->class_name)-1);
-		obj->class_name[sizeof(obj->class_name) - 1] = '\0';
-		if( strlen(obj->class_name) < 1 ) LOG_WARN("%s: obj->class_name",__func__);
-		
+        obj->class_name[sizeof(obj->class_name) - 1] = '\0';
+        if (strlen(obj->class_name) < 1) {
+			sprintf(obj->class_name,"Invlaid");
+            LOG_WARN("%s: obj->class_name",__func__);
+		}
+
         obj->x = track->x; obj->y = track->y; obj->w = track->w; obj->h = track->h;
-        obj->active = true;
+        obj->active = track->active;
         obj->num_attributes = track->num_attributes;
         if (obj->num_attributes > 0) {
             obj->attributes = calloc(obj->num_attributes, sizeof(vod_attribute_t));
@@ -275,9 +264,11 @@ static void detection_callback(const uint8_t *data, size_t size, void *user_data
         }
     }
 
+    // 4. Send all objects to callback
     if (out_count > 0)
         g_ctx.cb(out_objs, out_count, g_ctx.user_data);
 
+    // 5. Free output allocation
     for (size_t i = 0; i < out_count; ++i) {
         for (size_t j = 0; j < out_objs[i].num_attributes; ++j) {
             free(out_objs[i].attributes[j].name);
@@ -286,12 +277,27 @@ static void detection_callback(const uint8_t *data, size_t size, void *user_data
         free(out_objs[i].attributes);
     }
     free(out_objs);
+
+    // 6. Remove all inactive objects from cache
+    remove_inactive_objects_from_cache();
+
     vod__scene__free_unpacked(scene, NULL);
-	LOG_TRACE(">\n");
+    LOG_TRACE(">\n");
 }
 
+// --- Optional: Periodic debug function ---
+gboolean
+VOD_Debug_timer(gpointer user_data) {
+    int count = 0;
+    for (object_map_entry_t *entry = g_ctx.object_map; entry; entry = entry->next)
+        ++count;
+    LOG("VOD Cache: %d\n", count);
+    return G_SOURCE_CONTINUE; // Return TRUE to keep the timer running
+}
+
+// --- Initialization and shutdown ---
 int VOD_Init(int channel, vod_callback_t cb, void *user_data) {
-	LOG_TRACE("%s: Entry\n",__func__);
+    LOG_TRACE("%s: Entry\n",__func__);
     if (!cb) {
         LOG_WARN("%s: Callback function is NULL", __func__);
         return -1;
@@ -332,6 +338,8 @@ int VOD_Init(int channel, vod_callback_t cb, void *user_data) {
         return -7;
     }
     LOG_TRACE("%s: Successful on channel %d", __func__, channel);
+    g_timeout_add_seconds(60, VOD_Debug_timer, NULL);
+
     return 0;
 }
 
@@ -347,5 +355,5 @@ void VOD_Shutdown(void) {
         vod__detector_information__free_unpacked(g_ctx.det_info, NULL);
     clear_object_map();
     closelog();
-    LOG("VOD_Shutdown completed");
+    LOG("VOD_Shutdown completed\n");
 }
