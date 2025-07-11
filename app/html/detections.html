@@ -229,7 +229,7 @@ $(document).ready(function() {
 			$("#scene-cog").val(app.settings.scene.cog);
 			$("#scene-maxIdle").val(app.settings.scene.maxIdle);
 
-			const labelSelector = new LabelSelector('labelSelector', app.settings.scene.ignoreClass, labelsUpdated);
+			const labelSelector = new LabelSelector('labelSelector', app.status.detections.labels, app.settings.scene.ignoreClass, labelsUpdated);
 
 			if( app.status.mqtt.connected ) {
 				ConnectWebSocketClient();

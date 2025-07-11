@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include "cJSON.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,6 +36,7 @@ typedef void (*vod_callback_t)(const vod_object_t *objects, size_t num_objects, 
  * @return 0 on success, negative on error.
  */
 int VOD_Init(int channel, vod_callback_t cb, void *user_data);
+cJSON* VOD_Labels_List();
 
 /**
  * Shutdown and free all resources.

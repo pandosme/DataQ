@@ -44,13 +44,17 @@ static const NameMapEntry name_map[] = {
     { "bus", "Bus" },
     { "truck","Truck" },
     { "vehicle_other","Vehicle" },
+    { "vehicle","Vehicle" },	
+	{ "license_plate", "LicensePlate" },
     { "human", "Human" },
-
+    { "human_face", "Head" },
+    { "human_head", "Head" },
+    { "head", "Head" },
+    { "face", "Head" },	
     { "hat", "Hat" },
     { "no_hat", "" },
     { "hat_other", "Hat" },
     { "hard_hat", "Helmet" },
-
     { "bag", "Bag" },
     { "bag_other", "Bag" },
     { "backpack", "Bag" },
@@ -75,20 +79,22 @@ typedef struct {
     char class_name[64];
     int confidence;
     int x, y, w, h;
-    int cx, cy; // Center
-    int bx, by; // Birth position (center)
-    int dx, dy; // Total delta displacement
+    int cx, cy;
+    int bx, by;
+    int dx, dy;
+    double timestamp; // ms epoch
     double birthTime; // ms epoch
-    double lastTime;  // ms epoch
     int prev_cx, prev_cy;
+	int distance;
     double age;     // seconds
-	int	distance;
     bool valid;
     bool idle;
     bool sleep;
+	bool trackerSleep;	
     double idle_duration; // seconds
-    double prev_idle_duration; // seconds	
+    double max_idle_duration; // seconds
     double idle_start_time; // ms epoch
+	double last_published_tracker;  //The timestamp the tracker was published
 	od_attribute_t *attributes; // Dynamically allocated array
 	size_t num_attributes;      // Number of attributes
     bool active;
@@ -97,7 +103,7 @@ typedef struct {
 static GHashTable *detectionCache = NULL;
 
 static int config_tracker_confidence = 1;
-static int config_min_confidence = 40;
+static int config_min_confidence = 50;
 static int config_cog = 0;
 static int config_rotation = 0;
 static int config_max_idle = 0;
@@ -211,7 +217,21 @@ void ObjectDetection_Config(cJSON* data) {
         config_y1 = cJSON_GetObjectItem(aoi, "y1") ? cJSON_GetObjectItem(aoi, "y1")->valueint : 0;
         config_y2 = cJSON_GetObjectItem(aoi, "y2") ? cJSON_GetObjectItem(aoi, "y2")->valueint : 1000;
     }
+	
+	json = cJSON_PrintUnformatted(config_blacklist);
+	if(json) {
+		LOG_TRACE("%s: Blacklist: %s",__func__,json);
+		free(json);
+	}	
     LOG_TRACE("%s: Exit\n", __func__);
+}
+
+void ObjectDetection_Reset() {
+    if (detectionCache) {
+        g_hash_table_destroy(detectionCache);
+        detectionCache = NULL;
+    }
+    detectionCache = g_hash_table_new_full(g_str_hash, g_str_equal, free, free);
 }
 
 static void free_attributes(GHashTable *attrs) {
@@ -232,23 +252,122 @@ static void free_detection_cache_entry(gpointer data) {
     free(entry);
 }
 
-void ObjectDetection_Reset() {
-	LOG_TRACE("%s: Entry",__func__);
-    if (detectionCache) {
-        g_hash_table_destroy(detectionCache);
-        detectionCache = NULL;
-    }
-	detectionCache = g_hash_table_new_full(g_str_hash, g_str_equal, free, free_detection_cache_entry);	
-	LOG_TRACE("%s: Exit",__func__);
+static void publish_tracker( detection_cache_entry_t *entry ) {
+    cJSON *obj = cJSON_CreateObject();
+    if (!obj || !entry || !entry->id) return;
+	if (!entry->valid || entry->trackerSleep) return;
+	if (entry->age < 0.2 ) return;
+	if (!entry->distance < IDLE_THRESHOLD_PCT ) return;
+	const char* label = NiceName(entry->class_name);
+    if (!label) return;
+	if (ObjectDetection_Blacklisted(label)) return;
+
+    cJSON_AddStringToObject(obj, "class", label);
+    cJSON_AddNumberToObject(obj, "confidence", entry->confidence);
+    cJSON_AddNumberToObject(obj, "age", entry->age);
+    cJSON_AddNumberToObject(obj, "distance", entry->distance/10);
+    cJSON_AddNumberToObject(obj, "x", entry->x);
+    cJSON_AddNumberToObject(obj, "y", entry->y);
+    cJSON_AddNumberToObject(obj, "w", entry->w);
+    cJSON_AddNumberToObject(obj, "h", entry->h);
+    cJSON_AddNumberToObject(obj, "cx", entry->cx);
+    cJSON_AddNumberToObject(obj, "cy", entry->cy);
+    cJSON_AddNumberToObject(obj, "dx", entry->dx);
+    cJSON_AddNumberToObject(obj, "dy", entry->dy);
+    cJSON_AddNumberToObject(obj, "bx", entry->bx);
+    cJSON_AddNumberToObject(obj, "by", entry->by);
+    cJSON_AddNumberToObject(obj, "timestamp", entry->timestamp);
+    cJSON_AddNumberToObject(obj, "idle", entry->idle_duration);	
+    cJSON_AddStringToObject(obj, "id", entry->id);
+	if( entry->sleep && !entry->trackerSleep) {
+		cJSON_AddBoolToObject(obj, "active", 0);
+		entry->trackerSleep = 1;
+	} else {
+		cJSON_AddBoolToObject(obj, "active", entry->active);
+	}
+	for (size_t a = 0; a < entry->num_attributes; ++a) {
+		if (strlen(entry->attributes[a].name) && strlen(entry->attributes[a].value)) {
+			const char* aKey = entry->attributes[a].name;
+			const char* aValue = entry->attributes[a].value;
+			if( strcmp("vehicle_type",aKey) == 0 ) {
+				cJSON_ReplaceItemInObject(obj,"class",cJSON_CreateString(NiceName(aValue)));
+				aKey = 0;
+				aValue = 0;
+			}
+			if( aKey && strcmp("vehicle_color",aKey) ) {
+				cJSON_AddStringToObject(obj,"color",NiceName(aValue));
+				aKey = 0;
+				aValue = 0;
+			}
+			if( aKey && strcmp("clothing_upper_color",aKey) ) {
+				cJSON_AddStringToObject(obj,"color",NiceName(aValue));
+				aKey = 0;
+				aValue = 0;
+			}
+			if( aKey && strcmp("clothing_lower_color",aKey) ) {
+				cJSON_AddStringToObject(obj,"color2",NiceName(aValue));
+				aKey = 0;
+				aValue = 0;
+			}
+			if( aKey && strcmp("hat_type",aKey) ) {
+				if( strcmp("no_hat", aValue ) != 0 )
+					cJSON_AddStringToObject(obj,"type",NiceName(aValue));
+				aKey = 0;
+				aValue = 0;
+			}
+
+			if( aKey && strcmp("bag_type",aKey) ) {
+				cJSON_AddStringToObject(obj,"type",NiceName(aValue));
+				aKey = 0;
+				aValue = 0;
+			}
+
+			if( aKey && strcmp("human_face_visibility",aKey) ) {
+				if( strcmp( aValue,"face_visible") == 0 )
+					cJSON_AddTrueToObject(obj,"face");
+				else
+					cJSON_AddFalseToObject(obj,"face");
+				aKey = 0;
+				aValue = 0;
+			}
+			if( aKey && strcmp("human_pose",aKey) == 0 ) {
+				if( strcmp( aValue,"down") == 0 )
+					cJSON_AddTrueToObject(obj,"isOnGround");
+				else
+					cJSON_AddFalseToObject(obj,"isOnGround");
+				aKey = 0;
+				aValue = 0;
+			}
+				
+			if( aKey && aValue )
+				cJSON_AddStringToObject(obj, entry->attributes[a].name, entry->attributes[a].value);
+		}
+	}
+	entry->idle_duration = get_epoch_ms();
+	if( trackerCallback )
+		trackerCallback(obj);
 }
 
-int lastCounterWasZero = 0;
+gboolean update_trackers(gpointer user_data) {
+	if( !detectionCache )
+		return TRUE;
+	double now = get_epoch_ms();
+    GHashTableIter iter;
+    gpointer key, value;
+    g_hash_table_iter_init(&iter, detectionCache);
+	
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
+        detection_cache_entry_t *entry = (detection_cache_entry_t*)value;
+		if( now - entry->last_published_tracker > 1500 )
+			publish_tracker(entry);
+	}
+    return TRUE; 
+}
+
 
 // Defensive, robust implementation of publish_detections
-static void publish_detections(GHashTable *cache, ObjectDetection_Callback cb) {
-
-    if (!cb || !cache) return;
-
+static void publish_detections(GHashTable *cache) {
+    if (!cache) return;
     cJSON *arr = cJSON_CreateArray();
     if (!arr) return;
 
@@ -258,18 +377,19 @@ static void publish_detections(GHashTable *cache, ObjectDetection_Callback cb) {
 
     while (g_hash_table_iter_next(&iter, &key, &value)) {
         detection_cache_entry_t *entry = (detection_cache_entry_t*)value;
-        if (!entry) continue;
+
         cJSON *obj = cJSON_CreateObject();
-        if (!obj) continue;
-        if (!entry->class_name || !entry->id) continue;
-        if( entry->age < 0.30 ) continue;
-		if( !entry->valid ) continue;
-		if( entry->confidence < config_min_confidence ) continue;
+        if (!obj || !entry || !entry->id) continue;
+		if (!entry->valid || entry->sleep) continue;
+		const char* label = NiceName(entry->class_name);
+        if (!label) continue;
+		if (ObjectDetection_Blacklisted(label)) continue;
 
 //LOG("%s %s %f %d",entry->class_name,entry->id,entry->age, entry->active);
-        cJSON_AddStringToObject(obj, "class", NiceName(entry->class_name));
+        cJSON_AddStringToObject(obj, "class", label);
         cJSON_AddNumberToObject(obj, "confidence", entry->confidence);
         cJSON_AddNumberToObject(obj, "age", entry->age);
+        cJSON_AddNumberToObject(obj, "distance", entry->distance/10);
         cJSON_AddNumberToObject(obj, "x", entry->x);
         cJSON_AddNumberToObject(obj, "y", entry->y);
         cJSON_AddNumberToObject(obj, "w", entry->w);
@@ -278,13 +398,15 @@ static void publish_detections(GHashTable *cache, ObjectDetection_Callback cb) {
         cJSON_AddNumberToObject(obj, "cy", entry->cy);
         cJSON_AddNumberToObject(obj, "dx", entry->dx);
         cJSON_AddNumberToObject(obj, "dy", entry->dy);
-        cJSON_AddNumberToObject(obj, "bx", entry->bx);
-        cJSON_AddNumberToObject(obj, "by", entry->by);
-        cJSON_AddNumberToObject(obj, "timestamp", entry->lastTime);
-        cJSON_AddNumberToObject(obj, "birthTime", entry->birthTime);
+        cJSON_AddNumberToObject(obj, "timestamp", entry->timestamp);
+        cJSON_AddNumberToObject(obj, "idle", entry->idle_duration);
         cJSON_AddStringToObject(obj, "id", entry->id);
-        cJSON_AddBoolToObject(obj, "idle", entry->idle);
-        cJSON_AddBoolToObject(obj, "active", entry->active);
+		if( config_max_idle && entry->idle_duration > config_max_idle && entry->active ) {
+			cJSON_AddBoolToObject(obj, "active", 0);
+			entry->sleep = true;
+		} else {			
+			cJSON_AddBoolToObject(obj, "active", entry->active);
+		}
 		for (size_t a = 0; a < entry->num_attributes; ++a) {
 			if (strlen(entry->attributes[a].name) && strlen(entry->attributes[a].value)) {
 				const char* aKey = entry->attributes[a].name;
@@ -294,28 +416,48 @@ static void publish_detections(GHashTable *cache, ObjectDetection_Callback cb) {
 					aKey = 0;
 					aValue = 0;
 				}
-
-				if( aKey && strcmp("vehicle_color",aKey) ) {
+				if( aKey && strcmp("vehicle_color",aKey) == 0) {
 					cJSON_AddStringToObject(obj,"color",NiceName(aValue));
 					aKey = 0;
 					aValue = 0;
-					
 				}
-
-				if( aKey && strcmp("clothing_upper_color",aKey) ) {
+				if( aKey && strcmp("clothing_upper_color",aKey) == 0) {
 					cJSON_AddStringToObject(obj,"color",NiceName(aValue));
 					aKey = 0;
 					aValue = 0;
-					
 				}
-
-				if( aKey && strcmp("clothing_lower_color",aKey) ) {
+				if( aKey && strcmp("clothing_lower_color",aKey) == 0) {
 					cJSON_AddStringToObject(obj,"color2",NiceName(aValue));
 					aKey = 0;
 					aValue = 0;
-					
 				}
-				
+				if( aKey && strcmp("hat_type",aKey) == 0) {
+					if( strcmp("no_hat", aValue ) != 0 )
+						cJSON_AddStringToObject(obj,"type",NiceName(aValue));
+					aKey = 0;
+					aValue = 0;
+				}
+				if( aKey && strcmp("bag_type",aKey) == 0) {
+					cJSON_AddStringToObject(obj,"type",NiceName(aValue));
+					aKey = 0;
+					aValue = 0;
+				}
+				if( aKey && strcmp("human_face_visibility",aKey) == 0 ) {
+					if( strcmp( aValue,"face_visible") == 0 )
+						cJSON_AddTrueToObject(obj,"face");
+					else
+						cJSON_AddFalseToObject(obj,"face");
+					aKey = 0;
+					aValue = 0;
+				}
+				if( aKey && strcmp("human_pose",aKey) == 0 ) {
+					if( strcmp( aValue,"down") == 0 )
+						cJSON_AddTrueToObject(obj,"isOnGround");
+					else
+						cJSON_AddFalseToObject(obj,"isOnGround");
+					aKey = 0;
+					aValue = 0;
+				}
 				if( aKey && aValue )
 					cJSON_AddStringToObject(obj, entry->attributes[a].name, entry->attributes[a].value);
 			} else {
@@ -324,9 +466,8 @@ static void publish_detections(GHashTable *cache, ObjectDetection_Callback cb) {
 		}
         cJSON_AddItemToArray(arr, obj);
     }
-
-//	cb(arr);
-    cJSON_Delete(arr);
+	if( detectionsCallback )
+		detectionsCallback(arr);
 }
 
 static od_attribute_t *clone_attributes(const vod_attribute_t *src, size_t num, size_t *out_num) {
@@ -367,6 +508,7 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
     for (size_t i = 0; i < num_objects; ++i) {
         const vod_object_t *obj = &objects[i];
         if (!obj || !obj->class_name) continue;
+
         int rx, ry, rw, rh;
         rotate_bbox(obj->x, obj->y, obj->w, obj->h, &rx, &ry, &rw, &rh, config_rotation);
 
@@ -408,21 +550,20 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
             entry->h = rh;
             entry->cx = cx;
             entry->cy = cy;
-            entry->bx = cx;
-            entry->by = cy;
             entry->dx = 0;
             entry->dy = 0;
+            entry->bx = cx;
+            entry->by = cy;
             entry->birthTime = now;
-            entry->lastTime = now;
             entry->prev_cx = cx;
             entry->prev_cy = cy;
             entry->age = 0.0f;
-            entry->distance = 0.0f;
-            entry->valid = valid;
+			entry->max_idle_duration = 0;
+//            entry->valid = valid;
             entry->idle = false;
-            entry->sleep = false;
+			entry->sleep = false;
+			entry->trackerSleep = false;
             entry->idle_duration = 0.0f;
-			entry->prev_idle_duration = 0.0f;
             entry->idle_start_time = now;
 			entry->attributes = clone_attributes(obj->attributes, obj->num_attributes, &entry->num_attributes);
             entry->active = obj->active;
@@ -441,37 +582,43 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
                     entry->idle_start_time = now;
                 }
                 entry->idle_duration = (now - entry->idle_start_time) / 1000.0f;
+				if( entry->idle_duration > entry->max_idle_duration )
+					entry->max_idle_duration = entry->idle_duration;
             } else {
 				if( entry->sleep ) {
+					entry->sleep = false;
 					entry->bx = cx;
 					entry->by = cy;
-					entry->birthTime = now;
-					entry->lastTime = now;
-					entry->prev_cx = cx;
-					entry->prev_cy = cy;
 					entry->dx = 0;
 					entry->dy = 0;
+					entry->birthTime = now;
+					entry->prev_cx = cx;
+					entry->prev_cy = cy;
 					entry->age = 0.0f;
-					entry->distance = 0.0f;
+					entry->max_idle_duration = 0;
+					entry->distance = 0;
+					dist = 0;
 				}
-                entry->idle = false;
-				entry->sleep = false;
-				entry->prev_idle_duration = entry->idle_duration;
-                entry->idle_duration = 0.0f;
+				entry->trackerSleep = false;
 				entry->distance += dist;
+                entry->idle = false;
+				publish_tracker( entry );
+                entry->idle_duration = 0.0f;
                 entry->idle_start_time = now;
                 entry->prev_cx = cx;
                 entry->prev_cy = cy;
             }
             entry->confidence = obj->confidence;
-            entry->x = rx;
+			entry->timestamp = now;
+			entry->x = rx;
             entry->y = ry;
             entry->w = rw;
             entry->h = rh;
-            entry->dx = cx - entry->bx;
-            entry->dx = cy - entry->by;
+			entry->cx = cx;
+			entry->cy = cy;
+			entry->dx = cx - entry->bx;
+			entry->dy = cy - entry->by;
             entry->age = round(10.0 * ((now - entry->birthTime) / 1000.0)) / 10.0;
-            entry->lastTime = now;
             entry->valid = valid;
 
 			if (entry->attributes) {
@@ -484,7 +631,7 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
         }
     }
 
-    publish_detections(detectionCache, detectionsCallback);
+    publish_detections(detectionCache);
 
     // Remove all objects with active == false after publishing
     g_hash_table_iter_init(&iter, detectionCache);
@@ -501,13 +648,6 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
     g_list_free(remove_list);
 }
 
-gboolean
-ObjectDetection_Debug_timer(gpointer user_data) {
-    // Your code to run every minute
-	LOG_TRACE("Object Cache: %d", g_hash_table_size(detectionCache));
-    return G_SOURCE_CONTINUE; // Return TRUE to keep the timer running
-}
-
 int ObjectDetection_Init(ObjectDetection_Callback detections, ObjectDetection_Callback tracker) {
 	LOG_TRACE("%s: Entry\n",__func__);
     detectionsCallback = detections;
@@ -519,7 +659,17 @@ int ObjectDetection_Init(ObjectDetection_Callback detections, ObjectDetection_Ca
 		LOG_TRACE("%s: Exit\n",__func__);
         return 0;
     }
-	g_timeout_add_seconds(60, ObjectDetection_Debug_timer, NULL);	
+	cJSON* list = VOD_Labels_List();
+	cJSON* labels = cJSON_CreateArray();
+	cJSON* item = list->child;
+	while(item) {
+		const char* label = NiceName(item->valuestring);
+		if( label )
+			cJSON_AddItemToArray(labels,cJSON_CreateString(label));
+		item = item->next;
+	}
+	ACAP_STATUS_SetObject("detections", "labels", labels);
+	g_timeout_add_seconds(1, update_trackers, NULL);	
 	LOG_TRACE("%s: Exit\n",__func__);
     return 1;
 }

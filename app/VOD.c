@@ -47,6 +47,8 @@ typedef struct {
     object_map_entry_t *object_map;
 } vod_internal_ctx_t;
 
+cJSON* VOD_labels = 0;
+
 static vod_internal_ctx_t g_ctx = {0};
 static video_object_detection_subscriber_t *subscriber = NULL;
 
@@ -295,6 +297,10 @@ VOD_Debug_timer(gpointer user_data) {
     return G_SOURCE_CONTINUE; // Return TRUE to keep the timer running
 }
 
+cJSON* VOD_Labels_List() {
+	return VOD_labels;
+}
+
 // --- Initialization and shutdown ---
 int VOD_Init(int channel, vod_callback_t cb, void *user_data) {
     LOG_TRACE("%s: Entry\n",__func__);
@@ -311,6 +317,10 @@ int VOD_Init(int channel, vod_callback_t cb, void *user_data) {
         LOG_WARN("%s: No detection classes found", __func__);
         return -2;
     }
+	int i = 0;
+	VOD_labels = cJSON_CreateArray();
+	for( i = 0; i < g_ctx.num_classes; i++)
+		cJSON_AddItemToArray(VOD_labels, cJSON_CreateString(video_object_detection_subscriber_det_class_name(g_ctx.det_classes[i])));
 
     uint8_t *buffer = NULL;
     size_t size = 0;
@@ -338,7 +348,7 @@ int VOD_Init(int channel, vod_callback_t cb, void *user_data) {
         return -7;
     }
     LOG_TRACE("%s: Successful on channel %d", __func__, channel);
-    g_timeout_add_seconds(60, VOD_Debug_timer, NULL);
+//    g_timeout_add_seconds(60, VOD_Debug_timer, NULL);
 
     return 0;
 }

@@ -1,4 +1,4 @@
-function LabelSelector(elementId, ignoreLabels, callback) {
+function LabelSelector(elementId, labelsList, ignoreLabels, callback) {
   if (typeof callback !== 'function') {
     console.error('Callback must be a function.');
     return;
@@ -11,9 +11,7 @@ function LabelSelector(elementId, ignoreLabels, callback) {
   }
 
   // Define all possible labels
-  const allLabels = [
-    "Human", "Face", "Car", "Truck", "Bus", "Vehicle", "Bike", "Object"
-  ];
+  const allLabels = labelsList;
 
   // Generate HTML for checkboxes
   let html = '';
