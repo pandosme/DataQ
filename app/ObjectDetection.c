@@ -129,6 +129,25 @@ static double get_epoch_ms() {
     return (double)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 }
 
+
+static void free_attributes(GHashTable *attrs) {
+    if (!attrs) return;
+    GHashTableIter iter;
+    gpointer key, value;
+    g_hash_table_iter_init(&iter, attrs);
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
+        free(key);
+        free(value);
+    }
+    g_hash_table_destroy(attrs);
+}
+
+static void free_detection_cache_entry(gpointer data) {
+    detection_cache_entry_t *entry = (detection_cache_entry_t*)data;
+    if (entry->attributes) free(entry->attributes);
+    free(entry);
+}
+
 const char* NiceName(const char* input) {
     if (!input) return NULL;
     for (size_t i = 0; i < NAME_MAP_SIZE; ++i) {
@@ -233,28 +252,11 @@ void ObjectDetection_Reset() {
         g_hash_table_destroy(detectionCache);
         detectionCache = NULL;
     }
-    detectionCache = g_hash_table_new_full(g_str_hash, g_str_equal, free, free);
-}
-
-static void free_attributes(GHashTable *attrs) {
-    if (!attrs) return;
-    GHashTableIter iter;
-    gpointer key, value;
-    g_hash_table_iter_init(&iter, attrs);
-    while (g_hash_table_iter_next(&iter, &key, &value)) {
-        free(key);
-        free(value);
-    }
-    g_hash_table_destroy(attrs);
-}
-
-static void free_detection_cache_entry(gpointer data) {
-    detection_cache_entry_t *entry = (detection_cache_entry_t*)data;
-    if (entry->attributes) free(entry->attributes);
-    free(entry);
+    detectionCache = g_hash_table_new_full(g_str_hash, g_str_equal, free, free_detection_cache_entry);
 }
 
 static void publish_tracker( detection_cache_entry_t *entry ) {
+return;	
     cJSON *obj = cJSON_CreateObject();
     if (!obj || !entry || !entry->id) return;
 	if( entry->active == true ) {
@@ -347,9 +349,11 @@ static void publish_tracker( detection_cache_entry_t *entry ) {
 				cJSON_AddStringToObject(obj, entry->attributes[a].name, entry->attributes[a].value);
 		}
 	}
-	entry->idle_duration = get_epoch_ms();
+	entry->last_published_tracker = get_epoch_ms();
+	cJSON* payload = cJSON_Duplicate(obj,1);
+	cJSON_Delete(obj);
 	if( trackerCallback )
-		trackerCallback(obj);
+		trackerCallback(payload);
 }
 
 gboolean update_trackers(gpointer user_data) {
@@ -362,7 +366,7 @@ gboolean update_trackers(gpointer user_data) {
 	
     while (g_hash_table_iter_next(&iter, &key, &value)) {
         detection_cache_entry_t *entry = (detection_cache_entry_t*)value;
-		if( now - entry->last_published_tracker > 1500 )
+		if( entry->active == true && now - entry->last_published_tracker > 1500 )
 			publish_tracker(entry);
 	}
     return TRUE; 
@@ -413,7 +417,7 @@ static void publish_detections(GHashTable *cache) {
 			cJSON_AddBoolToObject(obj, "active", entry->active);
 		}
 		if( entry->active == false ) {
-LOG("Dead: %s", entry->id);
+//LOG("Dead: %s", entry->id);
 			publish_tracker(entry);
 		}
 		for (size_t a = 0; a < entry->num_attributes; ++a) {
@@ -475,8 +479,12 @@ LOG("Dead: %s", entry->id);
 		}
         cJSON_AddItemToArray(arr, obj);
     }
+
+	cJSON* payload = cJSON_Duplicate(arr,1);
+	cJSON_Delete(arr);
+
 	if( detectionsCallback )
-		detectionsCallback(arr);
+		detectionsCallback(payload);
 }
 
 static od_attribute_t *clone_attributes(const vod_attribute_t *src, size_t num, size_t *out_num) {

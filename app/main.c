@@ -59,117 +59,9 @@ Detections_Data (cJSON *list ) {
 		cJSON_AddItemToObject( payload, "list", list );
 		MQTT_Publish_JSON(topic,payload,0,0);
 		cJSON_Delete( payload );
-	} else {
-		cJSON_Delete(list);
+		return;
 	}
-
-/*
-	//Trackers
-	cJSON* trackers = cJSON_CreateArray();
-	cJSON_ArrayForEach(item, list) {
-		int valid = 0;
-		if( cJSON_GetObjectItem(item,"idle")->valueint == 0 )  //The object is born or passed 5% ditance threshold
-			valid=1;
-		if( cJSON_GetObjectItem(item,"active")->type == cJSON_False )
-			valid=1;
-	
-		if( valid ) {
-			cJSON* c = cJSON_CreateObject();
-			cJSON_AddStringToObject( c,"class", cJSON_GetObjectItem(item,"class")->valuestring);
-			cJSON_AddNumberToObject( c,"confidence", cJSON_GetObjectItem(item,"confidence")->valueint);
-			cJSON_AddNumberToObject( c,"age", cJSON_GetObjectItem(item,"age")->valuedouble);
-			cJSON_AddNumberToObject( c,"distance", cJSON_GetObjectItem(item,"distance")->valueint);
-			cJSON_AddStringToObject( c,"color", cJSON_GetObjectItem(item,"color")->valuestring);
-			cJSON_AddStringToObject( c,"color2", cJSON_GetObjectItem(item,"color2")->valuestring);
-			cJSON_AddNumberToObject( c,"x", cJSON_GetObjectItem(item,"x")->valueint);
-			cJSON_AddNumberToObject( c,"y", cJSON_GetObjectItem(item,"y")->valueint);
-			cJSON_AddNumberToObject( c,"w", cJSON_GetObjectItem(item,"w")->valueint);
-			cJSON_AddNumberToObject( c,"h", cJSON_GetObjectItem(item,"h")->valueint);
-			cJSON_AddNumberToObject( c,"cx", cJSON_GetObjectItem(item,"cx")->valueint);
-			cJSON_AddNumberToObject( c,"cy", cJSON_GetObjectItem(item,"cy")->valueint);
-			cJSON_AddNumberToObject( c,"bx", cJSON_GetObjectItem(item,"bx")->valueint);
-			cJSON_AddNumberToObject( c,"by", cJSON_GetObjectItem(item,"by")->valueint);
-			cJSON_AddNumberToObject( c,"dx", cJSON_GetObjectItem(item,"dx")->valueint);
-			cJSON_AddNumberToObject( c,"dy", cJSON_GetObjectItem(item,"dy")->valueint);
-			cJSON_AddNumberToObject( c,"timestamp", cJSON_GetObjectItem(item,"timestamp")->valuedouble);
-			cJSON_AddNumberToObject( c,"birth", cJSON_GetObjectItem(item,"birth")->valuedouble);
-//			cJSON_AddNumberToObject( c,"topVelocity", cJSON_GetObjectItem(item,"topVelocity")->valuedouble);
-			cJSON_AddStringToObject( c,"id", cJSON_GetObjectItem(item,"id")->valuestring);
-			if( cJSON_GetObjectItem(item,"active")->type == cJSON_True )
-				cJSON_AddTrueToObject(c,"active");
-			else
-				cJSON_AddFalseToObject(c,"active");
-			cJSON_AddItemToArray(trackers,c);
-		}
-	}
-	
-	if( publishTracker ) {
-		cJSON_ArrayForEach(item, trackers) {
-			if( cJSON_GetObjectItem(item,"distance")->valueint >= 5 && !Label_Blacklisted(item)) {
-				sprintf(topic, "tracker/%s", ACAP_DEVICE_Prop("serial"));
-				MQTT_Publish_JSON(topic, item, 0, 0);
-			}
-		}
-	}
-
-	//GeoSpace locations
-	if( publishGeospace ) {
-		item = trackers->child;
-		while( item ) {
-			if( !Label_Blacklisted(item) ) {
-				sprintf(topic,"geospace/%s", ACAP_DEVICE_Prop("serial") );
-				cJSON* payload = cJSON_CreateObject();
-				cJSON_AddStringToObject(payload,"id",cJSON_GetObjectItem(item,"id")->valuestring);
-				cJSON_AddTrueToObject(payload,"active");
-				if( cJSON_GetObjectItem(item,"active")->type == cJSON_False )
-					cJSON_AddFalseToObject(payload,"active")->type = cJSON_False;
-				double lat = 0;
-				double lon = 0;
-				GeoSpace_transform(cJSON_GetObjectItem(item,"cx")->valueint,
-								   cJSON_GetObjectItem(item,"cy")->valueint
-								   ,&lat,
-								   &lon);
-				if( cJSON_GetObjectItem( item,"lat" ) )
-					cJSON_ReplaceItemInObject(item,"lat",cJSON_CreateNumber(lat));
-				else
-					cJSON_AddNumberToObject(item,"lat",lat);
-				if( cJSON_GetObjectItem( item,"lon" ) )
-					cJSON_ReplaceItemInObject(item,"lon",cJSON_CreateNumber(lon));
-				else
-					cJSON_AddNumberToObject(item,"lon",lon);
-				cJSON_AddNumberToObject(payload,"lat",lat);
-				cJSON_AddNumberToObject(payload,"lon",lon);
-				cJSON_AddStringToObject(payload,"class",cJSON_GetObjectItem(item,"class")->valuestring);
-				cJSON_AddNumberToObject(payload,"age",cJSON_GetObjectItem(item,"age")->valuedouble);
-				MQTT_Publish_JSON(topic,payload,0,0);
-				cJSON_Delete(payload);
-			}
-			item = item->next;
-		}
-	}
-
-
-	//Paths
-	cJSON* paths = Process_Paths( trackers );
-	//Paths displayed in Path user interface
-	cJSON* statusPaths = ACAP_STATUS_Object("detections", "paths");
-	statusPaths = ACAP_STATUS_Object("detections", "paths");
-
-	if( publishPath ) {
-		item = paths->child;
-		while( item ) {
-			cJSON_AddItemToArray(statusPaths,cJSON_Duplicate(item, 1));
-			sprintf(topic,"path/%s", ACAP_DEVICE_Prop("serial") );
-			MQTT_Publish_JSON(topic,item,0,0);
-			item = item->next;
-		}
-	}
-
-	while( cJSON_GetArraySize(statusPaths) > 10 )
-		cJSON_DeleteItemFromArray(statusPaths,0);
-	cJSON_Delete(paths);
-	cJSON_Delete(trackers);
-*/	
+	cJSON_Delete(list);
 }
 
 void
@@ -410,8 +302,6 @@ main(void) {
 	g_main_loop_run(main_loop);
 
 	LOG("Terminating and cleaning up %s\n",APP_PACKAGE);
-	Main_MQTT_Status(MQTT_DISCONNECTING); //Send graceful disconnect message
-
 	Main_MQTT_Status(MQTT_DISCONNECTING); //Send graceful disconnect message
 	MQTT_Cleanup();
 	ACAP_Cleanup();
