@@ -52,6 +52,8 @@ static const NameMapEntry name_map[] = {
     { "head", "Head" },
     { "face", "Head" },	
     { "hat", "Hat" },
+    { "animal", "Animal" },	
+
     { "no_hat", "" },
     { "hat_other", "Hat" },
     { "hard_hat", "Helmet" },
@@ -255,9 +257,11 @@ static void free_detection_cache_entry(gpointer data) {
 static void publish_tracker( detection_cache_entry_t *entry ) {
     cJSON *obj = cJSON_CreateObject();
     if (!obj || !entry || !entry->id) return;
-	if (!entry->valid || entry->trackerSleep) return;
-	if (entry->age < 0.2 ) return;
-	if (!entry->distance < IDLE_THRESHOLD_PCT ) return;
+	if( entry->active == true ) {
+		if (entry->trackerSleep) return;
+		if (entry->age < 0.2 ) return;
+		if (entry->distance < IDLE_THRESHOLD_PCT ) return;
+	}
 	const char* label = NiceName(entry->class_name);
     if (!label) return;
 	if (ObjectDetection_Blacklisted(label)) return;
@@ -294,39 +298,39 @@ static void publish_tracker( detection_cache_entry_t *entry ) {
 				aKey = 0;
 				aValue = 0;
 			}
-			if( aKey && strcmp("vehicle_color",aKey) ) {
+			if( aKey && strcmp("vehicle_color",aKey) == 0 ) {
 				cJSON_AddStringToObject(obj,"color",NiceName(aValue));
 				aKey = 0;
 				aValue = 0;
 			}
-			if( aKey && strcmp("clothing_upper_color",aKey) ) {
+			if( aKey && strcmp("clothing_upper_color",aKey) == 0) {
 				cJSON_AddStringToObject(obj,"color",NiceName(aValue));
 				aKey = 0;
 				aValue = 0;
 			}
-			if( aKey && strcmp("clothing_lower_color",aKey) ) {
+			if( aKey && strcmp("clothing_lower_color",aKey) == 0 ) {
 				cJSON_AddStringToObject(obj,"color2",NiceName(aValue));
 				aKey = 0;
 				aValue = 0;
 			}
-			if( aKey && strcmp("hat_type",aKey) ) {
+			if( aKey && strcmp("hat_type",aKey) == 0 ) {
 				if( strcmp("no_hat", aValue ) != 0 )
-					cJSON_AddStringToObject(obj,"type",NiceName(aValue));
+					cJSON_AddStringToObject(obj,"hat",NiceName(aValue));
 				aKey = 0;
 				aValue = 0;
 			}
 
-			if( aKey && strcmp("bag_type",aKey) ) {
-				cJSON_AddStringToObject(obj,"type",NiceName(aValue));
+			if( aKey && strcmp("bag_type",aKey) == 0) {
+				cJSON_AddStringToObject(obj,"bag",NiceName(aValue));
 				aKey = 0;
 				aValue = 0;
 			}
 
-			if( aKey && strcmp("human_face_visibility",aKey) ) {
-				if( strcmp( aValue,"face_visible") == 0 )
-					cJSON_AddTrueToObject(obj,"face");
-				else
+			if( aKey && strcmp("human_face_visibility",aKey) == 0) {
+				if( strcmp( aValue,"face_non_visible") == 0 )
 					cJSON_AddFalseToObject(obj,"face");
+				else
+					cJSON_AddTrueToObject(obj,"face");
 				aKey = 0;
 				aValue = 0;
 			}
@@ -380,7 +384,8 @@ static void publish_detections(GHashTable *cache) {
 
         cJSON *obj = cJSON_CreateObject();
         if (!obj || !entry || !entry->id) continue;
-		if (!entry->valid || entry->sleep) continue;
+		if (!entry->valid ) continue;
+		if( entry->active == true && entry->sleep) continue;
 		const char* label = NiceName(entry->class_name);
         if (!label) continue;
 		if (ObjectDetection_Blacklisted(label)) continue;
@@ -406,6 +411,10 @@ static void publish_detections(GHashTable *cache) {
 			entry->sleep = true;
 		} else {			
 			cJSON_AddBoolToObject(obj, "active", entry->active);
+		}
+		if( entry->active == false ) {
+LOG("Dead: %s", entry->id);
+			publish_tracker(entry);
 		}
 		for (size_t a = 0; a < entry->num_attributes; ++a) {
 			if (strlen(entry->attributes[a].name) && strlen(entry->attributes[a].value)) {
@@ -443,10 +452,10 @@ static void publish_detections(GHashTable *cache) {
 					aValue = 0;
 				}
 				if( aKey && strcmp("human_face_visibility",aKey) == 0 ) {
-					if( strcmp( aValue,"face_visible") == 0 )
-						cJSON_AddTrueToObject(obj,"face");
-					else
+					if( strcmp( aValue,"face_non_visible") == 0 )
 						cJSON_AddFalseToObject(obj,"face");
+					else
+						cJSON_AddTrueToObject(obj,"face");
 					aKey = 0;
 					aValue = 0;
 				}
@@ -559,7 +568,7 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
             entry->prev_cy = cy;
             entry->age = 0.0f;
 			entry->max_idle_duration = 0;
-//            entry->valid = valid;
+            entry->valid = valid;
             entry->idle = false;
 			entry->sleep = false;
 			entry->trackerSleep = false;
@@ -619,8 +628,8 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
 			entry->dx = cx - entry->bx;
 			entry->dy = cy - entry->by;
             entry->age = round(10.0 * ((now - entry->birthTime) / 1000.0)) / 10.0;
-            entry->valid = valid;
-
+			if( entry->valid == false && valid == true)
+				entry->valid = true;
 			if (entry->attributes) {
 				free(entry->attributes);
 				entry->attributes = NULL;
