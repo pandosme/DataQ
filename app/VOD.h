@@ -36,7 +36,8 @@ typedef void (*vod_callback_t)(const vod_object_t *objects, size_t num_objects, 
  * @return 0 on success, negative on error.
  */
 int VOD_Init(int channel, vod_callback_t cb, void *user_data);
-cJSON* VOD_Labels_List();
+cJSON*	VOD_Labels_List();
+void	VOD_Reset();
 
 /**
  * Shutdown and free all resources.

@@ -31,6 +31,7 @@ int GeoSpace_Matrix(cJSON* matrix) {
 	LOG_TRACE("%s: Entry\n",__func__);
     if (!matrix || !cJSON_IsArray(matrix) || cJSON_GetArraySize(matrix) != 9) {
         LOG("%s: Matrix not configured\n", __func__);
+		ACAP_STATUS_SetBool("geospace", "active", 0);
         return 0;
     }
 
@@ -46,6 +47,7 @@ int GeoSpace_Matrix(cJSON* matrix) {
             return 0;
         }
         gMatrix.initialized = true;
+		ACAP_STATUS_SetBool("geospace", "active", 1);
     } else {
         // Update existing matrix data
         memcpy(gMatrix.H.elem.ptr, gMatrix.h_data, 9 * sizeof(lm_mat_elem_t));
@@ -53,7 +55,6 @@ int GeoSpace_Matrix(cJSON* matrix) {
 	LOG_TRACE("%s: Exit\n",__func__);
     return 1;
 }
-
 
 int
 GeoSpace_transform(int x, int y, double *lat, double *lon) {
@@ -105,6 +106,7 @@ GeoSpace_HTTP_transform(const ACAP_HTTP_Response response, const ACAP_HTTP_Reque
 	LOG_TRACE("%s: Enter\n",__func__);
 	
     if (!gMatrix.initialized) {
+		ACAP_STATUS_SetBool("geospace", "active", 0);
         ACAP_HTTP_Respond_Error(response, 500, "No valid transformation matrix");
         return;
     }
@@ -136,6 +138,15 @@ void
 GeoSpace_Init() {
     LOG_TRACE("%s: Enter\n",__func__);
     //Initialize HTTP endpoint
+	ACAP_STATUS_SetBool("geospace", "active", 0);
+	cJSON* settings = ACAP_Get_Config("settings");
+	if( settings ) {
+		cJSON* markers = cJSON_GetObjectItem(settings,"markers");
+		cJSON* matrix = cJSON_GetObjectItem(settings,"matrix");
+		if( markers && matrix && cJSON_GetArraySize(markers) && cJSON_GetArraySize(matrix) )
+			ACAP_STATUS_SetBool("geospace", "active", 1);
+	}
     ACAP_HTTP_Node("geospace", GeoSpace_HTTP_transform);
+	
     LOG_TRACE("%s: Exit\n",__func__);
 }

@@ -33,18 +33,21 @@
 			"y1": 475,
 			"y2": 525
 		},
-		"ignoreClass": []
-	},
-	"pathFilter": {
-		"distance": 15,
-		"age": 2,
-		"aoi": {
-			"x1": 0,
-			"y1": 0,
-			"x2": 1000,
-			"y2": 1000
+		"ignoreClass": [],
+		"significantMovement": {
+			"upperArea": 30,
+			"lowerArea": 70,
+			"line": 400
 		},
-		"ignoreClass": []
+		"merge": {
+			"active": false,
+			"x1": 250,
+			"y1": 250,
+			"x2": 750,
+			"y2": 750,
+			"distance": 100,
+			"duration": 1000
+		}
 	},
 	"eventTopics": [
 		{
