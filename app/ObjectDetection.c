@@ -464,6 +464,32 @@ static od_attribute_t *clone_attributes(const vod_attribute_t *src, size_t num, 
     return dst;
 }
 
+void
+Adjust_For_VehicleType(detection_cache_entry_t *entry) {
+    if (!entry || !entry->attributes || entry->num_attributes == 0)
+        return;
+
+    for (size_t i = 0; i < entry->num_attributes; ++i) {
+        if (strcmp(entry->attributes[i].name, "vehicle_type") == 0) {
+            // Set class_name to value, making sure to fit the buffer
+            strncpy(entry->class_name, entry->attributes[i].value, sizeof(entry->class_name) - 1);
+            entry->class_name[sizeof(entry->class_name) - 1] = '\0';
+
+            // Remove the attribute by shifting the others
+            for (size_t j = i; j + 1 < entry->num_attributes; ++j) {
+                entry->attributes[j] = entry->attributes[j + 1];
+            }
+            entry->num_attributes--;
+            // Optionally zero out the last slot
+            if (entry->num_attributes > 0) {
+                entry->attributes[entry->num_attributes].name[0] = '\0';
+                entry->attributes[entry->num_attributes].value[0] = '\0';
+            }
+            break; // Remove only the first "vehicle_type"
+        }
+    }
+}
+
 static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user_data) {
     g_mutex_lock(&detection_mutex);
 	LOG_DEEP("<ObjectDection:%s",__func__);
@@ -542,7 +568,9 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
                 free_detection_cache_entry(entry);
                 continue;
             }
+			Adjust_For_VehicleType( entry);
             g_hash_table_insert(detectionCache, keycopy, entry);
+			
         } else {
             float dist = calc_distance(entry->prev_cx, entry->prev_cy, cx, cy);
             if (dist < IDLE_THRESHOLD_PCT) {
@@ -597,6 +625,7 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
             }
             entry->attributes = clone_attributes(obj->attributes, obj->num_attributes, &entry->num_attributes);
             entry->active = obj->active;
+			Adjust_For_VehicleType(entry);
         }
     }
     publish_detections(detectionCache);
@@ -695,7 +724,8 @@ int ObjectDetection_Init(ObjectDetection_Callback detections, ObjectDetection_Ca
         g_mutex_unlock(&detection_mutex);
         return 0;
     }
-    cJSON* list = VOD_Labels_List();
+	
+    cJSON* list = VOD_Label_List();
     cJSON* labels = cJSON_CreateArray();
     cJSON* item = list->child;
     while(item) {
@@ -704,6 +734,13 @@ int ObjectDetection_Init(ObjectDetection_Callback detections, ObjectDetection_Ca
             cJSON_AddItemToArray(labels,cJSON_CreateString(label));
         item = item->next;
     }
+
+	char* json = cJSON_PrintUnformatted(labels);
+	if( json ) {
+		LOG("Labels: %s\n", json );
+		free(json);
+	}
+	cJSON_Delete(list);
     ACAP_STATUS_SetObject("detections", "labels", labels);
     g_timeout_add_seconds(1, update_trackers, NULL);	
     LOG_TRACE("%s: Exit\n",__func__);

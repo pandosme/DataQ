@@ -1,6 +1,7 @@
 # DataQ
 
 DataQ is an MQTT Client for Axis cameras that enables custom data-driven solutions when standard camera data and formats are insufficient. It processes, filters, and transforms data before MQTT publishing to optimize resource usage.
+Compared to "Metadata", DataQ makes integration and solution development very easy.  DataQ provides different data stractures based on use-case, optimizing bandwidth and alos adding pre-calculated properties like age, distance, direction and idle time so consumers does not need to.
 
 ## Key Features
 
@@ -8,6 +9,18 @@ DataQ is an MQTT Client for Axis cameras that enables custom data-driven solutio
 - Optimized data transformation
 - Resource-efficient publishing
 - Real-time analytics processing
+- Pre-calculated properties that simplifies data processing.
+
+**Data Filters**
+- Data type publish
+- Class labels
+- Confidence level
+- Area-of-intrest
+- Min/Max width and height
+- Max idle time (when objects are considered to be part of background)
+
+- Real-time analytics processing
+- Pre-calculated properties that simplifies data processing.
 
 **Target Users**
 - System integrators
@@ -15,7 +28,6 @@ DataQ is an MQTT Client for Axis cameras that enables custom data-driven solutio
 - Data-driven application builders
 
 ## Prerequisites
-
 - Axis device (ARM7HF or AARCH64)
 - The later the firmware provides better data
 - MQTT Broker with WebSocket support
@@ -98,29 +110,27 @@ MQTT Heartbeat published every 15 minutes
 ## Integration Specifications
 
 ### Coordinate System
-- Relative coordinates: to[1000][1000]
+- Relative coordinates [0...1000][0...1000] (Aspect ratio independent)
 - Origin: Top-left corner
-- Aspect ratio independent
 
-### Object Properties
+### Data Properties
 
 | Property | Description |
 |----------|-------------|
 | id | Unique object identifier |
 | type | Object class ID |
-| class | Object classification (Human, Vehicle, etc.) |
+| class | Object classification labels (Car, Human, Vehicle, Bus, Truck, Head, Bag, Bike, ...) |
 | active | Tracking status boolean |
 | x, y, w, h | Bounding box coordinates |
 | cx, cy | Center of gravity coordinates. Either middle of the object or bottom-center |
-| dx, dy | Travel distance from origin |
+| dx, dy | Total displacement from first detection |
 | birth | Object detection timestamp (EPOCH) |
 | bx, by | Initial position coordinates |
 | age | Duration since detection (seconds) |
+| idle | Time in seconds an object is stationary.  Resets when moving |
 | confidence | Detection confidence (0-100) |
 | timestamp | Current/last detection time |
-| topVelocity | Maximum tracked speed (% of view/seconds)|
 | color, color2 | Primary/secondary object colors |
-| attributes | Additional object characteristics |
 | path | Position and duration array |
 | lat,lon | Longitude and Latitude |
 
@@ -145,12 +155,13 @@ MQTT Heartbeat published every 15 minutes
 
 # History
 
-### 2.0.0   June 25
-- Now using the official MessageBroker instead of object detection lib.
-  This update changes some behavior on the data:
-  - Non-moving objects may not be detected causing the need to remove Occpancy functionality
-  - Improved detection for moving objects
-- Cleaned up data structures
+### 2.0.0   July 14
+- Refactor code for better stability, future proof and better manage camera firmware variations
+  - Using SDK 12.2 (previous SDK 3.5) for future comaptibility
+  - Changed MQTT library from synchrous to asynchronous that provides better reconnections.
+  - Object detection processing to handle variations in firmware and future changes.
+- Added property "idle" that gives the time in seconds an object is stationary.  Resets when moving.
+- Occupancy now support counting stationary objects, moving objects or both.
 
 ### 1.5.0	June 14, 2025
 - Optimized Detections datastructure by reducing its size (peopertieas removed)

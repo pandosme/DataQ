@@ -53,7 +53,6 @@ typedef struct {
     object_map_entry_t *object_map;
 } vod_internal_ctx_t;
 
-cJSON* VOD_labels = 0;
 static vod_internal_ctx_t g_ctx = {0};
 static video_object_detection_subscriber_t *subscriber = NULL;
 static pthread_mutex_t vod_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -369,12 +368,134 @@ gboolean VOD_Debug_timer(gpointer user_data) {
     return G_SOURCE_CONTINUE;
 }
 
-cJSON* VOD_Labels_List() {
-    pthread_mutex_lock(&vod_mutex);
-    cJSON* labels = VOD_labels;
-    pthread_mutex_unlock(&vod_mutex);
-    return labels;
+cJSON* VOD_Label_List(void) {
+    cJSON *det_info = VOD_Detector_Information();
+    if (!det_info) return NULL;
+
+	char* json = cJSON_PrintUnformatted(det_info);
+	if( json ) {
+		LOG("Object Detection Structure: %s\n", json )
+		free(json);
+	}
+
+    cJSON *labels = cJSON_GetObjectItem(det_info, "labels");
+    cJSON *attributes = cJSON_GetObjectItem(det_info, "attributes");
+    cJSON *result = cJSON_CreateArray();
+
+    // Helper: add string to array if not already present
+    #define ADD_UNIQUE_STR(arr, str) do { \
+        int found = 0; \
+        for (int idx = 0; idx < cJSON_GetArraySize(arr); ++idx) { \
+            cJSON *item = cJSON_GetArrayItem(arr, idx); \
+            if (strcmp(item->valuestring, (str)) == 0) { found = 1; break; } \
+        } \
+        if (!found) cJSON_AddItemToArray(arr, cJSON_CreateString(str)); \
+    } while (0)
+
+    // Add all label names
+    if (labels) {
+        for (int i = 0; i < cJSON_GetArraySize(labels); ++i) {
+            cJSON *lbl = cJSON_GetArrayItem(labels, i);
+            cJSON *name = cJSON_GetObjectItem(lbl, "name");
+            if (name && name->valuestring && strlen(name->valuestring) > 0) {
+                ADD_UNIQUE_STR(result, name->valuestring);
+            }
+        }
+    }
+
+    // Find vehicle_type attribute and add its class names
+    if (attributes) {
+        for (int i = 0; i < cJSON_GetArraySize(attributes); ++i) {
+            cJSON *attr = cJSON_GetArrayItem(attributes, i);
+            cJSON *attr_name = cJSON_GetObjectItem(attr, "name");
+            if (attr_name && strcmp(attr_name->valuestring, "vehicle_type") == 0) {
+                cJSON *labels_arr = cJSON_GetObjectItem(attr, "labels");
+                if (labels_arr) {
+                    for (int j = 0; j < cJSON_GetArraySize(labels_arr); ++j) {
+                        cJSON *vehicle_class = cJSON_GetArrayItem(labels_arr, j);
+                        cJSON *vname = cJSON_GetObjectItem(vehicle_class, "name");
+                        if (vname && vname->valuestring && strlen(vname->valuestring) > 0) {
+                            ADD_UNIQUE_STR(result, vname->valuestring);
+                        }
+                    }
+                }
+                break; // Only one vehicle_type expected
+            }
+        }
+    }
+
+    cJSON_Delete(det_info);
+    #undef ADD_UNIQUE_STR
+    return result;
 }
+
+cJSON* VOD_Detector_Information() {
+    uint8_t *buffer = NULL;
+    size_t size = 0;
+    pthread_mutex_lock(&vod_mutex);
+    int ret = video_object_detection_subscriber_get_detector_information(&buffer, &size);
+    if (ret != VIDEO_OBJECT_DETECTION_SUBSCRIBER_SUCCESS || !buffer) {
+        LOG("Failed to get detector information: %d\n", ret);
+        pthread_mutex_unlock(&vod_mutex);
+        return NULL;
+    }
+
+    VOD__DetectorInformation *det_info = vod__detector_information__unpack(NULL, size, buffer);
+    if (!det_info) {
+        LOG("Failed to unpack detector information\n");
+        free(buffer);
+        pthread_mutex_unlock(&vod_mutex);
+        return NULL;
+    }
+
+    cJSON *root = cJSON_CreateObject();
+
+    // Object Classes
+    cJSON *arr_obj_classes = cJSON_CreateArray();
+    for (size_t i = 0; i < det_info->n_classes; i++) {
+        VOD__ObjectClass *obj_class = det_info->classes[i];
+        cJSON *jc = cJSON_CreateObject();
+        cJSON_AddNumberToObject(jc, "id", obj_class->id);
+        cJSON_AddStringToObject(jc, "name", obj_class->name ? obj_class->name : "");
+
+        // Attribute Type IDs
+        cJSON *attr_ids = cJSON_CreateIntArray((const int*)obj_class->attribute_type_ids, obj_class->n_attribute_type_ids);
+        cJSON_AddItemToObject(jc, "attribute_type_ids", attr_ids);
+
+        cJSON_AddItemToArray(arr_obj_classes, jc);
+    }
+    cJSON_AddItemToObject(root, "labels", arr_obj_classes);
+
+    // Attribute Types
+    cJSON *arr_attr_types = cJSON_CreateArray();
+    for (size_t i = 0; i < det_info->n_attribute_types; i++) {
+        VOD__AttributeType *attr_type = det_info->attribute_types[i];
+        cJSON *ja = cJSON_CreateObject();
+        cJSON_AddNumberToObject(ja, "id", attr_type->id);
+        cJSON_AddStringToObject(ja, "name", attr_type->name ? attr_type->name : "");
+
+        // Classes
+        cJSON *classes = cJSON_CreateArray();
+        for (size_t j = 0; j < attr_type->n_classes; j++) {
+            VOD__AttributeClass *attr_class = attr_type->classes[j];
+            cJSON *jc = cJSON_CreateObject();
+            cJSON_AddNumberToObject(jc, "id", attr_class->id);
+            cJSON_AddStringToObject(jc, "name", attr_class->name ? attr_class->name : "");
+            cJSON_AddItemToArray(classes, jc);
+        }
+        cJSON_AddItemToObject(ja, "labels", classes);
+
+        cJSON_AddItemToArray(arr_attr_types, ja);
+    }
+    cJSON_AddItemToObject(root, "attributes", arr_attr_types);
+
+    // Cleanup
+    vod__detector_information__free_unpacked(det_info, NULL);
+    free(buffer);
+    pthread_mutex_unlock(&vod_mutex);
+    return root;
+}
+
 
 // --- Initialization and shutdown ---
 int VOD_Init(int channel, vod_callback_t cb, void *user_data) {
@@ -401,22 +522,6 @@ int VOD_Init(int channel, vod_callback_t cb, void *user_data) {
         LOG_WARN("%s: No detection classes found", __func__);
         pthread_mutex_unlock(&vod_mutex);
         return -2;
-    }
-
-    if (VOD_labels) {
-        cJSON_Delete(VOD_labels);
-        VOD_labels = NULL;
-    }
-    VOD_labels = cJSON_CreateArray();
-	LOG("Detection classes:\n");
-    for (int i = 0; i < g_ctx.num_classes; i++) {
-        const char *name = video_object_detection_subscriber_det_class_name(g_ctx.det_classes[i]);
-        if (name) {
-			cJSON_AddItemToArray(VOD_labels, cJSON_CreateString(name));
-			LOG("%d: %s\n",i,name);
-		} else {
-			LOG("%d: Label not set\n",i);
-		}
     }
 
     uint8_t *buffer = NULL;
@@ -481,10 +586,6 @@ void VOD_Shutdown(void) {
         g_ctx.det_info = NULL;
     }
     clear_object_map();
-    if (VOD_labels) {
-        cJSON_Delete(VOD_labels);
-        VOD_labels = NULL;
-    }
     closelog();
     LOG("VOD_Shutdown completed\n");
     pthread_mutex_unlock(&vod_mutex);
@@ -502,10 +603,6 @@ void VOD_Reset(void) {
     if (g_ctx.det_info) {
         vod__detector_information__free_unpacked(g_ctx.det_info, NULL);
         g_ctx.det_info = NULL;
-    }
-    if (VOD_labels) {
-        cJSON_Delete(VOD_labels);
-        VOD_labels = NULL;
     }
     LOG("VOD_Reset: All caches cleared\n");
     pthread_mutex_unlock(&vod_mutex);

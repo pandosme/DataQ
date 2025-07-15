@@ -7,6 +7,7 @@
 		"detections": false,
 		"tracker": true,
 		"path": true,
+		"occupancy": false,
 		"status": true,
 		"geospace": false
 	},
@@ -118,5 +119,11 @@
 	],
 	"userTopics": [],
 	"markers": [],
-	"matrix": []
+	"matrix": [],
+	"occupancy": {
+		"stationary": true,
+		"moving": true,		
+		"ageThreshold": 2.0,
+		"idleThreshold": 3.0
+	}
 }

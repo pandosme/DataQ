@@ -20,6 +20,7 @@
 			<a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
 			<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
 			<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
+			<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
 			<a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
 			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
 			<a href="about.html" class="list-group-item list-group-item-action">About</a>
@@ -66,6 +67,11 @@
 									<td><input type="checkbox" class="form-check-input publish-check" data-type="path"></td>
 									<td>Paths</td>
 									<td><span id="PathsTopic"></span></td>
+								</tr>
+								<tr>
+									<td><input type="checkbox" class="form-check-input publish-check" data-type="occupancy"></td>
+									<td>Occupancy</td>
+									<td><span id="OccupancyTopic"></span></td>
 								</tr>
 								<tr>
 									<td><input type="checkbox" class="form-check-input publish-check" data-type="geospace"></td>
@@ -121,10 +127,10 @@ $(document).ready(function() {
 			var serial = app.device.serial;
 
 			$('#EventTopic').text(pretopic + '/events/' + serial + '/#');
-			$('#OccupancyTopic').text(pretopic + '/occupancy/' + serial);
 			$('#DetectionsTopic').text(pretopic + '/detections/' + serial);
 			$('#TrackerTopic').text(pretopic + '/tracker/' + serial);
 			$('#PathsTopic').text(pretopic + '/path/' + serial);
+			$('#OccupancyTopic').text(pretopic + '/occupancy/' + serial);
 			$('#GeoSpaceTopic').text(pretopic + '/geospace/' + serial);
 			$('#StatusTopic').text(pretopic + '/status/' + serial);
 
