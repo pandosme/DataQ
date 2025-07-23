@@ -3,248 +3,519 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title></title>
+    <title>Custom Model - Cropping</title>
     <link rel="stylesheet" href="css/bootstrap.min.css">
     <link rel="stylesheet" href="css/app.css">
+    <link rel="stylesheet" href="css/cropping.css">
     <script src="js/jquery-3.7.1.min.js"></script>
     <script src="js/bootstrap.bundle.min.js"></script>
-    <script src="js/paho-mqtt-min.js"></script>
 </head>
 <body>
-<div class="d-flex" id="wrapper">
-	<div class="bg-light border-right" id="sidebar-wrapper">
-        <div class="sidebar-heading">&nbsp;</div>
-		<div class="list-group list-group-flush">
-			<a href="index.html" class="list-group-item list-group-item-action active">Publish</a>
-			<a href="events.html" class="list-group-item list-group-item-action">Events</a>
-			<a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
-			<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
-			<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
-			<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
-			<a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
-			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
-			<a href="about.html" class="list-group-item list-group-item-action">About</a>
-		</div>
-	</div>
-	
-	<div id="page-content-wrapper" class="p-0">
-		<div class="container-fluid">
-			<div class="col-6">
-				<div class="card mt-3">
-					<div class="card-header">
-						<h5 class="card-title mb-0">Data published on MQTT</h5>
-					</div>
-					<div class="alert alert-warning alert-dismissible fade d-none" id="liveDataAlert" role="alert">
-						<small id="liveDataMessage"></small>
-						<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-					</div>
-					<div class="card-body">
-						<table class="table">
-							<thead>
-								<tr>
-									<th width="50px"><input type="checkbox" id="selectAll" class="form-check-input"></th>
-									<th>Name</th>
-									<th>Subscription topic</th>
-								</tr>
-							</thead>
-							<tbody id="publishTable">
-								<tr>
-									<td><input type="checkbox" class="form-check-input publish-check" data-type="events"></td>
-									<td>Events</td>
-									<td><span id="EventTopic"></span></td>
-								</tr>
-								<tr>
-									<td><input type="checkbox" class="form-check-input publish-check" data-type="detections"></td>
-									<td>Detections</td>
-									<td><span id="DetectionsTopic"></span></td>
-								</tr>
-								<tr>
-									<td><input type="checkbox" class="form-check-input publish-check" data-type="tracker"></td>
-									<td>Trackers</td>
-									<td><span id="TrackerTopic"></span></td>
-								</tr>
-								<tr>
-									<td><input type="checkbox" class="form-check-input publish-check" data-type="path"></td>
-									<td>Paths</td>
-									<td><span id="PathsTopic"></span></td>
-								</tr>
-								<tr>
-									<td><input type="checkbox" class="form-check-input publish-check" data-type="occupancy"></td>
-									<td>Occupancy</td>
-									<td><span id="OccupancyTopic"></span></td>
-								</tr>
-								<tr>
-									<td><input type="checkbox" class="form-check-input publish-check" data-type="geospace"></td>
-									<td>Geospace</td>
-									<td><span id="GeoSpaceTopic"></span></td>
-								</tr>
-								<tr>
-									<td><input type="checkbox" class="form-check-input publish-check" data-type="status"></td>
-									<td>Status</td>
-									<td><span id="StatusTopic"></span></td>
-								</tr>
-							</tbody>
-						</table>
-					</div>
-				</div>
-			</div>
-		</div>
-	</div>
-	
+    <div class="d-flex" id="wrapper">
+        <!-- Sidebar -->
+        <div class="bg-light border-right" id="sidebar-wrapper">
+            <div class="sidebar-heading">Custom Model</div>
+            <div class="list-group list-group-flush">
+                <a href="index.html" class="list-group-item list-group-item-action">Detections</a>
+                <a href="cropping.html" class="list-group-item list-group-item-action active">Cropping</a>
+                <a href="mqtt.html" class="list-group-item list-group-item-action">MQTT</a>
+                <a href="advanced.html" class="list-group-item list-group-item-action">Advanced</a>
+                <a href="about.html" class="list-group-item list-group-item-action">About</a>
+            </div>
+        </div>
+        <!-- /#sidebar-wrapper -->
+
+        <!-- Page Content -->
+        <div id="page-content-wrapper" class="p-0">
+            <div id='modal' style='display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000;'>
+                <div style='position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:white; padding:20px;'>
+                    <h2>Model Offline</h2>
+                    <p>The model is currently loading. Please wait.</p>
+                </div>
+            </div>
+
+            <div class="container-fluid p-4">
+                <h2>Detection Cropping Configuration</h2>
+                <p class="text-muted">Configure automatic cropping of detected objects for storage and analysis.</p>
+
+                <div class="row">
+                    <!-- Left Column: Cropping Control with Border Adjustment -->
+                    <div class="col-lg-6 col-12 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">Cropping Control</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="cropping_active">
+                                    <label class="form-check-label" for="cropping_active">
+                                        <strong>Enable Detection Cropping</strong>
+                                    </label>
+                                    <div class="form-text">Automatically crop detected objects from the main image</div>
+                                </div>
+
+                                <hr>
+
+                                <!-- Border Adjustment Section -->
+                                <h6 class="mb-3">Border Adjustment</h6>
+
+                                <div class="preset-buttons mb-3">
+                                    <div class="d-flex gap-2">
+                                        <button class="btn btn-sm btn-outline-secondary flex-fill" onclick="setPreset(0, 0, 0, 0)">None</button>
+                                        <button class="btn btn-sm btn-outline-secondary flex-fill" onclick="setPreset(25, 25, 25, 25)">25px</button>
+                                        <button class="btn btn-sm btn-outline-secondary flex-fill" onclick="setPreset(50, 50, 50, 50)">50px</button>
+                                        <button class="btn btn-sm btn-outline-secondary flex-fill" onclick="setPreset(100, 100, 100, 100)">100px</button>
+                                    </div>
+                                </div>
+
+                                <p class="text-muted small">Drag the blue handles to expand the crop area around detections. Values are in pixels.</p>
+                                
+                                <div class="border-preview">
+                                    <div class="detection-area" id="detection_area">
+                                        <div class="detection-label">Detection Box</div>
+                                    </div>
+                                    <div class="crop-area" id="crop_area"></div>
+
+                                    <!-- Handles -->
+                                    <div class="border-handle top" data-border="top"></div>
+                                    <div class="border-handle right" data-border="right"></div>
+                                    <div class="border-handle bottom" data-border="bottom"></div>
+                                    <div class="border-handle left" data-border="left"></div>
+
+                                    <!-- Values: Centered between detection and frame -->
+                                    <span class="border-value-label top"    id="top_value_label">0</span>
+                                    <span class="border-value-label right"  id="right_value_label">0</span>
+                                    <span class="border-value-label bottom" id="bottom_value_label">0</span>
+                                    <span class="border-value-label left"   id="left_value_label">0</span>
+                                </div>
+
+                                <div class="d-grid mt-4">
+                                    <button id="save_settings_cropping" class="btn btn-primary" >Save Settings</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Output Destinations -->
+                    <div class="col-lg-6 col-12 mb-4" id="output_destinations_card">
+                        <div class="card h-100">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">Output Destinations</h5>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted small">Choose where to save or send the cropped detection images.</p>
+                                <!-- SD Card Output -->
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="sdcard_output" disabled>
+                                    <label class="form-check-label" for="sdcard_output">
+                                        <span class="status-indicator" id="sdcard_status"></span>
+                                        <strong>Save to SD Card</strong>
+                                    </label>
+                                    <div class="form-text">SD Card status: <span id="sdcard_status_text">Checking...</span></div>
+                                </div>
+                                <!-- MQTT Output -->
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="mqtt_output" disabled>
+                                    <label class="form-check-label" for="mqtt_output">
+                                        <span class="status-indicator" id="mqtt_status"></span>
+                                        <strong>Send via MQTT</strong>
+                                    </label>
+                                    <div class="form-text">MQTT status: <span id="mqtt_status_text">Checking...</span></div>
+                                </div>
+                                <!-- HTTP POST Output -->
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="http_output">
+                                    <label class="form-check-label" for="http_output">
+                                        <strong>Send via HTTP POST</strong>
+                                    </label>
+                                    <div class="form-text">Send cropped images to external endpoint</div>
+                                </div>
+                                <!-- HTTP Configuration -->
+                                <div id="http_config" class="http-config" style="display:none;">
+                                    <div class="mb-3">
+                                        <label for="http_url" class="form-label">URL</label>
+                                        <input type="text" class="form-control form-control-sm" id="http_url" placeholder="https://example.com/upload">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="http_auth" class="form-label">Authentication Method</label>
+                                        <select class="form-select form-select-sm" id="http_auth">
+                                            <option value="none">None</option>
+                                            <option value="basic">Basic</option>
+                                            <option value="digest">Digest</option>
+                                            <option value="bearer">Bearer</option>
+                                        </select>
+                                    </div>
+                                    <!-- Basic/Digest Auth Fields -->
+                                    <div id="basic_auth_fields" class="auth-fields" style="display: none;">
+                                        <div class="mb-2">
+                                            <label for="http_username" class="form-label">Username</label>
+                                            <input type="text" class="form-control form-control-sm" id="http_username">
+                                        </div>
+                                        <div class="mb-2">
+                                            <label for="http_password" class="form-label">Password</label>
+                                            <input type="password" class="form-control form-control-sm" id="http_password">
+                                        </div>
+                                    </div>
+                                    <!-- Bearer Auth Fields -->
+                                    <div id="bearer_auth_fields" class="auth-fields" style="display: none;">
+                                        <div class="mb-2">
+                                            <label for="http_token" class="form-label">Bearer Token</label>
+                                            <input type="text" class="form-control form-control-sm" id="http_token">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="d-grid gap-2 mt-4">
+                                    <button id="save_settings" class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Crops Display - Full Width -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">Recent Cropped Detections</h5>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted">Latest cropped images with detection bounding boxes overlaid</p>
+                                <div id="recent_crops" class="crop-container">
+                                    <div class="text-muted">No recent crops available. Enable cropping and wait for detections.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Error Modal -->
+        <div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="errorModalLabel">Error</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        The application is not running.
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="toast-container position-fixed top-0 end-0 p-3">
     </div>
-	
-</div>
-<script>
 
-let MQTT_Client = 0;
-var app = null;
+<script>
+var croppingSettings = {
+    active: false,
+    leftborder: 0,
+    rightborder: 0,
+    topborder: 0,
+    bottomborder: 0,
+    sdcard: false,
+    mqtt: false,
+    http: false,
+    http_url: '',
+    http_auth: 'none',
+    http_username: '',
+    http_password: '',
+    http_token: ''
+};
+
+var isDragging = false;
+var dragBorder = null;
+var startPos = { x: 0, y: 0 };
 
 $(document).ready(function() {
+    initializePage();
+    initializeBorderPreview();
 
-	let App = 0;
-	// Main AJAX call
-	$.ajax({
-		type: "GET",
-		url: 'app',
-		dataType: 'json',
-		cache: false,
-		success: function(data) {
-			app = data;
-			document.title = app.manifest.acapPackageConf.setup.friendlyName;
-			$('.sidebar-heading').text(app.manifest.acapPackageConf.setup.friendlyName);
+    $('#http_output').on('change', toggleHttpConfig);
+    $('#http_auth').on('change', toggleAuthFields);
 
-			if( app.status.mqtt.connected ) {
-				ConnectWebSocketClient();
-			} else {
-				setTimeout(() => {
-					showLiveDataMessage("Live data visualization in unavailable. Check MQTT Settings");
-					showToast("DataQ is not connected to a broker.  Please go to MQTT Settings");
-				}, 100);
-			}
+    $('#save_settings_cropping, #save_settings').on('click', saveSettings);
 
-			var pretopic = app.mqtt.preTopic;
-			var serial = app.device.serial;
-
-			$('#EventTopic').text(pretopic + '/events/' + serial + '/#');
-			$('#DetectionsTopic').text(pretopic + '/detections/' + serial);
-			$('#TrackerTopic').text(pretopic + '/tracker/' + serial);
-			$('#PathsTopic').text(pretopic + '/path/' + serial);
-			$('#OccupancyTopic').text(pretopic + '/occupancy/' + serial);
-			$('#GeoSpaceTopic').text(pretopic + '/geospace/' + serial);
-			$('#StatusTopic').text(pretopic + '/status/' + serial);
-
-			// Change these lines in the AJAX success callback
-			$('.publish-check[data-type="events"]').prop('checked', app.settings.publish.events);
-			$('.publish-check[data-type="occupancy"]').prop('checked', app.settings.publish.occupancy || false);
-			$('.publish-check[data-type="detections"]').prop('checked', app.settings.publish.detections);
-			$('.publish-check[data-type="tracker"]').prop('checked', app.settings.publish.tracker);
-			$('.publish-check[data-type="path"]').prop('checked', app.settings.publish.path);
-			$('.publish-check[data-type="geospace"]').prop('checked', app.settings.publish.geospace);
-			$('.publish-check[data-type="status"]').prop('checked', app.settings.publish.status);
-		},
-        error: function(response) {
-			showToast("The application is not running",'danger');
-		}
-	});
-
-	function showLiveDataMessage(message) {
-		const alert = document.getElementById('liveDataAlert');
-		const messageElement = document.getElementById('liveDataMessage');
-		
-		messageElement.textContent = message;
-		alert.classList.remove('d-none');
-		alert.classList.add('show');
-	}
-
-
-	$('.publish-check').on('change', function() {
-		const checkboxType = $(this).data('type');
-		const isChecked = $(this).is(':checked');
-		app.settings.publish[checkboxType] = isChecked;
-
-		var payload = {
-			publish: app.settings.publish
-		}
-
-		$.ajax({type: "POST",
-			url: "settings",
-			dataType: 'text',
-			contentType: 'application/json',
-			data: JSON.stringify(payload),
-			success: function(response) {
-				showToast("Filter updated",'info');
-			},
-			error: function(xhr, status, error) {
-				showToast("Filter updated failed",'danger');
-			}
-		});
-		
-		updateSelectAllCheckbox();
-		
-	});
-
-	$('#selectAll').on('change', function() {
-		const isChecked = $(this).is(':checked');
-		$('.publish-check').prop('checked', isChecked).trigger('change');
-	});
-
-	// Update select all checkbox state based on individual checkboxes
-	function updateSelectAllCheckbox() {
-		const totalCheckboxes = $('.publish-check').length;
-		const checkedCheckboxes = $('.publish-check:checked').length;
-		$('#selectAll').prop('checked', totalCheckboxes === checkedCheckboxes);
-	}
-
-	// Call initially to set the select all checkbox state
-	updateSelectAllCheckbox();
-
-	function ConnectWebSocketClient() {
-		const clientID = "WS-" + app.manifest.acapPackageConf.setup.appName + "-" + app.device.serial + "-" + Math.floor(Math.random() * 10000);
-		if(MQTT_Client)
-			delete MQTT_Client;
-		
-		// Use WSS if page is loaded over HTTPS
-		
-		var tls = app.settings.tls;
-		if( location.protocol === 'https:')
-			tls = true;
-		var port = tls?app.settings.WSS_Port:app.settings.WS_Port;
-
-		MQTT_Client = new Paho.MQTT.Client(app.mqtt.address, port, clientID);
-		
-		MQTT_Client.onConnectionLost = onConnectionLost;
-		var connectionOptions = {
-			useSSL: tls,
-			timeout: 3,
-			onSuccess: onConnect,
-			onFailure: onFailure
-		};
-		
-		if(app.mqtt.user && app.mqtt.user.length)
-			connectionOptions.userName = app.mqtt.user;
-		if(app.mqtt.password && app.mqtt.password.length)
-			connectionOptions.password = app.mqtt.password;
-			
-		MQTT_Client.connect(connectionOptions);
-	}
-	
-	function onConnect() {
-	}
-
-	function onFailure(message) {
-		console.log("onFailure");
-		showLiveDataMessage("Live data visualization is temporarily unavailable - Web client is not connected to broker.");
-		showToast("Web page not connect. " + message.errorMessage + "Check WebSocket connection in MQTT Settings","warning");
-	}
-
-	function onConnectionLost(responseObject) {
-	  if (responseObject.errorCode !== 0) {
-		showLiveDataMessage("Live data visualization is temporarily unavailable - Web client is not connected to broker.");
-		showToast("Web page lost connection. " + responseObject.errorMessage,"warning");
-	  }
-	}
+    setInterval(updateStatus, 2000);
+    setInterval(loadRecentCrops, 5000);
 });
+
+function initializePage() {
+    $.ajax({
+        type: "GET",
+        url: 'app',
+        dataType: 'json',
+        cache: false,
+        success: function(data) {
+            if (data && data.manifest && data.manifest.acapPackageConf &&
+                data.manifest.acapPackageConf.setup &&
+                data.manifest.acapPackageConf.setup.friendlyName) {
+                document.title = data.manifest.acapPackageConf.setup.friendlyName + " - Cropping";
+                $("#sidebar-wrapper .sidebar-heading").text(data.manifest.acapPackageConf.setup.friendlyName);
+            }
+            loadCroppingSettings();
+        },
+        error: function() {
+            showError('The application is not responding');
+        }
+    });
+}
+
+function initializeBorderPreview() {
+    updateDetectionArea();
+    updateCropArea();
+    updateBorderDisplay();
+
+    $('.border-handle').on('mousedown', function(e) {
+        isDragging = true;
+        dragBorder = $(this).data('border');
+        startPos = { x: e.clientX, y: e.clientY };
+        e.preventDefault();
+    });
+
+    $(document).on('mousemove', function(e) {
+        if (!isDragging) return;
+        const deltaX = e.clientX - startPos.x;
+        const deltaY = e.clientY - startPos.y;
+        let value = croppingSettings[dragBorder + 'border'];
+        const sensitivity = 1;
+        switch (dragBorder) {
+            case 'top':
+                value = Math.max(0, Math.min(100, value - deltaY * sensitivity));
+                break;
+            case 'bottom':
+                value = Math.max(0, Math.min(100, value + deltaY * sensitivity));
+                break;
+            case 'left':
+                value = Math.max(0, Math.min(100, value - deltaX * sensitivity));
+                break;
+            case 'right':
+                value = Math.max(0, Math.min(100, value + deltaX * sensitivity));
+                break;
+        }
+        croppingSettings[dragBorder + 'border'] = Math.round(value);
+        updateBorderDisplay();
+        updateCropArea();
+        startPos = { x: e.clientX, y: e.clientY };
+    });
+
+    $(document).on('mouseup', function() {
+        isDragging = false;
+        dragBorder = null;
+    });
+
+    $(window).on('resize', function() {
+        setTimeout(updateDetectionArea, 100);
+        setTimeout(updateCropArea, 110);
+        setTimeout(updateBorderDisplay, 120);
+    });
+}
+
+function updateDetectionArea() {
+    const preview = $('.border-preview');
+    const detection = $('#detection_area');
+    const previewWidth = preview.width();
+    const previewHeight = preview.height();
+    // Square detection, center
+    const size = Math.min(100, previewWidth * 0.3, previewHeight * 0.3);
+    detection.css({
+        width: size + 'px',
+        height: size + 'px',
+        left: (previewWidth / 2 - size / 2) + 'px',
+        top: (previewHeight / 2 - size / 2) + 'px'
+    });
+}
+
+function updateCropArea() {
+    const detection = $('#detection_area');
+    const crop = $('#crop_area');
+    const detectionPos = detection.position();
+    const detectionWidth = detection.outerWidth();
+    const detectionHeight = detection.outerHeight();
+    const left = detectionPos.left - croppingSettings.leftborder;
+    const top = detectionPos.top - croppingSettings.topborder;
+    const width = detectionWidth + croppingSettings.leftborder + croppingSettings.rightborder;
+    const height = detectionHeight + croppingSettings.topborder + croppingSettings.bottomborder;
+    crop.css({
+        left: left + 'px',
+        top: top + 'px',
+        width: width + 'px',
+        height: height + 'px'
+    });
+}
+
+function updateBorderDisplay() {
+    $('#top_value_label').text(croppingSettings.topborder);
+    $('#bottom_value_label').text(croppingSettings.bottomborder);
+    $('#left_value_label').text(croppingSettings.leftborder);
+    $('#right_value_label').text(croppingSettings.rightborder);
+
+    // Position labels halfway between detection and preview edges
+    const preview = $('.border-preview');
+    const d = $('#detection_area');
+    const pW = preview.width();
+    const pH = preview.height();
+    const dW = d.outerWidth();
+    const dH = d.outerHeight();
+
+    // Calculate gaps
+    const gapTop = (pH - dH) / 2;
+    const gapLeft = (pW - dW) / 2;
+    // Value bubbles
+    $('#top_value_label').css({
+        left: (pW/2) + 'px',
+        top: (gapTop / 2 - 17) + 'px',
+        transform: 'translateX(-50%)'
+    });
+    $('#bottom_value_label').css({
+        left: (pW/2) + 'px',
+        top: (pH - gapTop/2 - 17) + 'px',
+        transform: 'translateX(-50%)'
+    });
+    $('#left_value_label').css({
+        left: (gapLeft / 2) + 'px',
+        top: (pH/2 - 12) + 'px',
+        transform: 'none'
+    });
+    $('#right_value_label').css({
+        left: (pW - gapLeft / 2 - 34) + 'px',
+        top: (pH/2 - 12) + 'px',
+        transform: 'none'
+    });
+}
+
+function setPreset(top, right, bottom, left) {
+    croppingSettings.topborder = top;
+    croppingSettings.rightborder = right;
+    croppingSettings.bottomborder = bottom;
+    croppingSettings.leftborder = left;
+    updateBorderDisplay();
+    updateCropArea();
+}
+
+function loadCroppingSettings() {
+    $.ajax({
+        type: "GET",
+        url: 'settings',
+        dataType: 'json',
+        cache: false,
+        success: function(settings) {
+            if (settings.cropping) {
+                croppingSettings = settings.cropping;
+                updateUI();
+            }
+        }
+    });
+}
+
+function updateUI() {
+    $('#cropping_active').prop('checked', croppingSettings.active);
+    $('#sdcard_output').prop('checked', croppingSettings.sdcard || false);
+    $('#mqtt_output').prop('checked', croppingSettings.mqtt || false);
+    $('#http_output').prop('checked', croppingSettings.http || false);
+    $('#http_url').val(croppingSettings.http_url || '');
+    $('#http_auth').val(croppingSettings.http_auth || 'none');
+    $('#http_username').val(croppingSettings.http_username || '');
+    $('#http_password').val(croppingSettings.http_password || '');
+    $('#http_token').val(croppingSettings.http_token || '');
+    updateBorderDisplay();
+    updateCropArea();
+    toggleHttpConfig();
+    toggleAuthFields();
+}
+
+function toggleHttpConfig() {
+    if ($('#http_output').is(':checked')) {
+        $('#http_config').show();
+    } else {
+        $('#http_config').hide();
+    }
+}
+
+function toggleAuthFields() {
+    const authType = $('#http_auth').val();
+    $('#basic_auth_fields').hide();
+    $('#bearer_auth_fields').hide();
+    if (authType === 'basic' || authType === 'digest') {
+        $('#basic_auth_fields').show();
+    } else if (authType === 'bearer') {
+        $('#bearer_auth_fields').show();
+    }
+}
+
+function updateStatus() {
+    // ... unchanged ...
+}
+function loadRecentCrops() {
+    if (!croppingSettings.active) return;
+    $.ajax({
+        type: "GET",
+        url: 'api/recent-crops',
+        dataType: 'json',
+        cache: false,
+        success: function(crops) {
+            displayRecentCrops(crops);
+        }
+    });
+}
+function displayRecentCrops(crops) {
+    var container = $('#recent_crops');
+    container.empty();
+    if (!crops || crops.length === 0) {
+        container.html('<div class="text-muted">No recent crops available.</div>');
+        return;
+    }
+    crops.forEach(function(crop) {
+        var cropHtml = `
+            <div class="crop-item">
+                <div class="detection-box">
+                    <img src="data:image/jpeg;base64,${crop.jpeg_base64}" class="crop-preview" alt="Cropped detection">
+                    <div class="detection-overlay" style="
+                        left: ${crop.detection.x}px;
+                        top: ${crop.detection.y}px;
+                        width: ${crop.detection.w}px;
+                        height: ${crop.detection.h}px;
+                    "></div>
+                </div>
+                <div class="crop-label">
+                    ${crop.label}<br>
+                    <small>${new Date(crop.timestamp).toLocaleTimeString()}</small>
+                </div>
+            </div>
+        `;
+        container.append(cropHtml);
+    });
+}
+
+function saveSettings() {
+    croppingSettings.active = $('#cropping_active').is(':checked');
+    croppingSettings.sdcard = $('#sdcard_output').is(':checked');
+    croppingSettings.mqtt = $('#mqtt_output').is(':checked');
+    croppingSettings.http = $('#http_output').is(':checked');
+    croppingSettings.http_url = $('#http_url').val();
+    croppingSettings.http_auth = $('#http_auth').val();
+    croppingSettings.http_username = $('#http_username').val();
+    croppingSettings.http_password = $('#http_password').val();
+    croppingSettings.http_token = $('#http_token').val();
+    $.ajax({
+        type: "POST",
+        url: 'settings',
+        contentType: 'application/json',
+        data: JSON.stringify({ cropping: croppingSettings }),
+        success: function() {
+			showToast('Cropping settings saved successfully','info');
+        },
+        error: function(response) {
+            showToast('Failed to save cropping settings: ' + response.statusText,"warning");
+        }
+    });
+}
 
 function showToast(message, type = 'danger') {
     const toastContainer = document.querySelector('.toast-container');
