@@ -161,6 +161,11 @@ Certainly! Here is a reviewed and improved version of your release notes for Dat
 ## History
 
 ### 2.0.0 July 14
+- Added properties in geospace publish
+  - active, true while tracking
+  - id, UID for the tracked object
+  
+### 2.0.0 July 14
 
 - Major code refactoring for enhanced stability and future compatibility, especially across varying camera firmware versions.
   - Upgraded to SDK 12.2 (from SDK 3.5) for improved long-term support.

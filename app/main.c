@@ -203,6 +203,8 @@ void Tracker_Data(cJSON *tracker) {
             cJSON_AddNumberToObject(geospaceObject, "lat", lat);
             cJSON_AddNumberToObject(geospaceObject, "lon", lon);
             cJSON_AddNumberToObject(geospaceObject, "age", cJSON_GetObjectItem(tracker, "age")->valuedouble);
+            cJSON_AddStringToObject(geospaceObject, "id", cJSON_GetObjectItem(tracker, "id")->valuestring);
+			cJSON_AddItemToObject(geospaceObject, "active", cJSON_Duplicate(cJSON_GetObjectItem(tracker,"active"), 1));
             sprintf(topic, "geospace/%s", ACAP_DEVICE_Prop("serial"));
             MQTT_Publish_JSON(topic, geospaceObject, 0, 0);
             cJSON_Delete(geospaceObject);
