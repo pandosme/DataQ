@@ -160,10 +160,8 @@ Certainly! Here is a reviewed and improved version of your release notes for Dat
 
 ## History
 
-### 2.0.0 July 14
-- Added properties in geospace publish
-  - active, true while tracking
-  - id, UID for the tracked object
+### 2.0.2 July 14
+- Fixed WEB GUI screw up, displaying the wrong index page.
   
 ### 2.0.0 July 14
 
