@@ -116,24 +116,29 @@ MQTT Heartbeat published every 15 minutes
 
 ### Data Properties
 
-| Property | Description |
-|----------|-------------|
-| id | Unique object identifier |
-| type | Object class ID |
-| class | Object classification labels (Car, Human, Vehicle, Bus, Truck, Head, Bag, Bike, ...) |
-| active | Tracking status boolean |
-| x, y, w, h | Bounding box coordinates |
-| cx, cy | Center of gravity coordinates. Either middle of the object or bottom-center |
-| dx, dy | Total displacement from first detection |
-| birth | Object detection timestamp (EPOCH) |
-| bx, by | Initial position coordinates |
-| age | Duration since detection (seconds) |
-| idle | Time in seconds an object is stationary.  Resets when moving |
-| confidence | Detection confidence (0-100) |
-| timestamp | Current/last detection time |
-| color, color2 | Primary/secondary object colors |
-| path | Position and duration array |
-| lat,lon | Longitude and Latitude |
+| Property   | Type / Format | Description & Usage |
+|------------|---------------|---------------------|
+| **id**     | `string` | Unique tracking ID assigned per object during its lifetime in the scene. Used as a primary key when correlating updates. |
+| **type**   | `string` or `int` | Internal object type code (implementation detail). Typically maps to a `class` but may be model‑specific. Usually not needed unless doing low‑level integrations. |
+| **class**  | `string` | Semantic classification label (e.g., `"Person"`, `"Car"`, `"Bike"`, `"Bag"`). Primary field to identify object categories for business logic (counts, alerts, analytics). |
+| **active** | `boolean` | Indicates whether the object is currently visible/trackable. Useful for knowing when objects have exited the scene. |
+| **x, y, w, h** | `int` (pixels) | Bounding box rectangle: top‑left `(x,y)` position and box size `(w,h)`. Used to draw boxes in UIs or compute relative object size. |
+| **cx, cy** | `int` (pixels, normalized 0–1000 optional) | Object’s positional anchor point (center or bottom‑center). Used for tracking paths, heat maps, and trajectory analyses. |
+| **dx, dy** | `int` (pixels or normalized units) | Net displacement `(current − initial)` in X and Y directions. Indicates travel direction: `dx > 0 = right`, `dy > 0 = down`. Useful for direction/flow detection. |
+| **birth**  | `int` (epoch seconds/milliseconds) | Timestamp when the object first appeared. Used for age/duration calculations. |
+| **bx, by** | `int` (pixels) | Position coordinates where the object first entered the scene. Can be used for entry‑point analysis. |
+| **age**    | `float` (seconds) | Time since first detection. Key metric for dwell time, stay duration, and filtering short vs long presence. |
+| **idle**   | `float` (seconds) | How long the object has been stationary (resets on movement). Supports use cases like idle vehicle/person detection, abandoned luggage, or loitering alerts. |
+| **confidence** | `int` (0–100) | Detection confidence score. Use thresholding to discard low-confidence objects and minimize false positives. |
+| **timestamp**  | `int` (epoch seconds/milliseconds) | Last frame time where the object was seen. Useful for synchronization and gap detection. |
+| **color, color2** | `string` (label) | Primary and secondary detected color labels (e.g., `"red"`, `"blue"`). Helps with descriptive analytics (red car, blue shirt). May be `null` if unavailable. |
+| **path**   | `array` of objects | Sequence of position and dwell samples. Each entry contains `{x, y, d, lat?, lon?}`. Use to reconstruct trajectories, heatmaps, or identify where objects dwell most. |
+| **lat, lon** | `float` (GPS coords) | Latitude/Longitude if a homography matrix is available. Enables geo‑position mapping in real-world coordinates instead of pixels. |
+| **name**   | `string` | Camera name or location identifier (e.g., `"LobbyCam1"`). Useful for human-readable references. |
+| **serial / device** | `string` | Unique hardware device identifier. Supports multi-camera/log correlation. |
+| **localTime** | `string` (timestamp, local timezone) | Human‑readable local time when the event occurred. Useful for logs, reports, and non‑technical stakeholders. |
+
+***
 
 ## MQTT Configuration
 
