@@ -126,7 +126,7 @@ $(document).ready(function() {
 			var pretopic = app.mqtt.preTopic;
 			var serial = app.device.serial;
 
-			$('#EventTopic').text(pretopic + '/events/' + serial + '/#');
+			$('#EventTopic').text(pretopic + '/event/' + serial + '/#');
 			$('#DetectionsTopic').text(pretopic + '/detections/' + serial);
 			$('#TrackerTopic').text(pretopic + '/tracker/' + serial);
 			$('#PathsTopic').text(pretopic + '/path/' + serial);

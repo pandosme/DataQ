@@ -303,7 +303,7 @@ function setActiveMode(mode, button) {
 		areaMode = null;
 	} else {
 		// Activate the new mode
-		currentMode = mode;
+		areaMode = mode;
 		$(button).addClass('active');
 	}
 }
@@ -507,30 +507,6 @@ $('#btn-save').click(function() {
 function labelsUpdated(selection) {
 	app.settings.scene.ignoreClass = selection;
 	saveFilter();
-}
-
-function selectArea( area ) {
-	if( area === "aoi") {
-		var x1 = parseInt( app.settings.scene.aoi.x1 / 1000 * width);
-		var y1 = parseInt( app.settings.scene.aoi.y1 / 1000 * height);
-		var x2 = parseInt( app.settings.scene.aoi.x2 / 1000 * width);
-		var y2 = parseInt( app.settings.scene.aoi.y2 / 1000 * height);
-	}
-	if( area === "minSize") {
-		var x1 = parseInt( (1000 - app.settings.scene.minWidth) / 2000 * width);
-		var y1 = parseInt( (1000 - app.settings.scene.minHeight) / 2000 * height);
-		var x2 = x1 + parseInt( app.settings.scene.minWidth / 1000 * width);
-		var y2 = y1 + parseInt( app.settings.scene.minHeight / 1000 * height);
-	}
-	if( area === "maxSize") {
-		var x1 = parseInt( (1000 - app.settings.scene.maxWidth) / 2000 * width);
-		var y1 = parseInt( (1000 - app.settings.scene.maxHeight) / 2000 * height);
-		var x2 = x1 + parseInt( app.settings.scene.maxWidth / 1000 * width);
-		var y2 = y1 + parseInt( app.settings.scene.maxHeight / 1000 * height);
-	}
-	areaHandler.setSelection(x1, y1, x2, y2, 0);				
-	areaHandler.setOptions({show:true});
-	areaMode = area;
 }
 
 function updateArea( area, selection ) {

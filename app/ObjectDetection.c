@@ -524,6 +524,7 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
         if (cy < config_y1 || cy > config_y2) valid = false;
         if (ObjectDetection_Blacklisted(obj->class_name)) valid = false;
         if (rw < config_min_width || rh < config_min_height) valid = false;
+        if (rw > config_max_width || rh > config_max_height) valid = false;
         detection_cache_entry_t *entry = (detection_cache_entry_t*)g_hash_table_lookup(detectionCache, obj->id);
         if (!entry) {
             entry = calloc(1, sizeof(detection_cache_entry_t));

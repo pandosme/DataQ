@@ -165,7 +165,10 @@ Certainly! Here is a reviewed and improved version of your release notes for Dat
 
 ## History
 
-### 2.0.2 July 14
+### 2.0.3 Sep 7
+- Path timestamp is now correct
+
+### 2.0.2 Sep 2
 - Fixed WEB GUI screw up, displaying the wrong index page.
   
 ### 2.0.0 July 14
