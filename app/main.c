@@ -401,12 +401,6 @@ void Event_Callback(cJSON *event, void* userdata) {
         eventFilter = eventFilter->next;
     }
 
-	char *json = cJSON_PrintUnformatted(event);
-	if( json ) {
-		LOG("%s",json);
-		free(json);
-	}
-
     char topic[256];
     sprintf(topic, "event/%s/%s", ACAP_DEVICE_Prop("serial"), eventTopic->valuestring);
     cJSON_Delete(eventTopic);
