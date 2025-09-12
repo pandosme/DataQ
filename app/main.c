@@ -13,6 +13,7 @@
 #include <string.h>
 #include <syslog.h>
 #include <glib.h>
+#include <time.h>
 #include <glib-unix.h>
 #include <signal.h>
 #include <math.h>
@@ -45,6 +46,17 @@ int publishOccupancy = 0;
 int publishStatus = 1;
 int publishGeospace = 0;
 int shouldReset = 0;
+
+#define MAX_OCCUPANCY_HISTORY 64  // Adjust if your max burst rate is super high
+
+typedef struct {
+    double timestamp_ms; ///< in seconds (use e.g. gettimeofday or monotonic)
+    cJSON* counter;   ///< cJSON object: { "Human":3, "Car":5, ... }
+} OccupancySample;
+
+OccupancySample occupancy_history[MAX_OCCUPANCY_HISTORY];
+int occupancy_history_start = 0;
+int occupancy_history_count = 0;
 
 cJSON* ProcessPaths(cJSON* tracker) {
     if (!PathCache)
@@ -256,6 +268,63 @@ int Check_Counters_Equal(cJSON* counter1, cJSON* counter2) {
     return 1;
 }
 
+static void push_occupancy_sample(double timestamp_ms, cJSON* counter) {
+    // Remove oldest if buffer is full
+    if (occupancy_history_count == MAX_OCCUPANCY_HISTORY) {
+        cJSON_Delete(occupancy_history[occupancy_history_start].counter);
+        occupancy_history_start = (occupancy_history_start + 1) % MAX_OCCUPANCY_HISTORY;
+        occupancy_history_count--;
+    }
+    int idx = (occupancy_history_start + occupancy_history_count) % MAX_OCCUPANCY_HISTORY;
+    occupancy_history[idx].timestamp_ms = timestamp_ms;
+    occupancy_history[idx].counter = cJSON_Duplicate(counter, 1);
+    occupancy_history_count++;
+}
+
+static void push_occupancy_zero_sample(double timestamp_ms) {
+    cJSON* empty = cJSON_CreateObject();
+    push_occupancy_sample(timestamp_ms, empty);
+    cJSON_Delete(empty);
+}
+
+cJSON*
+compute_stabilized_occupancy(double now, double integration_time) {
+    // Remove outdated entries
+    while (occupancy_history_count > 0 &&
+           occupancy_history[occupancy_history_start].timestamp_ms < now - integration_time) {
+        cJSON_Delete(occupancy_history[occupancy_history_start].counter);
+        occupancy_history_start = (occupancy_history_start + 1) % MAX_OCCUPANCY_HISTORY;
+        occupancy_history_count--;
+    }
+    // Aggregate all counters
+    cJSON* result = cJSON_CreateObject();
+    int n = 0;
+    for (int i = 0, idx = occupancy_history_start; i < occupancy_history_count; ++i, idx = (idx + 1) % MAX_OCCUPANCY_HISTORY) {
+        cJSON* counter = occupancy_history[idx].counter;
+        cJSON* item = counter->child;
+        while (item) {
+            cJSON* sum = cJSON_GetObjectItem(result, item->string);
+            if (sum) {
+                sum->valuedouble += item->valuedouble;
+                sum->valueint = (int)sum->valuedouble;
+            } else {
+                cJSON_AddNumberToObject(result, item->string, item->valuedouble);
+            }
+            item = item->next;
+        }
+        n++;
+    }
+    // Average for each class
+    cJSON* item = result->child;
+    while (item) {
+        if (n > 0) item->valuedouble /= n;
+        item->valueint = (int)(item->valuedouble + 0.5); // Round
+        item = item->next;
+    }
+    return result;
+}
+
+
 cJSON* ProcessOccupancy(cJSON* list) {
     cJSON* settings = ACAP_Get_Config("settings");
     if (!settings)
@@ -267,10 +336,12 @@ cJSON* ProcessOccupancy(cJSON* list) {
     int moving = cJSON_GetObjectItem(occupancy, "moving") ? cJSON_GetObjectItem(occupancy, "moving")->type == cJSON_True : 0;
     double ageThreshold = cJSON_GetObjectItem(occupancy, "ageThreshold") ? cJSON_GetObjectItem(occupancy, "ageThreshold")->valuedouble : 2.0;
     double idleThreshold = cJSON_GetObjectItem(occupancy, "idleThreshold") ? cJSON_GetObjectItem(occupancy, "idleThreshold")->valuedouble : 3.0;
-
     int listSize = cJSON_GetArraySize(list);
-
+    
     if (listSize == 0) {
+        // Empty array: push an empty ("zero") sample!
+        double now = ACAP_DEVICE_Timestamp();
+        push_occupancy_zero_sample(now);
         cJSON* empty = cJSON_CreateObject();
         int changed = 1;
         if (last_occupancy && cJSON_Compare(last_occupancy, empty, 1))
@@ -284,32 +355,24 @@ cJSON* ProcessOccupancy(cJSON* list) {
         last_occupancy = cJSON_Duplicate(empty, 1);
         return empty;
     }
-
     cJSON* counters = cJSON_CreateObject();
-
     for (int i = 0; i < listSize; ++i) {
         cJSON* det = cJSON_GetArrayItem(list, i);
-
-        cJSON* active_item = cJSON_GetObjectItem(det, "active");
-        if (!active_item || active_item->type != cJSON_True)
-            continue;
-
         const char* cls = cJSON_GetObjectItem(det, "class")->valuestring;
         double age = cJSON_GetObjectItem(det, "age")->valuedouble;
         double idle = cJSON_GetObjectItem(det, "idle")->valuedouble;
-
         int is_moving = (age >= ageThreshold) && (idle < idleThreshold);
         int is_stationary = (age >= ageThreshold) && (idle >= idleThreshold);
-
         if ((moving && is_moving) || (stationary && is_stationary)) {
             cJSON* curr = cJSON_GetObjectItem(counters, cls);
-            if (curr)
-                curr->valueint += 1;
-            else
+            if (curr) {
+                curr->valuedouble += 1.0;
+                curr->valueint = (int)curr->valuedouble;
+            } else {
                 cJSON_AddNumberToObject(counters, cls, 1);
+            }
         }
     }
-
     cJSON* item = counters->child;
     while (item) {
         cJSON* next = item->next;
@@ -317,14 +380,16 @@ cJSON* ProcessOccupancy(cJSON* list) {
             cJSON_DeleteItemFromObjectCaseSensitive(counters, item->string);
         item = next;
     }
+    // Push sample to buffer
+    double now = ACAP_DEVICE_Timestamp();
+    push_occupancy_sample(now, counters);
 
     if (Check_Counters_Equal(last_occupancy, counters) == 1)
         return 0;
-
     if (last_occupancy)
         cJSON_Delete(last_occupancy);
     last_occupancy = cJSON_Duplicate(counters, 1);
-	ACAP_STATUS_SetObject("occupancy", "counter", counters);
+    ACAP_STATUS_SetObject("occupancy", "counter", counters);
     return counters;
 }
 
@@ -344,15 +409,30 @@ void Detections_Data(cJSON *list) {
     lasty_detections_was_empty = cJSON_GetArraySize(list) == 0;
 
     if (publishOccupancy) {
+        // Process actual occupancy, update buffers
         cJSON* counter = ProcessOccupancy(list);
-        if (counter) {
+        double now = ACAP_DEVICE_Timestamp();
+
+        // Fetch settings (allow fallback if not found)
+        cJSON* settings = ACAP_Get_Config("settings");
+        cJSON* occupancy = settings ? cJSON_GetObjectItem(settings, "occupancy") : NULL;
+        double integrationTime = 2.0; // Default integration window
+        if (occupancy && cJSON_GetObjectItem(occupancy, "integrationTime")) {
+            integrationTime = cJSON_GetObjectItem(occupancy, "integrationTime")->valuedouble;
+        }
+
+        // Compute stabilized output
+        cJSON* stabilized = compute_stabilized_occupancy(now, integrationTime);
+        if (stabilized) {
             cJSON* payload = cJSON_CreateObject();
-            cJSON_AddItemToObject(payload, "occupancy", counter);
-            cJSON_AddNumberToObject(payload, "timestamp", ACAP_DEVICE_Timestamp());
+            cJSON_AddItemToObject(payload, "occupancy", stabilized);
+            cJSON_AddNumberToObject(payload, "timestamp", now);
             sprintf(topic, "occupancy/%s", ACAP_DEVICE_Prop("serial"));
             MQTT_Publish_JSON(topic, payload, 0, 0);
             cJSON_Delete(payload);
         }
+        if (counter)
+            cJSON_Delete(counter); // Unstabilized, only for transition/compat use
     }
     cJSON_Delete(list);
 }

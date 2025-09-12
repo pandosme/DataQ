@@ -165,6 +165,9 @@ Certainly! Here is a reviewed and improved version of your release notes for Dat
 
 ## History
 
+### 2.0.4 Sep 12
+- Fixed Occupancy to have the value of the number of each detected labels.
+
 ### 2.0.3 Sep 7
 - Path timestamp is now correct
 
