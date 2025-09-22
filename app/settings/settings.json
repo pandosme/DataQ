@@ -9,7 +9,8 @@
 		"path": true,
 		"occupancy": false,
 		"status": true,
-		"geospace": false
+		"geospace": false,
+		"anomaly": false
 	},
 	"scene": {
 		"confidence": 30,
@@ -124,6 +125,8 @@
 		"stationary": true,
 		"moving": true,		
 		"ageThreshold": 2.0,
-		"idleThreshold": 3.0
-	}
+		"idleThreshold": 3.0,
+		"integrationTime": 2.0
+	},
+	"anomaly": {}
 }

@@ -165,6 +165,19 @@ Certainly! Here is a reviewed and improved version of your release notes for Dat
 
 ## History
 
+### 2.1.0 Sep XX
+- Added anomaly detection. Trackers and Path are marked with property "anomaly": "The reason".  
+  Vehicles and humans are treated individually
+	* Normal Entry areas (first detected position)
+    * Normal Exit Areas (last detected position)
+    * Max numbers of direction changes (zig-zag movement)
+    * Max idle time
+    * Max age
+    * Vertical movement (Wrong way)
+    * Horizontal movement (Wrong way)
+    * Max Speed
+- Trackers are now published immediately when detected. Previous behavior required new object to move.
+
 ### 2.0.4 Sep 12
 - Fixed Occupancy to have the value of the number of each detected labels.
 

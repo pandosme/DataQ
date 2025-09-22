@@ -27,6 +27,7 @@
 #define LOG_DEEP(fmt, args...) {}
 
 #define IDLE_THRESHOLD_PCT 50
+#define DIRECTION_CHANGE_THRESHOLD_RAD (M_PI / 4) // 45 degrees 
 
 typedef struct {
     char name[64];
@@ -44,7 +45,7 @@ static const NameMapEntry name_map[] = {
     { "motorcycle_bicycle", "Bike" },
     { "bus", "Bus" },
     { "truck","Truck" },
-    { "vehicle_other","Vehicle" },
+    { "vehicle_other","Other" },
     { "vehicle","Vehicle" },	
     { "license_plate", "LicensePlate" },
     { "human", "Human" },
@@ -85,12 +86,16 @@ typedef struct {
     double timestamp; // ms epoch
     double birthTime; // ms epoch
     int prev_cx, prev_cy;
+	double prev_angle;
+	int directions;
     int distance;
     double age;     // seconds
     bool valid;
     bool idle;
     bool sleep;
     bool trackerSleep;	
+	double speed;
+	double maxSpeed;	
     double idle_duration; // seconds
     double max_idle_duration; // seconds
     double idle_start_time; // ms epoch
@@ -126,7 +131,7 @@ static int config_significan_line = 400;
 static cJSON* config_blacklist = 0;
 
 static ObjectDetection_Callback detectionsCallback = 0;
-static ObjectDetection_Callback trackerCallback = 0;
+static TrackerDetection_Callback trackerCallback = 0;
 
 static double get_epoch_ms() {
     struct timespec ts;
@@ -253,14 +258,12 @@ void ObjectDetection_Config(cJSON* data) {
 }
 
 
-static void publish_tracker(detection_cache_entry_t *entry) {
+static void publish_tracker(detection_cache_entry_t *entry, int timer ) {
     cJSON *obj = cJSON_CreateObject();
     if (!obj || !entry || !entry->id) return;
     if( entry->active == true ) {
         if (!entry->valid) { cJSON_Delete(obj); return; }
         if (entry->trackerSleep) { cJSON_Delete(obj); return; }
-        if (entry->age < 0.2 ) { cJSON_Delete(obj); return; }
-        if (entry->distance < IDLE_THRESHOLD_PCT ) { cJSON_Delete(obj); return; }
     }
     const char* label = NiceName(entry->class_name);
     if (!label) { cJSON_Delete(obj); return; }
@@ -270,6 +273,7 @@ static void publish_tracker(detection_cache_entry_t *entry) {
     cJSON_AddNumberToObject(obj, "confidence", entry->confidence);
     cJSON_AddNumberToObject(obj, "age", entry->age);
     cJSON_AddNumberToObject(obj, "distance", entry->distance/10);
+    cJSON_AddNumberToObject(obj, "directions", entry->directions);
     cJSON_AddNumberToObject(obj, "x", entry->x);
     cJSON_AddNumberToObject(obj, "y", entry->y);
     cJSON_AddNumberToObject(obj, "w", entry->w);
@@ -283,6 +287,9 @@ static void publish_tracker(detection_cache_entry_t *entry) {
     cJSON_AddNumberToObject(obj, "timestamp", entry->timestamp);
     cJSON_AddNumberToObject(obj, "birth", entry->birthTime);
     cJSON_AddNumberToObject(obj, "idle", entry->idle_duration);	
+    cJSON_AddNumberToObject(obj, "maxIdle", entry->max_idle_duration);	
+	cJSON_AddNumberToObject(obj, "speed", entry->speed);
+	cJSON_AddNumberToObject(obj, "maxSpeed", entry->maxSpeed);
     cJSON_AddStringToObject(obj, "id", entry->id);
     if( entry->sleep && !entry->trackerSleep) {
         cJSON_AddBoolToObject(obj, "active", 0);
@@ -340,10 +347,9 @@ static void publish_tracker(detection_cache_entry_t *entry) {
     entry->last_published_tracker = get_epoch_ms();
     cJSON* payload = cJSON_Duplicate(obj,1);
     if( trackerCallback )
-        trackerCallback(payload);
+        trackerCallback(payload, timer);
     cJSON_Delete(obj);
 }
-
 
 static void publish_detections(GHashTable *cache) {
     cJSON *arr = cJSON_CreateArray();
@@ -382,7 +388,7 @@ static void publish_detections(GHashTable *cache) {
             cJSON_AddBoolToObject(obj, "active", entry->active);
         }
         if( entry->active == false ) {
-            publish_tracker(entry);
+            publish_tracker(entry, 0);
         }
         for (size_t a = 0; a < entry->num_attributes; ++a) {
             if (strlen(entry->attributes[a].name) && strlen(entry->attributes[a].value)) {
@@ -490,6 +496,31 @@ Adjust_For_VehicleType(detection_cache_entry_t *entry) {
     }
 }
 
+void distinct_direction_change(detection_cache_entry_t *entry, int cx, int cy) {
+    float dx = cx - entry->prev_cx;
+    float dy = cy - entry->prev_cy;
+    float norm = sqrtf(dx * dx + dy * dy);
+    if (norm < 1e-3) {
+        // No significant movement, do nothing
+        return;
+    }
+    double cur_angle = atan2(dy, dx); // returns in radians, full [-pi, pi]
+
+    if (isnan(entry->prev_angle)) {
+        // First entry—just set angle but don't increment
+        entry->prev_angle = cur_angle;
+        return;
+    }
+    double delta = fabs(cur_angle - entry->prev_angle);
+    // Normalize to [0,pi]
+    if (delta > M_PI)
+        delta = 2 * M_PI - delta;
+    if (delta > DIRECTION_CHANGE_THRESHOLD_RAD) {
+        entry->directions += 1;
+    }
+    entry->prev_angle = cur_angle;
+}
+
 static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user_data) {
     g_mutex_lock(&detection_mutex);
 	LOG_DEEP("<ObjectDection:%s",__func__);
@@ -522,6 +553,7 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
         if (obj->confidence < config_min_confidence) valid = false;
         if (cx < config_x1 || cx > config_x2) valid = false;
         if (cy < config_y1 || cy > config_y2) valid = false;
+        if (rw < 5 || rh < 5) valid = false;
         if (ObjectDetection_Blacklisted(obj->class_name)) valid = false;
         if (rw < config_min_width || rh < config_min_height) valid = false;
         if (rw > config_max_width || rh > config_max_height) valid = false;
@@ -554,11 +586,15 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
             entry->birthTime = now;
             entry->prev_cx = cx;
             entry->prev_cy = cy;
+			entry->prev_angle = NAN; // or -1000.0, but NAN is preferred for clarity
+			entry->directions = 0;			
             entry->age = 0.0f;
             entry->max_idle_duration = 0;
             entry->valid = valid;
             entry->idle = false;
-            entry->sleep = false;
+			entry->speed = 0;
+			entry->maxSpeed = 0;
+			entry->sleep = false;
             entry->trackerSleep = false;
             entry->idle_duration = 0.0f;
             entry->idle_start_time = now;
@@ -570,6 +606,8 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
                 continue;
             }
 			Adjust_For_VehicleType( entry);
+			if( valid )
+				publish_tracker( entry, 0 );
             g_hash_table_insert(detectionCache, keycopy, entry);
 			
         } else {
@@ -583,6 +621,7 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
                 if( entry->idle_duration > entry->max_idle_duration )
                     entry->max_idle_duration = entry->idle_duration;
             } else {
+				distinct_direction_change(entry, cx, cy);
                 if( entry->sleep ) {
                     entry->sleep = false;
                     entry->bx = cx;
@@ -599,8 +638,12 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
                 }
                 entry->trackerSleep = false;
                 entry->distance += dist;
+				if( entry->age > 1)
+					entry->speed = floor( (entry->distance/entry->age) * 100.0 + 0.5) / 100.0;
+				if( entry->speed > entry->maxSpeed )
+					entry->maxSpeed = entry->speed;
                 entry->idle = false;
-                publish_tracker( entry );
+                publish_tracker( entry, 0 );
                 entry->idle_duration = 0.0f;
                 entry->idle_start_time = now;
                 entry->prev_cx = cx;
@@ -673,7 +716,7 @@ void ObjectDetection_Reset() {
         g_hash_table_iter_init(&validIter, validCache);
         while (g_hash_table_iter_next(&validIter, &vkey, &vvalue)) {
             detection_cache_entry_t *entry = (detection_cache_entry_t*)vvalue;
-            publish_tracker(entry);
+            publish_tracker(entry ,0);
         }
 
         // Publish detections for valid objects
@@ -706,13 +749,13 @@ gboolean update_trackers(gpointer user_data) {
     while (g_hash_table_iter_next(&iter, &key, &value)) {
         detection_cache_entry_t *entry = (detection_cache_entry_t*)value;
         if( entry->active == true && now - entry->last_published_tracker > 1500 )
-            publish_tracker(entry);
+            publish_tracker(entry, 1);
     }
     g_mutex_unlock(&detection_mutex);
     return TRUE; 
 }
 
-int ObjectDetection_Init(ObjectDetection_Callback detections, ObjectDetection_Callback tracker) {
+int ObjectDetection_Init(ObjectDetection_Callback detections, TrackerDetection_Callback tracker) {
     g_mutex_lock(&detection_mutex);
     LOG_TRACE("%s: Entry\n",__func__);
     detectionsCallback = detections;
@@ -736,11 +779,6 @@ int ObjectDetection_Init(ObjectDetection_Callback detections, ObjectDetection_Ca
         item = item->next;
     }
 
-	char* json = cJSON_PrintUnformatted(labels);
-	if( json ) {
-		LOG("Labels: %s\n", json );
-		free(json);
-	}
 	cJSON_Delete(list);
     ACAP_STATUS_SetObject("detections", "labels", labels);
     g_timeout_add_seconds(1, update_trackers, NULL);	

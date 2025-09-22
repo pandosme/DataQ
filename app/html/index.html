@@ -21,6 +21,7 @@
 			<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
 			<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
 			<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
+			<a href="anomaly.html" class="list-group-item list-group-item-action">Anomaly</a>
 			<a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
 			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
 			<a href="about.html" class="list-group-item list-group-item-action">About</a>
@@ -72,6 +73,11 @@
 									<td><input type="checkbox" class="form-check-input publish-check" data-type="occupancy"></td>
 									<td>Occupancy</td>
 									<td><span id="OccupancyTopic"></span></td>
+								</tr>
+								<tr>
+									<td><input type="checkbox" class="form-check-input publish-check" data-type="anomaly"></td>
+									<td>Anomaly</td>
+									<td><span id="AnomalyTopic"></span></td>
 								</tr>
 								<tr>
 									<td><input type="checkbox" class="form-check-input publish-check" data-type="geospace"></td>
@@ -131,12 +137,14 @@ $(document).ready(function() {
 			$('#TrackerTopic').text(pretopic + '/tracker/' + serial);
 			$('#PathsTopic').text(pretopic + '/path/' + serial);
 			$('#OccupancyTopic').text(pretopic + '/occupancy/' + serial);
+			$('#AnomalyTopic').text(pretopic + '/anomaly/' + serial);
 			$('#GeoSpaceTopic').text(pretopic + '/geospace/' + serial);
 			$('#StatusTopic').text(pretopic + '/status/' + serial);
 
 			// Change these lines in the AJAX success callback
 			$('.publish-check[data-type="events"]').prop('checked', app.settings.publish.events);
 			$('.publish-check[data-type="occupancy"]').prop('checked', app.settings.publish.occupancy || false);
+			$('.publish-check[data-type="anomaly"]').prop('checked', app.settings.publish.anomaly || false);
 			$('.publish-check[data-type="detections"]').prop('checked', app.settings.publish.detections);
 			$('.publish-check[data-type="tracker"]').prop('checked', app.settings.publish.tracker);
 			$('.publish-check[data-type="path"]').prop('checked', app.settings.publish.path);

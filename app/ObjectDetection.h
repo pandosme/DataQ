@@ -8,9 +8,10 @@
 #include "cJSON.h"
 
 typedef void (*ObjectDetection_Callback)( cJSON *detections  );
+typedef void (*TrackerDetection_Callback)( cJSON *detections, int timer );
 //Subscribers are responsible for deleting the cJSON object.
 
-int		ObjectDetection_Init( ObjectDetection_Callback detections, ObjectDetection_Callback tracker);
+int		ObjectDetection_Init( ObjectDetection_Callback detections, TrackerDetection_Callback tracker);
 void	ObjectDetection_Config( cJSON* data );
 void	ObjectDetection_Reset();
 
