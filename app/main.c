@@ -187,10 +187,8 @@ cJSON* ProcessPaths(cJSON* tracker) {
 			cJSON_AddNumberToObject(path, "directions", cJSON_GetObjectItem(tracker, "directions")->valueint);
 			if( cJSON_GetObjectItem(tracker,"anomaly") )
 				cJSON_AddStringToObject(path,"anomaly",cJSON_GetObjectItem(tracker,"anomaly")->valuestring);
-			
-			if( age > 0 )
-				speed = floor( (distance / age) * 100.0 + 0.5) / 100.0;
-			cJSON_AddNumberToObject(path,"speed",speed);
+			if( cJSON_GetObjectItem(tracker,"maxSpeed") )
+				cJSON_AddNumberToObject(path,"maxSpeed",cJSON_GetObjectItem(tracker,"maxSpeed")->valuedouble);
             return path;
         }
         cJSON_DetachItemFromObject(PathCache, id);
@@ -200,18 +198,32 @@ cJSON* ProcessPaths(cJSON* tracker) {
     return 0;
 }
 
+
+static guint anomaly_timeout_id = 0;
+
+static gboolean
+Clear_Anomaly(gpointer user_data) {
+    ACAP_EVENTS_Fire_State("anomaly", 0);
+    anomaly_timeout_id = 0; // Reset timeout id
+    return FALSE; // Do not reschedule
+}
+
 void
 Fire_Anomaly() {
+    ACAP_EVENTS_Fire_State("anomaly", 1);
 
+    // Cancel any pending timeout
+    if (anomaly_timeout_id != 0) {
+        g_source_remove(anomaly_timeout_id);
+        anomaly_timeout_id = 0;
+    }
+    // Set a new 2-second timeout (2000 ms)
+    anomaly_timeout_id = g_timeout_add(4000, Clear_Anomaly, NULL);
 }
 
 
-void Check_Anomaly(cJSON* tracker) {
-    cJSON* settings = ACAP_Get_Config("settings");
-    if (!settings) return;
-    cJSON* anomaly = cJSON_GetObjectItem(settings, "anomaly");
-    if (!anomaly) return;
-    if (!anomaly->child) return;
+void
+Check_Anomaly(cJSON* tracker) {
 
     int is_human = 0, is_vehicle = 0;
     const char* label = cJSON_GetObjectItem(tracker, "class")->valuestring;
@@ -223,11 +235,6 @@ void Check_Anomaly(cJSON* tracker) {
         is_vehicle = 1;
 
     // Get the correct group ("humans" or "vehicles")
-    cJSON* group = NULL;
-    if (is_human) group = cJSON_GetObjectItem(anomaly, "humans");
-    else if (is_vehicle) group = cJSON_GetObjectItem(anomaly, "vehicles");
-    else return;
-    if (!group) return;
 
     // Save stats as before (unchanged)
     if (cJSON_GetObjectItem(tracker,"active")->type == cJSON_False) {
@@ -236,7 +243,7 @@ void Check_Anomaly(cJSON* tracker) {
 
         stats = ACAP_STATUS_Object(group_label, "directions");
         if(!stats) stats = cJSON_CreateArray();
-        while( cJSON_GetArraySize(stats) > 100 )
+        while( cJSON_GetArraySize(stats) > 200 )
             cJSON_DeleteItemFromArray(stats, 0);
         cJSON_AddItemToArray(stats, cJSON_CreateNumber(cJSON_GetObjectItem(tracker, "directions")->valueint));
         ACAP_STATUS_SetObject(group_label, "directions", stats);
@@ -244,24 +251,23 @@ void Check_Anomaly(cJSON* tracker) {
         stats = ACAP_STATUS_Object(group_label, "age");
         if(!stats) stats = cJSON_CreateArray();
         cJSON_AddItemToArray(stats, cJSON_CreateNumber(cJSON_GetObjectItem(tracker, "age")->valuedouble));
-        while( cJSON_GetArraySize(stats) > 100 )
+        while( cJSON_GetArraySize(stats) > 200 )
             cJSON_DeleteItemFromArray(stats, 0);
         ACAP_STATUS_SetObject(group_label, "age", stats);
 
         stats = ACAP_STATUS_Object(group_label, "idle");
         if(!stats) stats = cJSON_CreateArray();
         cJSON_AddItemToArray(stats, cJSON_CreateNumber(cJSON_GetObjectItem(tracker, "maxIdle")->valuedouble));
-        while( cJSON_GetArraySize(stats) > 100 )
+        while( cJSON_GetArraySize(stats) > 200 )
             cJSON_DeleteItemFromArray(stats, 0);
         ACAP_STATUS_SetObject(group_label, "idle", stats);
 
         stats = ACAP_STATUS_Object(group_label, "speed");
         if(!stats) stats = cJSON_CreateArray();
-
         double speed = cJSON_GetObjectItem(tracker, "maxSpeed")->valuedouble;
         if (speed > 0) {
             cJSON_AddItemToArray(stats, cJSON_CreateNumber(speed));
-            while( cJSON_GetArraySize(stats) > 100 )
+            while( cJSON_GetArraySize(stats) > 200 )
                 cJSON_DeleteItemFromArray(stats, 0);
             ACAP_STATUS_SetObject(group_label, "speed", stats);
         }
@@ -282,6 +288,19 @@ void Check_Anomaly(cJSON* tracker) {
             cJSON_DeleteItemFromArray(stats, 0);
         ACAP_STATUS_SetObject(group_label, "vertical", stats);
     }
+
+
+    cJSON* settings = ACAP_Get_Config("settings");
+    if (!settings) return;
+    cJSON* anomaly = cJSON_GetObjectItem(settings, "anomaly");
+    if (!anomaly) return;
+    if (!anomaly->child) return;
+
+    cJSON* group = NULL;
+    if (is_human) group = cJSON_GetObjectItem(anomaly, "humans");
+    else if (is_vehicle) group = cJSON_GetObjectItem(anomaly, "vehicles");
+    else return;
+    if (!group) return;
 
     // Extract area arrays for the current group
     cJSON* common = cJSON_GetObjectItem(group, "common");
@@ -312,7 +331,7 @@ void Check_Anomaly(cJSON* tracker) {
             item = item->next;
         }
         if (!found_common) {
-            LOG("Invalid common entry/exit");
+            //LOG("Invalid common entry/exit");
             Fire_Anomaly();
             cJSON_AddStringToObject(tracker, "anomaly", "Invalid entry/exit");
             return;
@@ -323,6 +342,8 @@ void Check_Anomaly(cJSON* tracker) {
     int found_restricted = 0;
     if (restricted && cJSON_GetArraySize(restricted)) {
         cJSON* item = restricted->child;
+		if( cJSON_GetObjectItem(item,"distance")->valueint < 20 )
+			item = 0;
         while(item && !found_restricted) {
             int x1 = cJSON_GetObjectItem(item,"x1")->valueint;
             int x2 = cJSON_GetObjectItem(item,"x2")->valueint;
@@ -346,7 +367,7 @@ void Check_Anomaly(cJSON* tracker) {
 
     int directions = cJSON_GetObjectItem(normal, "directions") ? cJSON_GetObjectItem(normal, "directions")->valueint : 0;
     if (directions && cJSON_GetObjectItem(tracker, "directions")->valueint > directions) {
-        LOG("Zig-zag");
+        //LOG("Zig-zag");
         cJSON_AddStringToObject(tracker, "anomaly", "Zig-zag");
         Fire_Anomaly();
         return;
@@ -354,7 +375,7 @@ void Check_Anomaly(cJSON* tracker) {
 
     int maxAge = cJSON_GetObjectItem(normal, "age") ? cJSON_GetObjectItem(normal, "age")->valueint : 0;
     if (maxAge && age > maxAge) {
-        LOG("Age");
+        //LOG("Age");
         Fire_Anomaly();
         cJSON_AddStringToObject(tracker, "anomaly", "Age");
         return;
@@ -362,7 +383,7 @@ void Check_Anomaly(cJSON* tracker) {
 
     int maxIdle = cJSON_GetObjectItem(normal, "idle") ? cJSON_GetObjectItem(normal, "idle")->valueint : 0;
     if (maxIdle && idle > maxIdle) {
-        LOG("Idle");
+        //LOG("Idle");
         Fire_Anomaly();
         cJSON_AddStringToObject(tracker, "anomaly", "Idle");
         return;
@@ -371,7 +392,7 @@ void Check_Anomaly(cJSON* tracker) {
     double speedLimit = cJSON_GetObjectItem(normal, "maxSpeed") ? cJSON_GetObjectItem(normal, "maxSpeed")->valuedouble : 0;
     double maxSpeed = cJSON_GetObjectItem(tracker, "maxSpeed")->valuedouble;
     if (speedLimit && maxSpeed > speedLimit) {
-        LOG("Speeding");
+        //LOG("Speeding");
         Fire_Anomaly();
         cJSON_AddStringToObject(tracker, "anomaly", "Too fast");
         return;
@@ -381,13 +402,13 @@ void Check_Anomaly(cJSON* tracker) {
     char* horizontal = cJSON_GetObjectItem(normal, "horizontal") ? cJSON_GetObjectItem(normal, "horizontal")->valuestring : NULL;
     int dx = cJSON_GetObjectItem(tracker, "dx") ? cJSON_GetObjectItem(tracker, "dx")->valueint : 0;
     if (horizontal && strcmp(horizontal, "Left") == 0 && dx > 0) {
-        LOG("Wrong way: Right");
+        //LOG("Wrong way: Right");
         Fire_Anomaly();
         cJSON_AddStringToObject(tracker, "anomaly", "Wrong way");
         return;
     }
     if (horizontal && strcmp(horizontal, "Right") == 0 && dx < 0) {
-        LOG("Wrong way: Left");
+        //LOG("Wrong way: Left");
         Fire_Anomaly();
         cJSON_AddStringToObject(tracker, "anomaly", "Wrong way");
         return;
@@ -396,13 +417,13 @@ void Check_Anomaly(cJSON* tracker) {
     char* vertical = cJSON_GetObjectItem(normal, "vertical") ? cJSON_GetObjectItem(normal, "vertical")->valuestring : NULL;
     int dy = cJSON_GetObjectItem(tracker, "dy") ? cJSON_GetObjectItem(tracker, "dy")->valueint : 0;
     if (vertical && strcmp(vertical, "Up") == 0 && dy > 0) {
-        LOG("Wrong way: Down");
+        //LOG("Wrong way: Down");
         Fire_Anomaly();
         cJSON_AddStringToObject(tracker, "anomaly", "Wrong way");
         return;
     }
     if (vertical && strcmp(vertical, "Down") == 0 && dy < 0) {
-        LOG("Wrong way: Up");
+        //LOG("Wrong way: Up");
         Fire_Anomaly();
         cJSON_AddStringToObject(tracker, "anomaly", "Wrong way");
         return;
@@ -679,6 +700,7 @@ void Event_Callback(cJSON *event, void* userdata) {
     if (!ignore && strstr(eventTopic->valuestring, "SystemInitializing")) ignore = 1;
     if (!ignore && strstr(eventTopic->valuestring, "Network")) ignore = 1;
     if (!ignore && strstr(eventTopic->valuestring, "xinternal_data")) ignore = 1;
+    if (!ignore && strstr(eventTopic->valuestring, "xinternal_data")) ignore = 1;	
     if (ignore) {
         cJSON_Delete(eventTopic);
         return;
@@ -859,6 +881,8 @@ int main(void) {
     GeoSpace_Init();
     g_timeout_add_seconds(15 * 60, MQTT_Publish_Device_Status, NULL);
 	MQTT_Publish_Device_Status(0);
+
+	ACAP_EVENTS_Add_Event("anomaly", "DataQ: Anomlay", 1);
     main_loop = g_main_loop_new(NULL, FALSE);
     GSource *signal_source = g_unix_signal_source_new(SIGTERM);
     if (signal_source) {

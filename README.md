@@ -129,14 +129,80 @@ MQTT Heartbeat published every 15 minutes
 | **bx, by** | `int` (pixels) | Position coordinates where the object first entered the scene. Can be used for entry‑point analysis. |
 | **age**    | `float` (seconds) | Time since first detection. Key metric for dwell time, stay duration, and filtering short vs long presence. |
 | **idle**   | `float` (seconds) | How long the object has been stationary (resets on movement). Supports use cases like idle vehicle/person detection, abandoned luggage, or loitering alerts. |
+| **maxIdle**| `float` (seconds) | The maximum idle time the object had while in scene |
+| **speed**  | `float`| The speed is distance/age and represents %movement of the view / seconds |
+| **maxSpeed**  | `float`| The highest speed detected of the object |
 | **confidence** | `int` (0–100) | Detection confidence score. Use thresholding to discard low-confidence objects and minimize false positives. |
 | **timestamp**  | `int` (epoch seconds/milliseconds) | Last frame time where the object was seen. Useful for synchronization and gap detection. |
 | **color, color2** | `string` (label) | Primary and secondary detected color labels (e.g., `"red"`, `"blue"`). Helps with descriptive analytics (red car, blue shirt). May be `null` if unavailable. |
+| **anomaly**   | `string` (Reason) | Only included if the anomaly service detected anomaly in Tracker or paths |
 | **path**   | `array` of objects | Sequence of position and dwell samples. Each entry contains `{x, y, d, lat?, lon?}`. Use to reconstruct trajectories, heatmaps, or identify where objects dwell most. |
 | **lat, lon** | `float` (GPS coords) | Latitude/Longitude if a homography matrix is available. Enables geo‑position mapping in real-world coordinates instead of pixels. |
 | **name**   | `string` | Camera name or location identifier (e.g., `"LobbyCam1"`). Useful for human-readable references. |
 | **serial / device** | `string` | Unique hardware device identifier. Supports multi-camera/log correlation. |
 | **localTime** | `string` (timestamp, local timezone) | Human‑readable local time when the event occurred. Useful for logs, reports, and non‑technical stakeholders. |
+
+***
+
+## Anomaly Detection Settings & Usage
+
+The anomaly detection service helps highlight abnormal object behaviors in your scene, assisting users to focus attention where needed most. Objects marked with `"anomaly": "<reason>"` are flagged in MQTT data, and a stateful event is triggered as long as the anomaly persists.
+
+### What is an Anomaly?
+
+An anomaly indicates that an object’s movement or behavior deviates from what is defined as normal in your configuration. This is not about detecting intrusions, but about identifying outliers or unusual system activity that may merit review. Use anomaly detection to monitor for unexpected appearances, exits, motion patterns, loitering, or excessive speed—all customizable per your application needs.
+
+### Configuration Overview
+
+- **Object Type Selection:**  
+  Choose to monitor anomalies for Humans, Vehicles, or both. Each type has separate statistics and behavior profiles for optimized detection.
+
+- **Entry/Exit Areas:**  
+  Specify one or more areas in the scene as normal entry/exit points. When an object appears or disappears outside these regions, it is flagged as an anomaly. Avoid using this feature if entries or exits can occur anywhere; restrict its use to controlled or predictable zones for reliable results.
+
+- **Max Direction Changes:**  
+  Set the maximum number of distinct direction changes an object can make before it is considered abnormal. This is useful for flagging zig-zag motion or non-standard traversal paths.
+
+- **Horizontal/Vertical Direction:**  
+  Define whether normal movement should be left/right (horizontal) or up/down (vertical). Default is “Any,” which means all directions are acceptable and won’t trigger anomalies on direction alone.
+
+- **Max Idle Time:**  
+  Establish how long an object may pause while traversing the view before being considered anomalously idle (e.g., loitering, stopping unexpectedly).
+
+- **Max Age:**  
+  Set how long an object is allowed to remain in the scene before being considered abnormal (e.g., extended dwell time).
+
+- **Max Speed:**  
+  Define what range of speeds are considered normal. Exceeding this speed will be flagged as an anomaly.
+
+- **Disable Checks:**
+  Setting any parameter to zero disables checking for that metric.
+
+### System integration
+
+On MQTT, Trackers and Paths will have an additional property "anomaly" with a "Reason".
+For VMS (Video Mananagement Systems"), a stateful event "anomaly" will be fired and stay high as long as there is detected anomaly.
+
+### Practical Guidance
+
+- **Statistics Area:**  
+  The settings screen displays live statistics for the last 100 Humans and Vehicles detected, including lowest, average, highest, and 95% percentile values per metric. Let the system run for hours or days to collect baseline data and configure thresholds that fit your real-world conditions.
+
+- **Iterative Tuning:**  
+  Start with broad settings, observe flagged anomalies, and refine thresholds based on what you see in the statistics area. This prevents over-alerting and false positives, improving utility over time.
+
+- **Entry/Exit Configuration:**  
+  Only configure entry/exit areas if regular entry/exit points exist—otherwise unpredictable entrances/exits may yield excessive anomalies.
+
+- **Event Triggering:**  
+  Each anomaly triggers a stateful event while ongoing, allowing MQTT consumers to react in real-time (alert operators, record video, etc.).
+
+### Best Practices
+
+- Define "normal" based on your business goals and operational context (e.g., security, process monitoring, safety).
+- Maintain clear records of configuration changes and review flagged events periodically to improve detection quality.
+- Periodically review the anomaly statistics to ensure thresholds are set appropriately and adapt them as usage patterns evolve.
+- Use the system’s data-driven insights—don’t rely solely on pre-set defaults.
 
 ***
 

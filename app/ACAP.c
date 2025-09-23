@@ -1761,6 +1761,10 @@ ACAP_EVENTS_Parse( AXEvent *axEvent ) {
 	}
 
 	//Special Device Event Filter
+	if( strcmp(topic,"Device/Configuration") == 0 ) {
+		cJSON_Delete(object);
+		return 0;
+	}
 	if( strcmp(topic,"Device/IO/Port") == 0 ) {
 		int port = cJSON_GetObjectItem(object,"port")?cJSON_GetObjectItem(object,"port")->valueint:-1;
 		if( port == -1 ) {

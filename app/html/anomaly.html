@@ -84,7 +84,7 @@
                                     <th>Lowest</th>
                                     <th>Average</th>
                                     <th>Highest</th>
-                                    <th>95% Below</th>
+                                    <th>97% Below</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -101,7 +101,7 @@
                                     <th>Lowest</th>
                                     <th>Average</th>
                                     <th>Highest</th>
-                                    <th>95% Below</th>
+                                    <th>97% Below</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -600,9 +600,9 @@ function computeStats(samples) {
   let arr = (samples || []).filter(x => typeof x === 'number' && !isNaN(x));
   if (arr.length < 8) return {low:'',avg:'',high:'',p95:''};
   arr.sort((a,b)=>a-b);
-  // For directions, 95% below must show at least 1 if there are nonzero values in data
+  // For directions, 97% below must show at least 1 if there are nonzero values in data
   const isDir = arr.every(x=>x===0||x===1);
-  let p95_val = arr[Math.floor(arr.length*0.95)-1];
+  let p95_val = arr[Math.floor(arr.length*0.97)-1];
   if (isDir && p95_val === 0 && arr.some(x=>x===1)) p95_val = 1;
   return {
     low: Math.round(arr[0]),
