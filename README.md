@@ -180,7 +180,7 @@ An anomaly indicates that an object’s movement or behavior deviates from what 
 
 ### System integration
 
-On MQTT, Trackers and Paths will have an additional property "anomaly" with a "Reason".
+On MQTT, Trackers and Paths will have an additional property "anomaly" with a "Reason".  
 For VMS (Video Mananagement Systems"), a stateful event "anomaly" will be fired and stay high as long as there is detected anomaly.
 
 ### Practical Guidance
