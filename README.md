@@ -231,7 +231,7 @@ Certainly! Here is a reviewed and improved version of your release notes for Dat
 
 ## History
 
-### 2.1.0 Sep XX
+### 2.1.0 Sep 23
 - Added anomaly detection. Trackers and Path are marked with property "anomaly": "The reason".  
   Vehicles and humans are treated individually
 	* Normal Entry areas (first detected position)
@@ -243,6 +243,7 @@ Certainly! Here is a reviewed and improved version of your release notes for Dat
     * Horizontal movement (Wrong way)
     * Max Speed
 - Trackers are now published immediately when detected. Previous behavior required new object to move.
+- Box area selection has been updated.
 
 ### 2.0.4 Sep 12
 - Fixed Occupancy to have the value of the number of each detected labels.
