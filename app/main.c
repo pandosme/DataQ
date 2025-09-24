@@ -40,6 +40,7 @@ cJSON* previousOccupancy = 0;
 int lastDetectionListWasEmpty = 0;
 int publishEvents = 1;
 int publishDetections = 1;
+int publishAnomaly = 0;
 int publishTracker = 1;
 int publishPath = 1;
 int publishOccupancy = 0;
@@ -234,9 +235,7 @@ Check_Anomaly(cJSON* tracker) {
         strcmp("Other", label) == 0 || strcmp("Veicle", label) == 0)
         is_vehicle = 1;
 
-    // Get the correct group ("humans" or "vehicles")
-
-    // Save stats as before (unchanged)
+    // Save stats
     if (cJSON_GetObjectItem(tracker,"active")->type == cJSON_False) {
         char* group_label = is_human ? "humans" : "vehicles";
         cJSON* stats;
@@ -289,7 +288,7 @@ Check_Anomaly(cJSON* tracker) {
         ACAP_STATUS_SetObject(group_label, "vertical", stats);
     }
 
-
+	if(!publishAnomaly) return;
     cJSON* settings = ACAP_Get_Config("settings");
     if (!settings) return;
     cJSON* anomaly = cJSON_GetObjectItem(settings, "anomaly");
@@ -297,9 +296,10 @@ Check_Anomaly(cJSON* tracker) {
     if (!anomaly->child) return;
 
     cJSON* group = NULL;
-    if (is_human) group = cJSON_GetObjectItem(anomaly, "humans");
-    else if (is_vehicle) group = cJSON_GetObjectItem(anomaly, "vehicles");
-    else return;
+    if (is_human)
+		group = cJSON_GetObjectItem(anomaly, "humans");
+    if (is_vehicle)
+		group = cJSON_GetObjectItem(anomaly, "vehicles");
     if (!group) return;
 
     // Extract area arrays for the current group
@@ -310,8 +310,6 @@ Check_Anomaly(cJSON* tracker) {
     int cy = cJSON_GetObjectItem(tracker, "cy")->valueint;
     int bx = cJSON_GetObjectItem(tracker, "bx")->valueint;
     int by = cJSON_GetObjectItem(tracker, "by")->valueint;
-    int age = cJSON_GetObjectItem(tracker, "age")->valuedouble;
-    int idle = cJSON_GetObjectItem(tracker, "maxIdle")->valuedouble;
 
     // AREA VALIDATION
 
@@ -364,37 +362,41 @@ Check_Anomaly(cJSON* tracker) {
     // GET settings block for the group
     cJSON* normal = cJSON_GetObjectItem(group, "settings");
     if (!normal) return;
+	char text[64];
 
-    int directions = cJSON_GetObjectItem(normal, "directions") ? cJSON_GetObjectItem(normal, "directions")->valueint : 0;
-    if (directions && cJSON_GetObjectItem(tracker, "directions")->valueint > directions) {
-        //LOG("Zig-zag");
-        cJSON_AddStringToObject(tracker, "anomaly", "Zig-zag");
+    int maxDirections = cJSON_GetObjectItem(normal, "directions") ? cJSON_GetObjectItem(normal, "directions")->valueint : 0;
+	int directions = cJSON_GetObjectItem(tracker, "directions")->valueint;
+    if (maxDirections && directions > maxDirections) {
+		sprintf(text,"Directions: %d > %d", directions , maxDirections);
+        cJSON_AddStringToObject(tracker, "anomaly", text);
         Fire_Anomaly();
         return;
     }
 
-    int maxAge = cJSON_GetObjectItem(normal, "age") ? cJSON_GetObjectItem(normal, "age")->valueint : 0;
+    float maxAge = cJSON_GetObjectItem(normal, "age") ? cJSON_GetObjectItem(normal, "age")->valuedouble : 0;
+    float age = cJSON_GetObjectItem(tracker, "age")->valuedouble;
     if (maxAge && age > maxAge) {
-        //LOG("Age");
+		sprintf(text,"Age: %f > %f", age , maxAge);
+        cJSON_AddStringToObject(tracker, "anomaly", text);
         Fire_Anomaly();
-        cJSON_AddStringToObject(tracker, "anomaly", "Age");
         return;
     }
 
-    int maxIdle = cJSON_GetObjectItem(normal, "idle") ? cJSON_GetObjectItem(normal, "idle")->valueint : 0;
+    float maxIdle = cJSON_GetObjectItem(normal, "idle") ? cJSON_GetObjectItem(normal, "idle")->valuedouble : 0;
+    float idle = cJSON_GetObjectItem(tracker, "maxIdle")->valuedouble;
     if (maxIdle && idle > maxIdle) {
-        //LOG("Idle");
+		sprintf(text,"Age: %f > %f", idle , maxIdle);
+        cJSON_AddStringToObject(tracker, "anomaly", text);
         Fire_Anomaly();
-        cJSON_AddStringToObject(tracker, "anomaly", "Idle");
         return;
     }
 
-    double speedLimit = cJSON_GetObjectItem(normal, "maxSpeed") ? cJSON_GetObjectItem(normal, "maxSpeed")->valuedouble : 0;
-    double maxSpeed = cJSON_GetObjectItem(tracker, "maxSpeed")->valuedouble;
+    float speedLimit = cJSON_GetObjectItem(normal, "maxSpeed") ? cJSON_GetObjectItem(normal, "maxSpeed")->valuedouble : 0;
+    float maxSpeed = cJSON_GetObjectItem(tracker, "maxSpeed")->valuedouble;
     if (speedLimit && maxSpeed > speedLimit) {
-        //LOG("Speeding");
+		sprintf(text,"Speed: %f > %f", maxSpeed , speedLimit);
+        cJSON_AddStringToObject(tracker, "anomaly", text);
         Fire_Anomaly();
-        cJSON_AddStringToObject(tracker, "anomaly", "Too fast");
         return;
     }
 
@@ -809,6 +811,7 @@ void Settings_Updated_Callback(const char* service, cJSON* data) {
         publishOccupancy = cJSON_IsTrue(cJSON_GetObjectItem(data, "occupancy"));
         publishStatus = cJSON_IsTrue(cJSON_GetObjectItem(data, "status"));
         publishGeospace = cJSON_IsTrue(cJSON_GetObjectItem(data, "geospace"));
+        publishAnomaly = cJSON_IsTrue(cJSON_GetObjectItem(data, "anomlay"));
     }
 
     if (strcmp(service, "scene") == 0)

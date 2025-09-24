@@ -231,6 +231,11 @@ Certainly! Here is a reviewed and improved version of your release notes for Dat
 
 ## History
 
+### 2.1.1 Sep 24
+- Fixed a flaw that prevented users from updating the Detections areas
+- Marked Anomaly as "Beta" as testing is ongoing.  
+  Please send comments, questions, error reports and suggestions for improvements.  
+
 ### 2.1.0 Sep 23
 - Added anomaly detection. Trackers and Path are marked with property "anomaly": "The reason".  
   Vehicles and humans are treated individually

@@ -6,13 +6,12 @@
     <title></title>
     <link rel="stylesheet" href="css/bootstrap.min.css">
     <link rel="stylesheet" href="css/app.css">
-    <link rel="stylesheet" href="css/imgareaselect-default.css">
     <script src="js/jquery-3.7.1.min.js"></script>
     <script src="js/bootstrap.bundle.min.js"></script>
     <script src="js/media-stream-player.min.js"></script>
     <script src="js/paho-mqtt-min.js"></script>
-    <script src="js/jquery.imgareaselect.js"></script>	
     <script src="js/labelselector.js"></script>
+    <script src="js/areaselect.js"></script>
 </head>
 <body>
 <div class="d-flex" id="wrapper">
@@ -24,8 +23,8 @@
 			<a href="detections.html" class="list-group-item list-group-item-action active">Detections</a>
 			<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
 			<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
-			<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
 			<a href="anomaly.html" class="list-group-item list-group-item-action">Anomaly</a>
+			<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
 			<a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
 			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
 			<a href="about.html" class="list-group-item list-group-item-action">About</a>
@@ -56,8 +55,9 @@
 									<div id="video-view" style="display: inline-block">
 										<div style="width:100%; height:100%; position:relative">
 											<div id="video" style="width:100%; height:100%; position:absolute; top:0; left:0;"></div>
-											<canvas id="detection-canvas" width="1000" height="1000" style="width:100%; height:100%; position:absolute; top:0px; left:0px;"></canvas>
-											<canvas id="settings-canvas" width="1000" height="1000" style="width:100%; height:100%; position:absolute; top:0px; left:0px;"></canvas>
+											<canvas id="detection-canvas" width="1000" height="1000" style="width:100%; height:100%; position:absolute; top:0px; left:0px; z-index:2;"></canvas>
+											<canvas id="settings-canvas" width="1000" height="1000" style="width:100%; height:100%; position:absolute; top:0px; left:0px; z-index:10; pointer-events:auto; border:2px solid red;"></canvas>
+
 										</div>
 									</div>
 							<div class="row mt-3">
@@ -67,12 +67,12 @@
 											<h5 class="card-title mb-0">Size & Area filter</h5>
 										</div>
 										<div class="card-body">
-											<div class="row">
-												<button type="button" class="btn btn-outline-primary col-3" id="btn-area">Set Area of Interest</button>
-												<button type="button" class="btn btn-outline-primary col-3" id="btn-min-size">Set minimum size (w and h)</button>
-												<button type="button" class="btn btn-outline-primary col-3" id="btn-max-size">Set maximum size (w and h)</button>
-												<button type="button" class="btn btn-success col-2" id="btn-save-area">Save</button>
+											<div class="btn-group btn-group-mode btn-group-sm w-100 mb-2" role="group">
+												<button type="button" class="btn btn-outline-secondary" id="btn-area">Set Area of Interest</button>
+												<button type="button" class="btn btn-outline-warning" id="btn-min-size">Set minimum size</button>
+												<button type="button" class="btn btn-outline-primary" id="btn-max-size">Set maximum size</button>
 											</div>
+											<button type="button" class="btn btn-success mt-2" id="btn-save-area">Save Area</button>
 										</div>
 									</div>
 								</div>
@@ -101,15 +101,6 @@
 													<option value="97">85</option>
 													<option value="97">90</option>
 													<option value="97">95</option>
-												</select>
-											</div>
-											<div class="form-group mb-3">
-												<label for="scene-rotation" class="form-label">Rotation</label>
-												<select class="form-select" id="scene-rotation">
-													<option value="0">0 degrees</option>
-													<option value="90">90 degrees</option>
-													<option value="180">180 degrees</option>
-													<option value="270">270 degrees</option>
 												</select>
 											</div>
 											<div class="form-group mb-3">
@@ -144,6 +135,15 @@
 													<option value="1">Bottom-center (feet/wheels)</option>
 												</select>
 											</div>
+											<div class="form-group mb-3">
+												<label for="scene-rotation" class="form-label">Rotation</label>
+												<select class="form-select" id="scene-rotation">
+													<option value="0">0</option>
+													<option value="90">90</option>
+													<option value="180">180</option>
+													<option value="270">270</option>
+												</select>
+											</div>
 											<div class="d-grid mt-3">
 												<button type="button" class="btn btn-success" id="btn-save">Save</button>
 											</div>
@@ -172,11 +172,7 @@ let MQTT_Client = 0;
 var app = null;
 var width = 800;
 var height = 450;
-var areaHandler = 0;
-var areaMode = null;
 var forcePublish = false;
-var areaHandler = 0;
-var areaMode = null;
 
 $(document).ready(function() {
 	
@@ -207,10 +203,8 @@ $(document).ready(function() {
 						publish: app.settings.publish
 					}
 					$.ajax({
-						type: "POST",
-						url: 'settings',
-						contentType: 'application/json',
-						data: JSON.stringify(payload),
+						type: "GET",
+						url: 'settings?json=' + encodeURI(JSON.stringify(payload)),
 						error: function(xhr, status, error) {
 							showToast("Calibration failed", 'danger');
 						}
@@ -231,7 +225,10 @@ $(document).ready(function() {
 			$("#scene-cog").val(app.settings.scene.cog);
 			$("#scene-maxIdle").val(app.settings.scene.maxIdle);
 
-			const labelSelector = new LabelSelector('labelSelector', app.status.detections.labels, app.settings.scene.ignoreClass, labelsUpdated);
+			const labelSelector = new LabelSelector('labelSelector', app.status.detections.labels, app.settings.scene.ignoreClass, function(selection) {
+				app.settings.scene.ignoreClass = selection;
+				saveFilter();
+			});
 
 			if( app.status.mqtt.connected ) {
 				ConnectWebSocketClient();
@@ -244,71 +241,96 @@ $(document).ready(function() {
 
 			$('.video-panel').css('padding-top', `${paddingPercentage}%`);
 			PlayVideo(aspectRatio, app.settings.scene.rotation );
+			
+		   // >>>> AREA SELECTOR CODE HERE <<<<
+			areaSelector = new AreaSelector('settings-canvas', {
+				modes: areaModes,
+				onchange: function(areas) { }
+			});
+
+			const canvasWidth = 1000;
+			const canvasHeight = 1000;
+
+			const minWidth  = app.settings.scene.minWidth  || 5;
+			const minHeight = app.settings.scene.minHeight || 20;
+			const maxWidth  = app.settings.scene.maxWidth  || 800;
+			const maxHeight = app.settings.scene.maxHeight || 800;
+
+			function centerRect(width, height) {
+			  return {
+				x1: Math.round((canvasWidth  - width) / 2),
+				y1: Math.round((canvasHeight - height) / 2),
+				x2: Math.round((canvasWidth  + width) / 2),
+				y2: Math.round((canvasHeight + height) / 2)
+			  };
+			}
+
+			const minArea = centerRect(minWidth, minHeight);
+			const maxArea = centerRect(maxWidth, maxHeight);
+
+			areaSelector = new AreaSelector('settings-canvas', {
+				modes: areaModes,
+				onchange: function(areas) { 
+					console.log("AreaSelector changed:", areas); 
+				}
+			});
+
+
+			areaSelector.setAreas({
+			  aoi: app.settings.scene.aoi,
+			  min: minArea,
+			  max: maxArea
+			});
+
+			areaSelector.setMode('aoi');
+			areaSelector.hideAreas(); // Hide overlays after save
+			
+			// Buttons
+			$('#btn-area').off('click').on('click', ()=>areaSelector.setMode('aoi'));
+			$('#btn-min-size').off('click').on('click', ()=>areaSelector.setMode('min'));
+			$('#btn-max-size').off('click').on('click', ()=>areaSelector.setMode('max'));
+			$('#btn-save-area').off('click').on('click', function() {
+				const areas = areaSelector.getAreas();
+				// Save AOI only as an actual rectangle
+				if (areas.aoi) {
+					app.settings.scene.aoi = areas.aoi;
+				} else {
+					app.settings.scene.aoi = null;
+				}
+
+				// For min and max: calculate width/height and save to top-level keys
+				if (areas.min) {
+					const minW = areas.min.x2 - areas.min.x1;
+					const minH = areas.min.y2 - areas.min.y1;
+					app.settings.scene.minWidth = minW;
+					app.settings.scene.minHeight = minH;
+				}
+
+				if (areas.max) {
+					const maxW = areas.max.x2 - areas.max.x1;
+					const maxH = areas.max.y2 - areas.max.y1;
+					app.settings.scene.maxWidth = maxW;
+					app.settings.scene.maxHeight = maxH;
+				}
+
+				saveFilter();
+				areaSelector.hideAreas(); // Hide overlays after save
+			});
+			window.addEventListener('resize', function() { areaSelector.resizeCanvas(); });
+            // Make sure resizing works for video/rotation changes:
+            window.addEventListener('resize', ()=>areaSelector.resizeCanvas());
+			
 		},
         error: function(response) {
 			showToast("The application is not running",'danger');
-			updateConnectionStatus("Disconnected");
         }
 	});
 });
 
-function selectArea( area ) {
-	if( area === "aoi") {
-		var x1 = parseInt( app.settings.scene.aoi.x1 / 1000 * width);
-		var y1 = parseInt( app.settings.scene.aoi.y1 / 1000 * height);
-		var x2 = parseInt( app.settings.scene.aoi.x2 / 1000 * width);
-		var y2 = parseInt( app.settings.scene.aoi.y2 / 1000 * height);
-	}
-	if( area === "minSize") {
-		var x1 = parseInt( (1000 - app.settings.scene.minWidth) / 2000 * width);
-		var y1 = parseInt( (1000 - app.settings.scene.minHeight) / 2000 * height);
-		var x2 = x1 + parseInt( app.settings.scene.minWidth / 1000 * width);
-		var y2 = y1 + parseInt( app.settings.scene.minHeight / 1000 * height);
-	}
-	if( area === "maxSize") {
-		var x1 = parseInt( (1000 - app.settings.scene.maxWidth) / 2000 * width);
-		var y1 = parseInt( (1000 - app.settings.scene.maxHeight) / 2000 * height);
-		var x2 = x1 + parseInt( app.settings.scene.maxWidth / 1000 * width);
-		var y2 = y1 + parseInt( app.settings.scene.maxHeight / 1000 * height);
-	}
-	areaHandler.setSelection(x1, y1, x2, y2, 0);				
-	areaHandler.setOptions({show:true});
-	areaMode = area;
-}
-
-$('#btn-save-area').click(function() {
-	$('.btn-outline-primary').removeClass('active');
+function labelsUpdated(selection) {
+	app.settings.scene.ignoreClass = selection;
 	saveFilter();
-	areaHandler.setOptions({hide:true});
-});
-
-$('#btn-area').click(function() {
-	setActiveMode('aoi', this);
-	selectArea("aoi");
-});
-
-$('#btn-min-size').click(function() {
-	setActiveMode('min-size', this);
-	selectArea("minSize");
-});
-
-$('#btn-max-size').click(function() {
-	setActiveMode('max-size', this);
-	selectArea("maxSize");
-});
-
-function setActiveMode(mode, button) {
-	$('.btn-outline-primary').removeClass('active');
-	if (areaMode === mode) {
-		// If clicking the same button, deactivate it
-		areaMode = null;
-	} else {
-		// Activate the new mode
-		areaMode = mode;
-		$(button).addClass('active');
-	}
 }
-
 
 function ConnectWebSocketClient() {
 	updateConnectionStatus('connecting');
@@ -413,22 +435,24 @@ function onMessageArrived(message) {
 	detections.forEach(function(detection) {
 		// Skip invalid detections
 		if (typeof detection !== 'object' || detection === null) return;
-		// Draw on canvas
-		ctx.rect(detection.x, detection.y, detection.w, detection.h);
-		var text = detection.class || "Undefined";
-		if (detection.hasOwnProperty("confidence"))
-			text += " " + detection.confidence;
-			
-		var age = "";
-		if (detection.hasOwnProperty("age")) {
-			age = detection.age.toFixed(1) + "s";
-			if (detection.age > 60)
-				age = parseInt(detection.age/60) + "m";
-			if (detection.age > 3600)
-				age = parseInt(detection.age/3600) + "h";
-			text += " " + age;
+		if( detection.ignore === false ) {
+			// Draw on canvas
+			ctx.rect(detection.x, detection.y, detection.w, detection.h);
+			var text = detection.class || "Undefined";
+			if (detection.hasOwnProperty("confidence"))
+				text += " " + detection.confidence;
+				
+			var age = "";
+			if (detection.hasOwnProperty("age")) {
+				age = detection.age.toFixed(1) + "s";
+				if (detection.age > 60)
+					age = parseInt(detection.age/60) + "m";
+				if (detection.age > 3600)
+					age = parseInt(detection.age/3600) + "h";
+				text += " " + age;
+			}
+			ctx.fillText(text, detection.x, detection.y-10);
 		}
-		ctx.fillText(text, detection.x, detection.y-10);
 	});
 	ctx.stroke();
 }
@@ -463,30 +487,15 @@ function PlayVideo(aspect, rotation) {
 				+ ' resolution="' + videoWidth + 'x' + videoHeight + '"'
 				+ ' variant="basic" autoplay></media-stream-player>';
 	$("#video").append(player);
-	
-	if( areaHandler )
-		delete areaHandler;
-
-	areaHandler = $("#video").imgAreaSelect({
-		x1: 0, y1: 0, x2: width, y2: height,
-		handles: true, enable:true, movable:true, resizable:true, show:false,
-		instance: true,
-		onSelectEnd: function(img, selection) {
-			updateArea( areaMode, selection );
-		}
-	});
-	areaHandler.setOptions({hide:true});
 }
 
 function saveFilter() {
 	var payload = {
 		scene: app.settings.scene
 	}
-	$.ajax({
-		type: "POST",
-		url: 'settings',
-		contentType: 'application/json',
-		data: JSON.stringify(payload),
+	var url = 'settings?json=' + encodeURI(JSON.stringify(payload));
+	$.ajax({type: "GET",
+		url: url,
 		success: function(response) {
 			showToast("Settings updated",'info');
 		},
@@ -508,35 +517,6 @@ $('#btn-save').click(function() {
 function labelsUpdated(selection) {
 	app.settings.scene.ignoreClass = selection;
 	saveFilter();
-}
-
-function updateArea( area, selection ) {
-	if( area === "aoi") {
-		app.settings.scene.aoi.x1 = Math.round(selection.x1 * 1000 / width);
-		app.settings.scene.aoi.x2 = Math.round(selection.x2 * 1000 / width);
-		app.settings.scene.aoi.y1 = Math.round(selection.y1 * 1000 / height);
-		app.settings.scene.aoi.y2 = Math.round(selection.y2 * 1000 / height);
-	}
-	if( area === "minSize") {
-		app.settings.scene.minWidth = Math.round(selection.x2 * 1000 / width) - Math.round(selection.x1 * 1000 / width);
-		app.settings.scene.minHeight = Math.round(selection.y2 * 1000 / height) - Math.round(selection.y1 * 1000 / height);
-	}
-	if( area === "maxSize") {
-		app.settings.scene.maxWidth = Math.round(selection.x2 * 1000 / width) - Math.round(selection.x1 * 1000 / width);
-		app.settings.scene.maxHeight = Math.round(selection.y2 * 1000 / height) - Math.round(selection.y1 * 1000 / height);
-	}
-}
-
-function setActiveMode(mode, button) {
-	$('.btn-outline-primary').removeClass('active');
-	if (areaMode === mode) {
-		// If clicking the same button, deactivate it
-		areaMode = null;
-	} else {
-		// Activate the new mode
-		currentMode = mode;
-		$(button).addClass('active');
-	}
 }
 
 function showToast(message, type = 'danger') {
@@ -566,6 +546,14 @@ function showToast(message, type = 'danger') {
         this.remove();
     });
 }
+
+// --- Area Select integration ---
+let areaSelector = null;
+const areaModes = [
+  { key: 'aoi',  button: '#btn-area',     color: 'rgba(128,128,128,0.4)' },
+  { key: 'min',  button: '#btn-min-size', color: 'rgba(255,214,0,0.4)'   },
+  { key: 'max',  button: '#btn-max-size', color: 'rgba(25,118,210,0.4)'  }
+];
 
 </script>
 </body>

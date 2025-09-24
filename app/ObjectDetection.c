@@ -619,7 +619,7 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
                 }
                 entry->idle_duration = (now - entry->idle_start_time) / 1000.0f;
                 if( entry->idle_duration > entry->max_idle_duration )
-                    entry->max_idle_duration = entry->idle_duration;
+                    entry->max_idle_duration = floor((entry->idle_duration*10)+0.5) / 10.0;
             } else {
 				distinct_direction_change(entry, cx, cy);
                 if( entry->sleep ) {
@@ -639,7 +639,7 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
                 entry->trackerSleep = false;
                 entry->distance += dist;
 				if( entry->age > 1)
-					entry->speed = floor( (entry->distance/entry->age) * 100.0 + 0.5) / 100.0;
+					entry->speed = floor( (entry->distance/entry->age) + 0.5);
 				if( entry->speed > entry->maxSpeed )
 					entry->maxSpeed = entry->speed;
                 entry->idle = false;
