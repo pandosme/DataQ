@@ -124,9 +124,6 @@ static int config_x2 = 1000;
 static int config_y1 = 0;
 static int config_y2 = 1000;
 static int config_hanging_objects = 0;
-static int config_significan_upperArea = 30;
-static int config_significan_lowerArea = 70;
-static int config_significan_line = 400;
 
 static cJSON* config_blacklist = 0;
 
@@ -222,11 +219,7 @@ void ObjectDetection_Config(cJSON* data) {
         g_mutex_unlock(&detection_mutex);
         return;
     }
-    char* json = cJSON_PrintUnformatted(data);
-    if(json) {
-        LOG_TRACE("%s: %s",__func__,json);
-        free(json);
-    }
+
     config_min_confidence = cJSON_GetObjectItem(data, "confidence") ? cJSON_GetObjectItem(data, "confidence")->valueint : 40;
     config_cog = cJSON_GetObjectItem(data, "cog") ? cJSON_GetObjectItem(data, "cog")->valueint : 0;
     config_rotation = cJSON_GetObjectItem(data, "rotation") ? cJSON_GetObjectItem(data, "rotation")->valueint : 0;
@@ -245,13 +238,14 @@ void ObjectDetection_Config(cJSON* data) {
         config_y1 = cJSON_GetObjectItem(aoi, "y1") ? cJSON_GetObjectItem(aoi, "y1")->valueint : 0;
         config_y2 = cJSON_GetObjectItem(aoi, "y2") ? cJSON_GetObjectItem(aoi, "y2")->valueint : 1000;
     }
-    json = cJSON_PrintUnformatted(config_blacklist);
+/*	
     cJSON *significantMovement = cJSON_GetObjectItem(data, "significantMovement");
     if (significantMovement) {
 		config_significan_upperArea = cJSON_GetObjectItem(significantMovement, "upperArea") ? cJSON_GetObjectItem(significantMovement, "upperArea")->valueint : 30;
 		config_significan_lowerArea = cJSON_GetObjectItem(significantMovement, "lowerArea") ? cJSON_GetObjectItem(significantMovement, "lowerArea")->valueint : 70;
 		config_significan_line = cJSON_GetObjectItem(significantMovement, "line") ? cJSON_GetObjectItem(significantMovement, "line")->valueint : 400;
 	}
+*/	
     LOG_TRACE("%s: Exit\n", __func__);
     g_mutex_unlock(&detection_mutex);
 	ObjectDetection_Reset();

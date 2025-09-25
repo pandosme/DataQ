@@ -372,12 +372,6 @@ cJSON* VOD_Label_List(void) {
     cJSON *det_info = VOD_Detector_Information();
     if (!det_info) return NULL;
 
-	char* json = cJSON_PrintUnformatted(det_info);
-	if( json ) {
-		LOG("Object Detection Structure: %s\n", json )
-		free(json);
-	}
-
     cJSON *labels = cJSON_GetObjectItem(det_info, "labels");
     cJSON *attributes = cJSON_GetObjectItem(det_info, "attributes");
     cJSON *result = cJSON_CreateArray();

@@ -294,13 +294,13 @@ Check_Anomaly(cJSON* tracker) {
     cJSON* anomaly = cJSON_GetObjectItem(settings, "anomaly");
     if (!anomaly) return;
     if (!anomaly->child) return;
-
     cJSON* group = NULL;
     if (is_human)
 		group = cJSON_GetObjectItem(anomaly, "humans");
     if (is_vehicle)
 		group = cJSON_GetObjectItem(anomaly, "vehicles");
     if (!group) return;
+
 
     // Extract area arrays for the current group
     cJSON* common = cJSON_GetObjectItem(group, "common");
@@ -322,16 +322,36 @@ Check_Anomaly(cJSON* tracker) {
             int x2 = cJSON_GetObjectItem(item,"x2")->valueint;
             int y1 = cJSON_GetObjectItem(item,"y1")->valueint;
             int y2 = cJSON_GetObjectItem(item,"y2")->valueint;
-            if ((bx > x1 && bx < x2 && by > y1 && by < y2) ||
-                (cx > x1 && cx < x2 && cy > y1 && cy < y2)) {
+            if (bx > x1 && bx < x2 && by > y1 && by < y2) {
                 found_common = 1;
             }
             item = item->next;
         }
         if (!found_common) {
-            //LOG("Invalid common entry/exit");
+            LOG("Invalid entry");
             Fire_Anomaly();
-            cJSON_AddStringToObject(tracker, "anomaly", "Invalid entry/exit");
+            cJSON_AddStringToObject(tracker, "anomaly", "Invalid entry");
+            return;
+        }
+    }
+
+    found_common = 0;
+    if (common && cJSON_GetArraySize(common) && cJSON_GetObjectItem(tracker,"active")->type == cJSON_False) {
+        cJSON* item = common->child;
+        while(item && !found_common) {
+            int x1 = cJSON_GetObjectItem(item,"x1")->valueint;
+            int x2 = cJSON_GetObjectItem(item,"x2")->valueint;
+            int y1 = cJSON_GetObjectItem(item,"y1")->valueint;
+            int y2 = cJSON_GetObjectItem(item,"y2")->valueint;
+            if (cx > x1 && cx < x2 && cy > y1 && cy < y2) {
+                found_common = 1;
+            }
+            item = item->next;
+        }
+        if (!found_common) {
+            LOG("Invalid exit");
+            Fire_Anomaly();
+            cJSON_AddStringToObject(tracker, "anomaly", "Invalid exit");
             return;
         }
     }
@@ -368,6 +388,7 @@ Check_Anomaly(cJSON* tracker) {
 	int directions = cJSON_GetObjectItem(tracker, "directions")->valueint;
     if (maxDirections && directions > maxDirections) {
 		sprintf(text,"Directions: %d > %d", directions , maxDirections);
+		LOG("%s",text);
         cJSON_AddStringToObject(tracker, "anomaly", text);
         Fire_Anomaly();
         return;
@@ -376,7 +397,8 @@ Check_Anomaly(cJSON* tracker) {
     float maxAge = cJSON_GetObjectItem(normal, "age") ? cJSON_GetObjectItem(normal, "age")->valuedouble : 0;
     float age = cJSON_GetObjectItem(tracker, "age")->valuedouble;
     if (maxAge && age > maxAge) {
-		sprintf(text,"Age: %f > %f", age , maxAge);
+		sprintf(text,"Age: %d>%d", (int)age , (int)maxAge);
+		LOG("%s",text);		
         cJSON_AddStringToObject(tracker, "anomaly", text);
         Fire_Anomaly();
         return;
@@ -385,7 +407,8 @@ Check_Anomaly(cJSON* tracker) {
     float maxIdle = cJSON_GetObjectItem(normal, "idle") ? cJSON_GetObjectItem(normal, "idle")->valuedouble : 0;
     float idle = cJSON_GetObjectItem(tracker, "maxIdle")->valuedouble;
     if (maxIdle && idle > maxIdle) {
-		sprintf(text,"Age: %f > %f", idle , maxIdle);
+		sprintf(text,"Idle: %d>%d", (int)idle , (int)maxIdle);
+		LOG("%s",text);
         cJSON_AddStringToObject(tracker, "anomaly", text);
         Fire_Anomaly();
         return;
@@ -394,7 +417,8 @@ Check_Anomaly(cJSON* tracker) {
     float speedLimit = cJSON_GetObjectItem(normal, "maxSpeed") ? cJSON_GetObjectItem(normal, "maxSpeed")->valuedouble : 0;
     float maxSpeed = cJSON_GetObjectItem(tracker, "maxSpeed")->valuedouble;
     if (speedLimit && maxSpeed > speedLimit) {
-		sprintf(text,"Speed: %f > %f", maxSpeed , speedLimit);
+		sprintf(text,"Speed: %d>%d", (int)maxSpeed , (int)speedLimit);
+		LOG("%s",text);
         cJSON_AddStringToObject(tracker, "anomaly", text);
         Fire_Anomaly();
         return;
@@ -404,13 +428,13 @@ Check_Anomaly(cJSON* tracker) {
     char* horizontal = cJSON_GetObjectItem(normal, "horizontal") ? cJSON_GetObjectItem(normal, "horizontal")->valuestring : NULL;
     int dx = cJSON_GetObjectItem(tracker, "dx") ? cJSON_GetObjectItem(tracker, "dx")->valueint : 0;
     if (horizontal && strcmp(horizontal, "Left") == 0 && dx > 0) {
-        //LOG("Wrong way: Right");
+		LOG("%s",text);
         Fire_Anomaly();
         cJSON_AddStringToObject(tracker, "anomaly", "Wrong way");
         return;
     }
     if (horizontal && strcmp(horizontal, "Right") == 0 && dx < 0) {
-        //LOG("Wrong way: Left");
+		LOG("%s",text);
         Fire_Anomaly();
         cJSON_AddStringToObject(tracker, "anomaly", "Wrong way");
         return;
@@ -419,13 +443,13 @@ Check_Anomaly(cJSON* tracker) {
     char* vertical = cJSON_GetObjectItem(normal, "vertical") ? cJSON_GetObjectItem(normal, "vertical")->valuestring : NULL;
     int dy = cJSON_GetObjectItem(tracker, "dy") ? cJSON_GetObjectItem(tracker, "dy")->valueint : 0;
     if (vertical && strcmp(vertical, "Up") == 0 && dy > 0) {
-        //LOG("Wrong way: Down");
+        LOG("Wrong way: Down");
         Fire_Anomaly();
         cJSON_AddStringToObject(tracker, "anomaly", "Wrong way");
         return;
     }
     if (vertical && strcmp(vertical, "Down") == 0 && dy < 0) {
-        //LOG("Wrong way: Up");
+        LOG("Wrong way: Up");
         Fire_Anomaly();
         cJSON_AddStringToObject(tracker, "anomaly", "Wrong way");
         return;
@@ -726,6 +750,23 @@ void Event_Callback(cJSON *event, void* userdata) {
     MQTT_Publish_JSON(topic, event, 0, 0);
 }
 
+static gboolean MQTT_Publish_Device_Status(gpointer user_data) {
+    if (!publishStatus)
+        return G_SOURCE_CONTINUE;
+
+    cJSON* payload = cJSON_CreateObject();
+    cJSON_AddNumberToObject(payload, "Network_Kbps", (int)ACAP_DEVICE_Network_Average());
+    cJSON_AddNumberToObject(payload, "CPU_average", (int)(ACAP_DEVICE_CPU_Average() * 100));
+    cJSON_AddNumberToObject(payload, "Uptime_Hours", (int)(ACAP_DEVICE_Uptime() / 3600));
+
+    char topic[256];
+    sprintf(topic, "status/%s", ACAP_DEVICE_Prop("serial"));
+    MQTT_Publish_JSON(topic, payload, 0, 0);
+    cJSON_Delete(payload);
+
+    return G_SOURCE_CONTINUE;
+}
+
 void Main_MQTT_Status(int state) {
     char topic[64];
     cJSON* message = 0;
@@ -745,6 +786,7 @@ void Main_MQTT_Status(int state) {
             cJSON_AddStringToObject(message, "address", ACAP_DEVICE_Prop("IPv4"));
             MQTT_Publish_JSON(topic, message, 0, 1);
             cJSON_Delete(message);
+			MQTT_Publish_Device_Status(0);
             break;
         case MQTT_DISCONNECTING:
             sprintf(topic, "connect/%s", ACAP_DEVICE_Prop("serial"));
@@ -767,23 +809,6 @@ void Main_MQTT_Subscription_Message(const char *topic, const char *payload) {
     LOG("Message arrived: %s %s\n", topic, payload);
 }
 
-static gboolean MQTT_Publish_Device_Status(gpointer user_data) {
-    if (!publishStatus)
-        return G_SOURCE_CONTINUE;
-
-    cJSON* payload = cJSON_CreateObject();
-    cJSON_AddNumberToObject(payload, "Network_Kbps", (int)ACAP_DEVICE_Network_Average());
-    cJSON_AddNumberToObject(payload, "CPU_average", (int)(ACAP_DEVICE_CPU_Average() * 100));
-    cJSON_AddNumberToObject(payload, "Uptime_Hours", (int)(ACAP_DEVICE_Uptime() / 3600));
-
-    char topic[256];
-    sprintf(topic, "status/%s", ACAP_DEVICE_Prop("serial"));
-    MQTT_Publish_JSON(topic, payload, 0, 0);
-    cJSON_Delete(payload);
-
-    return G_SOURCE_CONTINUE;
-}
-
 static GMainLoop *main_loop = NULL;
 
 static gboolean signal_handler(gpointer user_data) {
@@ -795,13 +820,6 @@ static gboolean signal_handler(gpointer user_data) {
 }
 
 void Settings_Updated_Callback(const char* service, cJSON* data) {
-    char* json = cJSON_PrintUnformatted(data);
-    if (json) {
-        LOG_TRACE("%s: %s=%s\n", __func__, service, json);
-        free(json);
-    } else {
-        LOG_WARN("%s: JSON Parse error\n", __func__);
-    }
 
     if (strcmp(service, "publish") == 0) {
         publishEvents = cJSON_IsTrue(cJSON_GetObjectItem(data, "events"));
@@ -811,7 +829,7 @@ void Settings_Updated_Callback(const char* service, cJSON* data) {
         publishOccupancy = cJSON_IsTrue(cJSON_GetObjectItem(data, "occupancy"));
         publishStatus = cJSON_IsTrue(cJSON_GetObjectItem(data, "status"));
         publishGeospace = cJSON_IsTrue(cJSON_GetObjectItem(data, "geospace"));
-        publishAnomaly = cJSON_IsTrue(cJSON_GetObjectItem(data, "anomlay"));
+        publishAnomaly = cJSON_IsTrue(cJSON_GetObjectItem(data, "anomaly"));
     }
 
     if (strcmp(service, "scene") == 0)
@@ -883,7 +901,6 @@ int main(void) {
 
     GeoSpace_Init();
     g_timeout_add_seconds(15 * 60, MQTT_Publish_Device_Status, NULL);
-	MQTT_Publish_Device_Status(0);
 
 	ACAP_EVENTS_Add_Event("anomaly", "DataQ: Anomlay", 1);
     main_loop = g_main_loop_new(NULL, FALSE);

@@ -231,6 +231,9 @@ Certainly! Here is a reviewed and improved version of your release notes for Dat
 
 ## History
 
+### 2.1.1 Sep 25
+- Fixed a serious flaw that prevented anomaly to work.
+
 ### 2.1.1 Sep 24
 - Fixed a flaw that prevented users from updating the Detections areas
 - Marked Anomaly as "Beta" as testing is ongoing.  
