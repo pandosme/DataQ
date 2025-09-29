@@ -231,14 +231,14 @@ Certainly! Here is a reviewed and improved version of your release notes for Dat
 
 ## History
 
-### 2.1.6 Sep 27
-- Add detection of split paths due to some obstruction in scens and merge split paths to one.
+### 2.1.6 Sep 29
 - Fixed client certificate authentication for MQTT
 - Anomaly still in Beta
 - Occupancy now working as expected
+- Fixed a flaw that prevented users from updating the Detections areas
 
 ### 2.1.1 Sep 24
-- Fixed a flaw that prevented users from updating the Detections areas
+
 - Marked Anomaly as "Beta" as testing is ongoing.  
   Please send comments, questions, error reports and suggestions for improvements.  
 
