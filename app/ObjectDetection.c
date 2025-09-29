@@ -756,13 +756,20 @@ int ObjectDetection_Init(ObjectDetection_Callback detections, TrackerDetection_C
     trackerCallback = tracker;
     if (!detectionCache)
         detectionCache = g_hash_table_new_full(g_str_hash, g_str_equal, free, free_detection_cache_entry);
-    if (VOD_Init(0, VOD_Data, NULL) != 0) {
+	int allow_predictions = 0;
+	cJSON* settings = ACAP_Get_Config("settings");
+	cJSON* scene = settings?cJSON_GetObjectItem(settings,"scene"):0;
+	cJSON* tracker_confidence = scene?cJSON_GetObjectItem(scene,"tracker_confidence"):0;
+	if( tracker_confidence && tracker_confidence->type==cJSON_False)
+		allow_predictions = 1;
+
+    if (VOD_Init(0, VOD_Data, NULL, allow_predictions) != 0) {
         LOG_WARN("%s: Object detection service failed\n", __func__);
         LOG_TRACE("%s: Exit\n",__func__);
         g_mutex_unlock(&detection_mutex);
         return 0;
     }
-	
+
     cJSON* list = VOD_Label_List();
     cJSON* labels = cJSON_CreateArray();
     cJSON* item = list->child;
@@ -773,10 +780,12 @@ int ObjectDetection_Init(ObjectDetection_Callback detections, TrackerDetection_C
         item = item->next;
     }
 
+
 	cJSON_Delete(list);
     ACAP_STATUS_SetObject("detections", "labels", labels);
     g_timeout_add_seconds(1, update_trackers, NULL);	
     LOG_TRACE("%s: Exit\n",__func__);
     g_mutex_unlock(&detection_mutex);
+
     return 1;
 }

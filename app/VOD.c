@@ -17,6 +17,7 @@
 //#define LOG_DEEP(fmt, args...) { syslog(LOG_INFO, fmt, ## args); printf(fmt, ## args); }
 #define LOG_DEEP(fmt, args...) {}
 
+int vod_predictions = 0;
 
 typedef struct {
     uint32_t type_id;
@@ -170,12 +171,10 @@ static void transform_bbox(float left, float top, float right, float bottom, int
 // --- Main detection callback ---
 static void detection_callback(const uint8_t *data, size_t size, void *user_data) {
     pthread_mutex_lock(&vod_mutex);
-	LOG_DEEP("<VOD");
     VOD__Scene *scene = vod__scene__unpack(NULL, size, data);
     if (!scene) {
         LOG_WARN("%s: Failed to unpack detection protobuf data", __func__);
         pthread_mutex_unlock(&vod_mutex);
-	LOG_DEEP("ERROR VOD>");
         return;
     }
 
@@ -201,9 +200,10 @@ static void detection_callback(const uint8_t *data, size_t size, void *user_data
 
     // 3. Process detections with validation
     for (size_t i = 0; i < scene->n_detections; ++i) {
+		
         VOD__Detection *det = scene->detections[i];
         if (!det) continue;
-        if (det->detection_status != VOD__DETECTION__DETECTION_STATUS__TRACKED_CONFIDENT) continue;
+        if (det->detection_status != VOD__DETECTION__DETECTION_STATUS__TRACKED_CONFIDENT && vod_predictions==0) continue;
 
         bool valid_class = (det->det_class >= 0) && (det->det_class < g_ctx.num_classes);
         bool valid_score = (det->score > 0);
@@ -492,7 +492,7 @@ cJSON* VOD_Detector_Information() {
 
 
 // --- Initialization and shutdown ---
-int VOD_Init(int channel, vod_callback_t cb, void *user_data) {
+int VOD_Init(int channel, vod_callback_t cb, void *user_data, int predictions ) {
     pthread_mutex_lock(&vod_mutex);
     LOG_TRACE("%s: Entry\n", __func__);
     if (!cb) {
@@ -503,13 +503,18 @@ int VOD_Init(int channel, vod_callback_t cb, void *user_data) {
     memset(&g_ctx, 0, sizeof(g_ctx));
     g_ctx.cb = cb;
     g_ctx.user_data = user_data;
-	
+
+
 	int major,minor;
 	if( video_object_detection_subscriber_get_version(&major,&minor) != VIDEO_OBJECT_DETECTION_SUBSCRIBER_SUCCESS ) {
         LOG_WARN("%s: No version detected", __func__);
         pthread_mutex_unlock(&vod_mutex);
 	}
 	LOG("%s: Version = %d.%d\n",__func__,major,minor);
+
+	vod_predictions = predictions;
+	if( vod_predictions )
+		LOG("Predicted positions enabled");
 	
     g_ctx.num_classes = video_object_detection_subscriber_det_classes_get(&g_ctx.det_classes);
     if (g_ctx.num_classes <= 0) {

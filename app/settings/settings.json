@@ -128,5 +128,15 @@
 		"idleThreshold": 3.0,
 		"integrationTime": 2.0
 	},
-	"anomaly": {}
+	"anomaly": {},
+	"stitch": {
+		"active": true,
+		"x1": 250,
+		"x2": 750,
+		"y1": 250,
+		"y2": 750,
+		"duration": 4,
+		"angle_threshold": 40
+	}
+		
 }

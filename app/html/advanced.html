@@ -16,107 +16,176 @@
         <div class="bg-light border-right" id="sidebar-wrapper">
             <div class="sidebar-heading">&nbsp;</div>
             <div class="list-group list-group-flush">
-				<a href="index.html" class="list-group-item list-group-item-action">Publish</a>
-				<a href="events.html" class="list-group-item list-group-item-action">Events</a>
-				<a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
-				<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
-				<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
-				<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
-				<a href="anomaly.html" class="list-group-item list-group-item-action">Anomaly</a>
-				<a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
-				<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
-				<a href="about.html" class="list-group-item list-group-item-action  active">About</a>
+                <a href="index.html" class="list-group-item list-group-item-action">Publish</a>
+                <a href="events.html" class="list-group-item list-group-item-action">Events</a>
+                <a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
+                <a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
+                <a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
+                <a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
+                <a href="anomaly.html" class="list-group-item list-group-item-action">Anomaly</a>
+                <a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
+                <a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
+                <a href="about.html" class="list-group-item list-group-item-action">About</a>
             </div>
         </div>
-		<div id="page-content-wrapper" class="p-5">
-			<div class="container">
-				<div class="col-4">
-					<div class="card">
-						<div class="card-header">
-							<h5 class="card-title mb-0">Scene behaviour</h5>
-						</div>
-						<div class="card-body" id="settings-form">
-							<div class="form-group mb-3">
-								<label for="scene-tracker" class="form-label">Tracker</label>
-								<select class="form-select" id="scene-tracker">
-									<option value="0">Allow low confidence</option>
-									<option value="1">Require high confidence</option>
-								</select>
+        <div id="page-content-wrapper" class="p-5">
+            <div class="container-fluid">
+                <div class="row justify-content-center">
+                    <div class="col-12 col-lg-8">
+                        <div class="card shadow-sm">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="card-title mb-0">Advanced settings</h5>
+                            </div>
+                            <div class="card-body" id="settings-form">
+								<div class="row g-4 align-items-center">
+									<div class="col-md-6">
+										<div class="form-label mb-1">Tracker Predictions</div>
+										<div class="text-muted small mb-2">
+											Include predicted detection positions.<br>
+											Change requires ACAP restart.
+										</div>
+									</div>
+									<div class="col-md-6 text-end">
+										<div class="form-check form-switch d-inline-flex align-items-center">
+											<input class="form-check-input" type="checkbox" id="tracker-predictions-switch">
+											<label class="form-check-label ms-2" for="tracker-predictions-switch">
+												Enable Predictions
+											</label>
+										</div>
+									</div>
+									<hr class="my-2"/>
+									<div class="col-md-6">
+										<div class="form-label mb-1">Path Stitch Angle Threshold</div>
+										<div class="text-muted small mb-2">
+											Defines the limit trajectory angles for stitching paths.
+										</div>
+									</div>
+									<div class="col-md-6 text-end">
+										<input type="number" id="angle-threshold-input" class="form-control w-50 d-inline-block" min="20" max="60" step="5">
+									</div>
+								</div>
 							</div>
-							<div class="form-group mb-3">
-								<label for="scene-hanging_objects" class="form-label">Hanging opjects</label>
-								<select class="form-select" id="scene-hanging_objects">
-									<option value="0">Allow</option>
-									<option value="1">Supress</option>
-								</select>
-							</div>
-							<div class="d-grid mt-3">
-								<button type="button" class="btn btn-success" id="btn-save">Save</button>
-							</div>
-						</div>
-					</div>
-				</div>
-			</div>
-		</div>
-	</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="toast-container position-fixed top-0 end-0 p-3"></div>
+    </div>
 
 <script>
-
-$(document).ready(function() {
-
-	$.ajax({
-		type: "GET",
-		url: 'app',
-		dataType: 'json',
-		cache: false,
-		success: function(app) {
-			document.title = app.manifest.acapPackageConf.setup.friendlyName;
-			$('.sidebar-heading').text(app.manifest.acapPackageConf.setup.friendlyName);
-			$("#scene-tracker").val(app.settings.scene.tracker_confidence?"1":"0");
-			$("#scene-hanging_objects").val(app.settings.scene.hanging_objects>0?"1":"0");
-		},
-		error: function(response) {
-			alert(response.statusText);
-		}
-	});
-
-	// Menu toggle handler
-	$("#menu-toggle").click(function(e) {
-		e.preventDefault();
-		$("#wrapper").toggleClass("toggled");
-	});
-
-});	
+let appData = null;
 
 
-function saveScene() {
-	var payload = {
-		scene: app.settings.scene
-	}
-	var url = 'settings?json=' + encodeURI(JSON.stringify(payload));
-	$.ajax({type: "GET",
-		url: url,
-		success: function(response) {
-			showToast("Settings updated",'info');
-		},
-		error: function(xhr, status, error) {
-			showToast("Filter updated failed",'danger');
-		}
-	});
+
+function updateSetting(path, value) {
+    if (!appData) return;
+
+    // Update the value in the appData object
+    let keyParts = path.split('.');
+    let obj = appData.settings;
+    for (let i = 0; i < keyParts.length - 1; i++) {
+        obj = obj[keyParts[i]];
+        if (!obj) return;
+    }
+    obj[keyParts[keyParts.length - 1]] = value;
+
+    // Prepare payload for both scene and stitch (for safety)
+    let payload = {
+        scene: appData.settings.scene,
+        stitch: appData.settings.stitch
+    };
+
+    let url = 'settings?json=' + encodeURIComponent(JSON.stringify(payload));
+    $.ajax({
+        type: "GET",
+        url: url,
+        success: function(response) {
+            showToast('Settings updated', 'info');
+        },
+        error: function(xhr, status, error) {
+            showToast('Settings update failed', 'danger');
+        }
+    });
 }
 
-$('#btn-save').click(function() {
-	app.settings.scene.tracker_confidence = ($("#scene-tracker").val()==="1");
-	if( $("#scene-hanging_objects").val()==="1" )
-		app.settings.scene.hanging_objects = 5;
-	else
-		app.settings.scene.hanging_objects = 0;
-	saveFilter();
+$(document).ready(function() {
+    $.ajax({
+        type: "GET",
+        url: 'app',
+        dataType: 'json',
+        cache: false,
+        success: function(app) {
+            appData = app;
+            document.title = app.manifest.acapPackageConf.setup.friendlyName;
+            $('.sidebar-heading').text(app.manifest.acapPackageConf.setup.friendlyName);
+
+            // -- TRACKER PREDICTIONS SWITCH: checked if tracker_confidence is FALSE --
+			$('#tracker-predictions-switch').prop('checked', !app.settings.scene.tracker_confidence);
+            // -- PATH STITCH ANGLE THRESHOLD --
+            $('#angle-threshold-input').val(
+                typeof app.settings.stitch.angle_threshold === "number" 
+                ? app.settings.stitch.angle_threshold : 40
+            );
+        },
+        error: function(response) { showToast(response.statusText, 'danger'); }
+    });
+
+    // Inverted logic: predictions enabled if tracker_confidence is FALSE
+	$('#tracker-predictions-switch').on('change', function() {
+		if (!appData) return;
+		appData.settings.scene.tracker_confidence = !$(this).is(':checked');
+		const payload = {
+			scene: appData.settings.scene,
+		};
+		$.ajax({
+			type: "POST",
+			url: 'settings',
+			contentType: 'application/json',
+			data: JSON.stringify(payload),
+			success: () => showToast('Settings updated', 'info'),
+			error: () => showToast('Settings update failed', 'danger')
+		});
+	});
+
+    $('#angle-threshold-input').on('change', function() {
+        if (!appData) return;
+        let val = Math.round(parseInt(this.value, 10) / 5) * 5;
+        if (isNaN(val)) val = 40;
+        if (val < 20) val = 20;
+        if (val > 60) val = 60;
+        this.value = val;
+        appData.settings.stitch.angle_threshold = val;
+		const payload = {
+			stitch: appData.settings.stitch
+		};
+		$.ajax({
+			type: "POST",
+			url: 'settings',
+			contentType: 'application/json',
+			data: JSON.stringify(payload),
+			success: () => showToast('Settings updated', 'info'),
+			error: () => showToast('Settings update failed', 'danger')
+		});
+    });
 });
 
-
+function showToast(message, type = 'danger') {
+    const toastContainer = document.querySelector('.toast-container');
+    const textColorClass = type === 'warning' ? 'text-dark' : 'text-white';
+    toastContainer.insertAdjacentHTML('beforeend', `
+        <div class="toast align-items-center ${textColorClass} bg-${type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">${message}</div>
+                <button type="button" class="btn-close${type === 'warning' ? '' : ' btn-close-white'} me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    `);
+    const toastEl = toastContainer.lastElementChild;
+    new bootstrap.Toast(toastEl, {autohide: true, delay: 4000}).show();
+    toastEl.addEventListener('hidden.bs.toast', function() { this.remove(); });
+}
 
 </script>
 </body>
-
 </html>

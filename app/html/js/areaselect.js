@@ -21,6 +21,9 @@ class AreaSelector {
     this.startMouse = null;
     this.onchange = options.onchange || null;
 
+    this.minWidth = options.minWidth || 100;   // normalized units [0,1000]
+    this.minHeight = options.minHeight || 100; // normalized units [0,1000]
+
     this._bindEvents();
     this.redraw();
   }
@@ -147,7 +150,6 @@ class AreaSelector {
     }
     const area = this.areas[this.currentMode];
     const mouseRaw = this._mouseToCanvas(e);
-    // Clamp mouse position for resizing
     const mouse = {
       x: Math.max(0, Math.min(mouseRaw.x, this.canvas.width)),
       y: Math.max(0, Math.min(mouseRaw.y, this.canvas.height))
@@ -163,12 +165,12 @@ class AreaSelector {
         break;
       }
     }
-    // Correct pointer shape:
+    // Pointer shape logic
     if (hoverHandle===0 || hoverHandle===4)   this.canvas.style.cursor = 'nwse-resize';
     else if (hoverHandle===2 || hoverHandle===6) this.canvas.style.cursor = 'nesw-resize';
     else if (hoverHandle===1 || hoverHandle===5) this.canvas.style.cursor = 'ns-resize';
     else if (hoverHandle===3 || hoverHandle===7) this.canvas.style.cursor = 'ew-resize';
-    else if (!hoverHandle) {
+    else if (hoverHandle == null) {
       const c = this._areaToCanvas(area);
       if (mouse.x>c.x && mouse.x<c.x+c.w && mouse.y>c.y && mouse.y<c.y+c.h) {
         this.canvas.style.cursor = 'move';
@@ -176,6 +178,10 @@ class AreaSelector {
         this.canvas.style.cursor = 'default';
       }
     }
+
+    // Minimum size in canvas pixels
+    const minW = this.minWidth * this.canvas.width / 1000;
+    const minH = this.minHeight * this.canvas.height / 1000;
 
     if (this.draggingHandle && this.activeHandle!==null && this.startBox && this.startMouse) {
       let c = Object.assign({}, this.startBox);
@@ -193,11 +199,11 @@ class AreaSelector {
         case 6: x += diffX; w -= diffX; h += diffY; break; // SW
         case 7: x += diffX; w -= diffX; break; // W
       }
-      // Edge snap
-      x = Math.max(0, Math.min(x, this.canvas.width-10));
-      y = Math.max(0, Math.min(y, this.canvas.height-10));
-      w = Math.max(10, Math.min(w, this.canvas.width-x));
-      h = Math.max(10, Math.min(h, this.canvas.height-y));
+      // Edge and minimum size
+      x = Math.max(0, Math.min(x, this.canvas.width-minW));
+      y = Math.max(0, Math.min(y, this.canvas.height-minH));
+      w = Math.max(minW, Math.min(w, this.canvas.width-x));
+      h = Math.max(minH, Math.min(h, this.canvas.height-y));
 
       let newArea = this._canvasToArea(x, y, w, h);
       this.areas[this.currentMode] = newArea;
@@ -205,12 +211,13 @@ class AreaSelector {
       if (this.onchange) this.onchange(this.getAreas());
     }
     else if (this.draggingBox && this.startBox && this.startMouse) {
-      // Move box: compute move, clamp to canvas
       let dx = mouse.x - this.startMouse.x;
       let dy = mouse.y - this.startMouse.y;
       let newX = Math.max(0, Math.min(this.startBox.x+dx, this.canvas.width-this.startBox.w));
       let newY = Math.max(0, Math.min(this.startBox.y+dy, this.canvas.height-this.startBox.h));
-      let newArea = this._canvasToArea(newX, newY, this.startBox.w, this.startBox.h);
+      let w = Math.max(minW, this.startBox.w);
+      let h = Math.max(minH, this.startBox.h);
+      let newArea = this._canvasToArea(newX, newY, w, h);
       this.areas[this.currentMode] = newArea;
       this.redraw();
       if (this.onchange) this.onchange(this.getAreas());

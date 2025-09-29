@@ -30,7 +30,6 @@ static GeoSpace_Matrix_t gMatrix = {
 int GeoSpace_Matrix(cJSON* matrix) {
 	LOG_TRACE("%s: Entry\n",__func__);
     if (!matrix || !cJSON_IsArray(matrix) || cJSON_GetArraySize(matrix) != 9) {
-        LOG("%s: Matrix not configured\n", __func__);
 		ACAP_STATUS_SetBool("geospace", "active", 0);
         return 0;
     }
@@ -43,7 +42,6 @@ int GeoSpace_Matrix(cJSON* matrix) {
     
     if (!gMatrix.initialized) {
         if (lm_mat_set(&gMatrix.H, 3, 3, gMatrix.h_data, 9) != LM_SUCCESS) {
-            LOG_WARN("%s: Failed to initialize matrix\n", __func__);
             return 0;
         }
         gMatrix.initialized = true;
@@ -65,7 +63,6 @@ GeoSpace_transform(int x, int y, double *lat, double *lon) {
     if (lon) *lon = 0;
 
     if (!gMatrix.initialized || !lat || !lon) {
-        LOG_WARN("Invalid parameters or matrix not initialized\n");
         return 0;
     }
     
@@ -73,7 +70,6 @@ GeoSpace_transform(int x, int y, double *lat, double *lon) {
     lm_mat_t p;
     lm_mat_elem_t p_data[3] = {(lm_mat_elem_t)x, (lm_mat_elem_t)y, 1.0f};
     if (lm_mat_set(&p, 3, 1, p_data, 3) != LM_SUCCESS) {
-        LOG_WARN("Failed to set point vector\n");
         return 0;
     }
     
@@ -81,13 +77,11 @@ GeoSpace_transform(int x, int y, double *lat, double *lon) {
     lm_mat_t result;
     lm_mat_elem_t result_data[3] = {0};
     if (lm_mat_set(&result, 3, 1, result_data, 3) != LM_SUCCESS) {
-        LOG_WARN("Failed to set result vector\n");
         return 0;
     }
     
     // Compute transformation using stored matrix
     if (lm_oper_gemm(false, false, 1.0f, &gMatrix.H, &p, 0.0f, &result) != LM_SUCCESS) {
-        LOG_WARN("Matrix multiplication failed\n");
         return 0;
     }
     

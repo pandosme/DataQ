@@ -23,6 +23,7 @@
 #include "MQTT.h"
 #include "ObjectDetection.h"
 #include "GeoSpace.h"
+#include "Stitch.h"
 
 #define APP_PACKAGE "DataQ"
 
@@ -180,7 +181,7 @@ cJSON* ProcessPaths(cJSON* tracker) {
     if (path && !active) {
         cJSON* pathArr = cJSON_GetObjectItem(path, "path");
         int pathLen = cJSON_GetArraySize(pathArr);
-        if (pathLen > 2) {
+        if (pathLen > 1) {
             cJSON_DetachItemFromObject(PathCache, id);
 			float speed = 0;
 			double distance = cJSON_GetObjectItem(path,"distance")->valuedouble;
@@ -349,7 +350,7 @@ Check_Anomaly(cJSON* tracker) {
             item = item->next;
         }
         if (!found_common) {
-            LOG("Invalid exit");
+            //LOG("Invalid exit");
             Fire_Anomaly();
             cJSON_AddStringToObject(tracker, "anomaly", "Invalid exit");
             return;
@@ -388,7 +389,7 @@ Check_Anomaly(cJSON* tracker) {
 	int directions = cJSON_GetObjectItem(tracker, "directions")->valueint;
     if (maxDirections && directions > maxDirections) {
 		sprintf(text,"Directions: %d > %d", directions , maxDirections);
-		LOG("%s",text);
+		//LOG("%s",text);
         cJSON_AddStringToObject(tracker, "anomaly", text);
         Fire_Anomaly();
         return;
@@ -398,7 +399,7 @@ Check_Anomaly(cJSON* tracker) {
     float age = cJSON_GetObjectItem(tracker, "age")->valuedouble;
     if (maxAge && age > maxAge) {
 		sprintf(text,"Age: %d>%d", (int)age , (int)maxAge);
-		LOG("%s",text);		
+		//LOG("%s",text);		
         cJSON_AddStringToObject(tracker, "anomaly", text);
         Fire_Anomaly();
         return;
@@ -408,7 +409,7 @@ Check_Anomaly(cJSON* tracker) {
     float idle = cJSON_GetObjectItem(tracker, "maxIdle")->valuedouble;
     if (maxIdle && idle > maxIdle) {
 		sprintf(text,"Idle: %d>%d", (int)idle , (int)maxIdle);
-		LOG("%s",text);
+		//LOG("%s",text);
         cJSON_AddStringToObject(tracker, "anomaly", text);
         Fire_Anomaly();
         return;
@@ -418,7 +419,7 @@ Check_Anomaly(cJSON* tracker) {
     float maxSpeed = cJSON_GetObjectItem(tracker, "maxSpeed")->valuedouble;
     if (speedLimit && maxSpeed > speedLimit) {
 		sprintf(text,"Speed: %d>%d", (int)maxSpeed , (int)speedLimit);
-		LOG("%s",text);
+		//LOG("%s",text);
         cJSON_AddStringToObject(tracker, "anomaly", text);
         Fire_Anomaly();
         return;
@@ -428,13 +429,13 @@ Check_Anomaly(cJSON* tracker) {
     char* horizontal = cJSON_GetObjectItem(normal, "horizontal") ? cJSON_GetObjectItem(normal, "horizontal")->valuestring : NULL;
     int dx = cJSON_GetObjectItem(tracker, "dx") ? cJSON_GetObjectItem(tracker, "dx")->valueint : 0;
     if (horizontal && strcmp(horizontal, "Left") == 0 && dx > 0) {
-		LOG("%s",text);
+		//LOG("%s",text);
         Fire_Anomaly();
         cJSON_AddStringToObject(tracker, "anomaly", "Wrong way");
         return;
     }
     if (horizontal && strcmp(horizontal, "Right") == 0 && dx < 0) {
-		LOG("%s",text);
+		//LOG("%s",text);
         Fire_Anomaly();
         cJSON_AddStringToObject(tracker, "anomaly", "Wrong way");
         return;
@@ -443,13 +444,13 @@ Check_Anomaly(cJSON* tracker) {
     char* vertical = cJSON_GetObjectItem(normal, "vertical") ? cJSON_GetObjectItem(normal, "vertical")->valuestring : NULL;
     int dy = cJSON_GetObjectItem(tracker, "dy") ? cJSON_GetObjectItem(tracker, "dy")->valueint : 0;
     if (vertical && strcmp(vertical, "Up") == 0 && dy > 0) {
-        LOG("Wrong way: Down");
+        //LOG("Wrong way: Down");
         Fire_Anomaly();
         cJSON_AddStringToObject(tracker, "anomaly", "Wrong way");
         return;
     }
     if (vertical && strcmp(vertical, "Down") == 0 && dy < 0) {
-        LOG("Wrong way: Up");
+        //LOG("Wrong way: Up");
         Fire_Anomaly();
         cJSON_AddStringToObject(tracker, "anomaly", "Wrong way");
         return;
@@ -486,19 +487,24 @@ void Tracker_Data(cJSON *tracker, int timer) {
         }
     }
 
+    if (publishPath && !timer && tracker)
+		STICH_Path(ProcessPaths(tracker));
+
+    cJSON_Delete(tracker);
+}
+
+void Publish_Path( cJSON* path ){
+	if( !path ) return;
+    char topic[128];
+	sprintf(topic, "path/%s", ACAP_DEVICE_Prop("serial"));
+	MQTT_Publish_JSON(topic, path, 0, 0);
+	
     cJSON* statusPaths = ACAP_STATUS_Object("detections", "paths");
-    if (publishPath && !timer) {
-        cJSON* path = ProcessPaths(tracker);
-        if (path) {
-            sprintf(topic, "path/%s", ACAP_DEVICE_Prop("serial"));
-            MQTT_Publish_JSON(topic, path, 0, 0);
-            cJSON_AddItemToArray(statusPaths, cJSON_Duplicate(path, 1));
-            cJSON_Delete(path);
-        }
-    }
+	
+    cJSON_AddItemToArray(statusPaths, cJSON_Duplicate(path, 1));
     while (cJSON_GetArraySize(statusPaths) > 10)
         cJSON_DeleteItemFromArray(statusPaths, 0);
-    cJSON_Delete(tracker);
+	cJSON_Delete(path);
 }
 
 static cJSON* last_occupancy = NULL;
@@ -599,24 +605,27 @@ cJSON* ProcessOccupancy(cJSON* list) {
     double ageThreshold = cJSON_GetObjectItem(occupancy, "ageThreshold") ? cJSON_GetObjectItem(occupancy, "ageThreshold")->valuedouble : 2.0;
     double idleThreshold = cJSON_GetObjectItem(occupancy, "idleThreshold") ? cJSON_GetObjectItem(occupancy, "idleThreshold")->valuedouble : 3.0;
     int listSize = cJSON_GetArraySize(list);
-    
+
+    // Handle empty list: only broadcast on change (normalized empty object)
     if (listSize == 0) {
-        // Empty array: push an empty ("zero") sample!
-        double now = ACAP_DEVICE_Timestamp();
-        push_occupancy_zero_sample(now);
         cJSON* empty = cJSON_CreateObject();
         int changed = 1;
-        if (last_occupancy && cJSON_Compare(last_occupancy, empty, 1))
+        if (last_occupancy && Check_Counters_Equal(last_occupancy, empty))
             changed = 0;
         if (!changed) {
             cJSON_Delete(empty);
             return 0;
         }
+        // Only add to history and report on change
+        double now = ACAP_DEVICE_Timestamp();
+        push_occupancy_zero_sample(now);
         if (last_occupancy)
             cJSON_Delete(last_occupancy);
         last_occupancy = cJSON_Duplicate(empty, 1);
         return empty;
     }
+
+    // Build counters object (class counts)
     cJSON* counters = cJSON_CreateObject();
     for (int i = 0; i < listSize; ++i) {
         cJSON* det = cJSON_GetArrayItem(list, i);
@@ -629,29 +638,44 @@ cJSON* ProcessOccupancy(cJSON* list) {
             cJSON* curr = cJSON_GetObjectItem(counters, cls);
             if (curr) {
                 curr->valuedouble += 1.0;
-                curr->valueint = (int)curr->valuedouble;
             } else {
-                cJSON_AddNumberToObject(counters, cls, 1);
+                cJSON_AddNumberToObject(counters, cls, 1.0);
             }
         }
     }
+
+    // Normalize and round counters before comparison
     cJSON* item = counters->child;
+    while (item) {
+        item->valueint = (int)(item->valuedouble + 0.5);
+        item->valuedouble = (double)item->valueint;
+        item = item->next;
+    }
+
+    // Remove zero-count classes
+    item = counters->child;
     while (item) {
         cJSON* next = item->next;
         if (item->valueint == 0)
             cJSON_DeleteItemFromObjectCaseSensitive(counters, item->string);
         item = next;
     }
-    // Push sample to buffer
+
+    // Compare with the last reported occupancy before history/report
+    if (last_occupancy && Check_Counters_Equal(last_occupancy, counters)) {
+        cJSON_Delete(counters); // Clean up if not sending
+        return 0;
+    }
+
+    // Only now do we push to history and report
     double now = ACAP_DEVICE_Timestamp();
     push_occupancy_sample(now, counters);
 
-    if (Check_Counters_Equal(last_occupancy, counters) == 1)
-        return 0;
     if (last_occupancy)
         cJSON_Delete(last_occupancy);
     last_occupancy = cJSON_Duplicate(counters, 1);
     ACAP_STATUS_SetObject("occupancy", "counter", counters);
+
     return counters;
 }
 
@@ -673,28 +697,29 @@ void Detections_Data(cJSON *list) {
     if (publishOccupancy) {
         // Process actual occupancy, update buffers
         cJSON* counter = ProcessOccupancy(list);
-        double now = ACAP_DEVICE_Timestamp();
+		if(counter ) {
+			double now = ACAP_DEVICE_Timestamp();
 
-        // Fetch settings (allow fallback if not found)
-        cJSON* settings = ACAP_Get_Config("settings");
-        cJSON* occupancy = settings ? cJSON_GetObjectItem(settings, "occupancy") : NULL;
-        double integrationTime = 2.0; // Default integration window
-        if (occupancy && cJSON_GetObjectItem(occupancy, "integrationTime")) {
-            integrationTime = cJSON_GetObjectItem(occupancy, "integrationTime")->valuedouble;
-        }
+			// Fetch settings (allow fallback if not found)
+			cJSON* settings = ACAP_Get_Config("settings");
+			cJSON* occupancy = settings ? cJSON_GetObjectItem(settings, "occupancy") : NULL;
+			double integrationTime = 2.0; // Default integration window
+			if (occupancy && cJSON_GetObjectItem(occupancy, "integrationTime")) {
+				integrationTime = cJSON_GetObjectItem(occupancy, "integrationTime")->valuedouble;
+			}
 
-        // Compute stabilized output
-        cJSON* stabilized = compute_stabilized_occupancy(now, integrationTime);
-        if (stabilized) {
-            cJSON* payload = cJSON_CreateObject();
-            cJSON_AddItemToObject(payload, "occupancy", stabilized);
-            cJSON_AddNumberToObject(payload, "timestamp", now);
-            sprintf(topic, "occupancy/%s", ACAP_DEVICE_Prop("serial"));
-            MQTT_Publish_JSON(topic, payload, 0, 0);
-            cJSON_Delete(payload);
-        }
-        if (counter)
-            cJSON_Delete(counter); // Unstabilized, only for transition/compat use
+			// Compute stabilized output
+			cJSON* stabilized = compute_stabilized_occupancy(now, integrationTime);
+			if (stabilized) {
+				cJSON* payload = cJSON_CreateObject();
+				cJSON_AddItemToObject(payload, "occupancy", stabilized);
+				cJSON_AddNumberToObject(payload, "timestamp", now);
+				sprintf(topic, "occupancy/%s", ACAP_DEVICE_Prop("serial"));
+				MQTT_Publish_JSON(topic, payload, 0, 0);
+				cJSON_Delete(payload);
+			}
+			cJSON_Delete(counter); // Unstabilized, only for transition/compat use
+		}
     }
     cJSON_Delete(list);
 }
@@ -837,6 +862,9 @@ void Settings_Updated_Callback(const char* service, cJSON* data) {
 
     if (strcmp(service, "matrix") == 0)
         GeoSpace_Matrix(data);
+
+    if (strcmp(service, "stitch") == 0)
+        GeoSpace_Matrix(data);	
 }
 
 void HandleVersionUpdateConfigurations(cJSON* settings) {
@@ -884,6 +912,7 @@ int main(void) {
     ACAP_STATUS_SetObject("detections", "paths", cJSON_CreateArray());
 
     ACAP_EVENTS_SetCallback(Event_Callback);
+
     cJSON* eventSubscriptions = ACAP_FILE_Read("settings/subscriptions.json");
     cJSON* subscription = eventSubscriptions ? eventSubscriptions->child : 0;
     while (subscription) {
@@ -901,6 +930,10 @@ int main(void) {
 
     GeoSpace_Init();
     g_timeout_add_seconds(15 * 60, MQTT_Publish_Device_Status, NULL);
+
+	STICH_Init(Publish_Path);
+
+
 
 	ACAP_EVENTS_Add_Event("anomaly", "DataQ: Anomlay", 1);
     main_loop = g_main_loop_new(NULL, FALSE);

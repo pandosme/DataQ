@@ -371,7 +371,7 @@ MQTT_Publish_JSON(const char *topic, cJSON *payload, int qos, int retained) {
     }
     
     if (!payload) {
-        LOG_WARN("%s: NULL payload\n", __func__);
+        LOG_WARN("%s: %s NULL payload\n", __func__, topic);
         return 0;
     }
 
@@ -532,7 +532,7 @@ MQTT_SetupClient() {
                 __func__, sizeof(serverURI)-1);
         return 0;
     }
-
+	LOG("Broker URI: %s",serverURI);
     /* Generate unique client ID */
     char clientId[128];
     snprintf(clientId, sizeof(clientId), "%s-%s", 

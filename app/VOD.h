@@ -35,7 +35,7 @@ typedef void (*vod_callback_t)(const vod_object_t *objects, size_t num_objects, 
  * @param user_data  User pointer passed to callback.
  * @return 0 on success, negative on error.
  */
-int VOD_Init(int channel, vod_callback_t cb, void *user_data);
+int VOD_Init(int channel, vod_callback_t cb, void *user_data, int predictions);
 cJSON*	VOD_Detector_Information();
 cJSON*	VOD_Label_List();
 void	VOD_Reset();

@@ -1,5 +1,5 @@
 PROG1	= DataQ
-OBJS1	= main.c ACAP.c cJSON.c MQTT.c CERTS.c ObjectDetection.c VOD.c video_object_detection.pb-c.c protobuf-c.c  GeoSpace.c \
+OBJS1	= main.c ACAP.c cJSON.c MQTT.c CERTS.c ObjectDetection.c VOD.c video_object_detection.pb-c.c protobuf-c.c  GeoSpace.c  Stitch.c\
         linmatrix/src/lm_log.c \
         linmatrix/src/lm_assert.c \
         linmatrix/src/lm_err.c \
