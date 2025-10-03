@@ -36,7 +36,7 @@ Just like Axis Metadata, detections are based on DataQ makes integration and sol
 
 
 ### [Download](https://www.dropbox.com/scl/fi/3z5ruobn27nvt2rwebqym/DataQ.zip?rlkey=etnpo7yvp2u6vqxi9d50hqpik&st=ian3s4md&dl=1)
-Pre-compiled version for ARMv7-HF and AARCH64
+It is a good idea to regularly download the latest version.  The ZIP file contains pre-compiled version for amrv7hf, aarach64 and this readme.
 
 ---
 If you find this ACAP valuable, please consider [buying me a coffee](https://buymeacoffee.com/fredjuhlinl).  
@@ -225,9 +225,7 @@ For VMS (Video Mananagement Systems"), a stateful event "anomaly" will be fired 
 > **Note**: This ACAP deprecates and replaces SIMQTT, ObjectTracker, ObjectPath and Occupancy  
 > **Note**: Use DataQ when standard Axis device services and data formats do not meet your requirements.
 
-# History
-
-Certainly! Here is a reviewed and improved version of your release notes for DataQ:
+***
 
 ## History
 
