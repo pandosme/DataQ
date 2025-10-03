@@ -38,12 +38,16 @@ Just like Axis Metadata, detections are based on DataQ makes integration and sol
 ***
 
 ### Pre-compiled download
-If you are only after a pre-compiled version[Download Latest precompiled](https://www.dropbox.com/scl/fi/3z5ruobn27nvt2rwebqym/DataQ.zip?rlkey=etnpo7yvp2u6vqxi9d50hqpik&st=ian3s4md&dl=1) The ZIP file contains pre-compiled version for amrv7hf, aarach64 and this readme.   
-It is a good idea to regularly download the latest version as new features and bug fixes are published. 
----
+If you are only after a pre-compiled version, [Download Latest ZIP](https://www.dropbox.com/scl/fi/3z5ruobn27nvt2rwebqym/DataQ.zip?rlkey=etnpo7yvp2u6vqxi9d50hqpik&st=ian3s4md&dl=1)<br>
+The ZIP file contains pre-compiled version for amrv7hf, aarach64 and this readme.<br>
+It is a good idea to regularly download the latest version as new features and bug fixes are published.<br>
+
+***
+
 If you find this ACAP valuable, please consider [buying me a coffee](https://buymeacoffee.com/fredjuhlinl).  
 
----
+***
+
 ## Data Types
 
 ### Events
