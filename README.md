@@ -3,6 +3,7 @@
 DataQ is an MQTT Client for Axis cameras that enables custom data-driven solutions when standard camera data and formats are insufficient. It processes, filters, and transforms data before MQTT publishing to optimize resource usage.
 Just like Axis Metadata, detections are based on DataQ makes integration and solution development very easy.  DataQ provides different data stractures based on use-case, optimizing bandwidth and alos adding pre-calculated properties like age, distance, direction and idle time so consumers does not need to.
 
+***
 ## Key Features
 
 **Data Processing**
@@ -34,10 +35,11 @@ Just like Axis Metadata, detections are based on DataQ makes integration and sol
 - MQTT Broker with WebSocket support
 - MQTT client for data consumption
 
+***
 
-### [Download](https://www.dropbox.com/scl/fi/3z5ruobn27nvt2rwebqym/DataQ.zip?rlkey=etnpo7yvp2u6vqxi9d50hqpik&st=ian3s4md&dl=1)
-It is a good idea to regularly download the latest version.  The ZIP file contains pre-compiled version for amrv7hf, aarach64 and this readme.
-
+### Pre-compiled download
+If you are only after a pre-compiled version[Download Latest precompiled](https://www.dropbox.com/scl/fi/3z5ruobn27nvt2rwebqym/DataQ.zip?rlkey=etnpo7yvp2u6vqxi9d50hqpik&st=ian3s4md&dl=1) The ZIP file contains pre-compiled version for amrv7hf, aarach64 and this readme.   
+It is a good idea to regularly download the latest version as new features and bug fixes are published. 
 ---
 If you find this ACAP valuable, please consider [buying me a coffee](https://buymeacoffee.com/fredjuhlinl).  
 
