@@ -231,6 +231,9 @@ Certainly! Here is a reviewed and improved version of your release notes for Dat
 
 ## History
 
+### 2.1.7 Oct 3
+- Settings are now correctly stored in Detections.
+
 ### 2.1.6 Sep 29
 - Fixed client certificate authentication for MQTT
 - Anomaly still in Beta

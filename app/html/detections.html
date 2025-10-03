@@ -483,9 +483,10 @@ function saveFilter() {
 	var payload = {
 		scene: app.settings.scene
 	}
-	var url = 'settings?json=' + encodeURI(JSON.stringify(payload));
-	$.ajax({type: "GET",
-		url: url,
+	$.ajax({type: "POST",
+		url: "settings",
+		contentType: "application/json",
+		data: JSON.stringify(payload),
 		success: function(response) {
 			showToast("Settings updated",'info');
 		},
