@@ -17,7 +17,7 @@
 #include "ObjectDetection.h"
 #include "cJSON.h"
 #include "ACAP.h"
-#include "VOD.h"
+#include "RADAR.h"
 
 #define LOG(fmt, args...) { syslog(LOG_INFO, fmt, ## args); printf(fmt, ## args); }
 #define LOG_WARN(fmt, args...) { syslog(LOG_WARNING, fmt, ## args); printf(fmt, ## args); }
@@ -29,81 +29,8 @@
 #define IDLE_THRESHOLD_PCT 50
 #define DIRECTION_CHANGE_THRESHOLD_RAD (M_PI / 4) // 45 degrees 
 
-typedef struct {
-    char name[64];
-    char value[64];
-} od_attribute_t;
-
-typedef struct {
-    const char *key;
-    const char *value;
-} NameMapEntry;
-
-static const NameMapEntry name_map[] = {
-    { "car", "Car" },
-    { "truck", "Truck" },
-    { "motorcycle_bicycle", "Bike" },
-    { "bus", "Bus" },
-    { "truck","Truck" },
-    { "vehicle_other","Other" },
-    { "vehicle","Vehicle" },	
-    { "license_plate", "LicensePlate" },
-    { "human", "Human" },
-    { "human_face", "Head" },
-    { "human_head", "Head" },
-    { "head", "Head" },
-    { "face", "Head" },	
-    { "hat", "Hat" },
-    { "animal", "Animal" },	
-    { "no_hat", "" },
-    { "hat_other", "Hat" },
-    { "hard_hat", "Helmet" },
-    { "bag", "Bag" },
-    { "bag_other", "Bag" },
-    { "backpack", "Bag" },
-    { "bag", "suitcase" },
-    { "red", "Red" },
-    { "blue", "Blue" },
-    { "black", "Black" },
-    { "white", "White" },
-    { "green", "Green" },
-    { "beige", "Beige" },
-    { "yellow", "Yellow" },
-    { "gray", "Gray" },
-    { "unknown", "" },
-};
 
 #define NAME_MAP_SIZE (sizeof(name_map) / sizeof(name_map[0]))
-
-typedef struct {
-    char id[32];
-    char class_name[64];
-    int confidence;
-    int x, y, w, h;
-    int cx, cy;
-    int bx, by;
-    int dx, dy;
-    double timestamp; // ms epoch
-    double birthTime; // ms epoch
-    int prev_cx, prev_cy;
-	double prev_angle;
-	int directions;
-    int distance;
-    double age;     // seconds
-    bool valid;
-    bool idle;
-    bool sleep;
-    bool trackerSleep;	
-	double speed;
-	double maxSpeed;	
-    double idle_duration; // seconds
-    double max_idle_duration; // seconds
-    double idle_start_time; // ms epoch
-    double last_published_tracker;  //The timestamp the tracker was published
-    od_attribute_t *attributes; // Dynamically allocated array
-    size_t num_attributes;      // Number of attributes
-    bool active;
-} detection_cache_entry_t;
 
 // ---- THREAD SAFETY ----
 static GMutex detection_mutex;
@@ -146,22 +73,6 @@ static void free_attributes(GHashTable *attrs) {
         free(value);
     }
     g_hash_table_destroy(attrs);
-}
-
-static void free_detection_cache_entry(gpointer data) {
-    detection_cache_entry_t *entry = (detection_cache_entry_t*)data;
-    if (entry->attributes) free(entry->attributes);
-    free(entry);
-}
-
-const char* NiceName(const char* input) {
-    if (!input) return NULL;
-    for (size_t i = 0; i < NAME_MAP_SIZE; ++i) {
-        if (strcmp(input, name_map[i].key) == 0) {
-            return name_map[i].value;
-        }
-    }
-    return input;
 }
 
 static float calc_distance(int x1, int y1, int x2, int y2) {
@@ -253,6 +164,7 @@ void ObjectDetection_Config(cJSON* data) {
 
 
 static void publish_tracker(detection_cache_entry_t *entry, int timer ) {
+/*	
     cJSON *obj = cJSON_CreateObject();
     if (!obj || !entry || !entry->id) return;
     if( entry->active == true ) {
@@ -343,9 +255,11 @@ static void publish_tracker(detection_cache_entry_t *entry, int timer ) {
     if( trackerCallback )
         trackerCallback(payload, timer);
     cJSON_Delete(obj);
+*/	
 }
 
 static void publish_detections(GHashTable *cache) {
+/*	
     cJSON *arr = cJSON_CreateArray();
     if (!arr) return;
     GHashTableIter iter;
@@ -439,57 +353,10 @@ static void publish_detections(GHashTable *cache) {
     cJSON_Delete(arr);
     if( detectionsCallback )
         detectionsCallback(payload);
+*/	
 }
 
-static od_attribute_t *clone_attributes(const vod_attribute_t *src, size_t num, size_t *out_num) {
-    if (!src || num == 0) {
-        if (out_num) *out_num = 0;
-        return NULL;
-    }
-    od_attribute_t *dst = calloc(num, sizeof(od_attribute_t));
-    if (!dst) {
-        if (out_num) *out_num = 0;
-        return NULL;
-    }
-    for (size_t i = 0, j = 0; i < num; ++i) {
-        if (!src[i].name || !src[i].value) continue;
-        if (strlen(src[i].name) == 0 || strlen(src[i].value) == 0) continue;
-        strncpy(dst[j].name, src[i].name, sizeof(dst[j].name) - 1);
-        dst[j].name[sizeof(dst[j].name) - 1] = '\0';
-        strncpy(dst[j].value, src[i].value, sizeof(dst[j].value) - 1);
-        dst[j].value[sizeof(dst[j].value) - 1] = '\0';
-        ++j;
-        if (out_num) *out_num = j;
-    }
-    return dst;
-}
-
-void
-Adjust_For_VehicleType(detection_cache_entry_t *entry) {
-    if (!entry || !entry->attributes || entry->num_attributes == 0)
-        return;
-
-    for (size_t i = 0; i < entry->num_attributes; ++i) {
-        if (strcmp(entry->attributes[i].name, "vehicle_type") == 0) {
-            // Set class_name to value, making sure to fit the buffer
-            strncpy(entry->class_name, entry->attributes[i].value, sizeof(entry->class_name) - 1);
-            entry->class_name[sizeof(entry->class_name) - 1] = '\0';
-
-            // Remove the attribute by shifting the others
-            for (size_t j = i; j + 1 < entry->num_attributes; ++j) {
-                entry->attributes[j] = entry->attributes[j + 1];
-            }
-            entry->num_attributes--;
-            // Optionally zero out the last slot
-            if (entry->num_attributes > 0) {
-                entry->attributes[entry->num_attributes].name[0] = '\0';
-                entry->attributes[entry->num_attributes].value[0] = '\0';
-            }
-            break; // Remove only the first "vehicle_type"
-        }
-    }
-}
-
+/*
 void distinct_direction_change(detection_cache_entry_t *entry, int cx, int cy) {
     float dx = cx - entry->prev_cx;
     float dy = cy - entry->prev_cy;
@@ -514,172 +381,10 @@ void distinct_direction_change(detection_cache_entry_t *entry, int cx, int cy) {
     }
     entry->prev_angle = cur_angle;
 }
+*/
 
-static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user_data) {
+static void RADAR_Data(cJSON* detections) {
     g_mutex_lock(&detection_mutex);
-	LOG_DEEP("<ObjectDection:%s",__func__);
-    if (!detectionCache) {
-        detectionCache = g_hash_table_new_full(g_str_hash, g_str_equal, free, free_detection_cache_entry);
-        if (!detectionCache) {
-            LOG_WARN("Failed to allocate detectionCache");
-            g_mutex_unlock(&detection_mutex);
-			LOG_DEEP("Error %s:ObjectDetection>", __func__);
-            return;
-        }
-    }
-    double now = get_epoch_ms();
-    GHashTableIter iter;
-    gpointer key, value;
-    for (size_t i = 0; i < num_objects; ++i) {
-        const vod_object_t *obj = &objects[i];
-        if (!obj || !obj->class_name) continue;
-        int rx, ry, rw, rh;
-        rotate_bbox(obj->x, obj->y, obj->w, obj->h, &rx, &ry, &rw, &rh, config_rotation);
-        int cx, cy;
-        if (config_cog == 0) {
-            cx = rx + rw / 2;
-            cy = ry + rh / 2;
-        } else {
-            cx = rx + rw / 2;
-            cy = ry + rh;
-        }
-        bool valid = true;
-        if (obj->confidence < config_min_confidence) valid = false;
-        if (cx < config_x1 || cx > config_x2) valid = false;
-        if (cy < config_y1 || cy > config_y2) valid = false;
-        if (rw < 5 || rh < 5) valid = false;
-        if (ObjectDetection_Blacklisted(obj->class_name)) valid = false;
-        if (rw < config_min_width || rh < config_min_height) valid = false;
-        if (rw > config_max_width || rh > config_max_height) valid = false;
-        detection_cache_entry_t *entry = (detection_cache_entry_t*)g_hash_table_lookup(detectionCache, obj->id);
-        if (!entry) {
-            entry = calloc(1, sizeof(detection_cache_entry_t));
-            if (!entry) {
-                LOG_WARN("Failed to allocate detection_cache_entry_t");
-                continue;
-            }
-            if (!obj->id) {
-                free(entry);
-                continue;
-            }
-            strncpy(entry->id, obj->id, sizeof(entry->id)-1);
-            entry->id[sizeof(entry->id) - 1] = '\0';
-            strncpy(entry->class_name, obj->class_name, sizeof(entry->class_name)-1);
-            entry->class_name[sizeof(entry->class_name) - 1] = '\0';
-            entry->confidence = obj->confidence;
-            entry->x = rx;
-            entry->y = ry;
-            entry->w = rw;
-            entry->h = rh;
-            entry->cx = cx;
-            entry->cy = cy;
-            entry->dx = 0;
-            entry->dy = 0;
-            entry->bx = cx;
-            entry->by = cy;
-            entry->birthTime = now;
-            entry->prev_cx = cx;
-            entry->prev_cy = cy;
-			entry->prev_angle = NAN; // or -1000.0, but NAN is preferred for clarity
-			entry->directions = 0;			
-            entry->age = 0.0f;
-            entry->max_idle_duration = 0;
-            entry->valid = valid;
-            entry->idle = false;
-			entry->speed = 0;
-			entry->maxSpeed = 0;
-			entry->sleep = false;
-            entry->trackerSleep = false;
-            entry->idle_duration = 0.0f;
-            entry->idle_start_time = now;
-            entry->attributes = clone_attributes(obj->attributes, obj->num_attributes, &entry->num_attributes);
-            entry->active = obj->active;
-            char *keycopy = strdup(entry->id);
-            if (!keycopy) {
-                free_detection_cache_entry(entry);
-                continue;
-            }
-			Adjust_For_VehicleType( entry);
-			if( valid )
-				publish_tracker( entry, 0 );
-            g_hash_table_insert(detectionCache, keycopy, entry);
-			
-        } else {
-            float dist = calc_distance(entry->prev_cx, entry->prev_cy, cx, cy);
-            if (dist < IDLE_THRESHOLD_PCT) {
-                if (!entry->idle) {
-                    entry->idle = true;
-                    entry->idle_start_time = now;
-                }
-                entry->idle_duration = (now - entry->idle_start_time) / 1000.0f;
-                if( entry->idle_duration > entry->max_idle_duration )
-                    entry->max_idle_duration = floor((entry->idle_duration*10)+0.5) / 10.0;
-            } else {
-				distinct_direction_change(entry, cx, cy);
-                if( entry->sleep ) {
-                    entry->sleep = false;
-                    entry->bx = cx;
-                    entry->by = cy;
-                    entry->dx = 0;
-                    entry->dy = 0;
-                    entry->birthTime = now;
-                    entry->prev_cx = cx;
-                    entry->prev_cy = cy;
-                    entry->age = 0.0f;
-                    entry->max_idle_duration = 0;
-                    entry->distance = 0;
-                    dist = 0;
-                }
-                entry->trackerSleep = false;
-                entry->distance += dist;
-				if( entry->age > 1)
-					entry->speed = floor( (entry->distance/entry->age) + 0.5);
-				if( entry->speed > entry->maxSpeed )
-					entry->maxSpeed = entry->speed;
-                entry->idle = false;
-                publish_tracker( entry, 0 );
-                entry->idle_duration = 0.0f;
-                entry->idle_start_time = now;
-                entry->prev_cx = cx;
-                entry->prev_cy = cy;
-            }
-            entry->confidence = obj->confidence;
-            entry->timestamp = now;
-            entry->x = rx;
-            entry->y = ry;
-            entry->w = rw;
-            entry->h = rh;
-            entry->cx = cx;
-            entry->cy = cy;
-            entry->dx = cx - entry->bx;
-            entry->dy = cy - entry->by;
-            entry->age = round(10.0 * ((now - entry->birthTime) / 1000.0)) / 10.0;
-            if( entry->valid == false && valid == true)
-                entry->valid = true;
-            if (entry->attributes) {
-                free(entry->attributes);
-                entry->attributes = NULL;
-                entry->num_attributes = 0;
-            }
-            entry->attributes = clone_attributes(obj->attributes, obj->num_attributes, &entry->num_attributes);
-            entry->active = obj->active;
-			Adjust_For_VehicleType(entry);
-        }
-    }
-    publish_detections(detectionCache);
-    g_hash_table_iter_init(&iter, detectionCache);
-    GList *remove_list = NULL;
-    while (g_hash_table_iter_next(&iter, &key, &value)) {
-        detection_cache_entry_t *entry = (detection_cache_entry_t*)value;
-        if (!entry->active) {
-            remove_list = g_list_prepend(remove_list, key);
-        }
-    }
-    for (GList *l = remove_list; l != NULL; l = l->next) {
-        g_hash_table_remove(detectionCache, l->data);
-    }
-    g_list_free(remove_list);
-	LOG_DEEP("%s:ObjectDetection>",__func__);
     g_mutex_unlock(&detection_mutex);
 }
 
@@ -763,7 +468,7 @@ int ObjectDetection_Init(ObjectDetection_Callback detections, TrackerDetection_C
 	if( tracker_confidence && tracker_confidence->type==cJSON_False)
 		allow_predictions = 1;
 
-    if (VOD_Init(0, VOD_Data, NULL, allow_predictions) != 0) {
+    if (RADAR_Init(RADAR_Data) != 0) {
         LOG_WARN("%s: Object detection service failed\n", __func__);
         LOG_TRACE("%s: Exit\n",__func__);
         g_mutex_unlock(&detection_mutex);
