@@ -235,6 +235,9 @@ For VMS (Video Mananagement Systems"), a stateful event "anomaly" will be fired 
 
 ## History
 
+### 2.1.8 Nov 17
+- Fixed time issues in Path.  Age and duration in path array is now correct.
+
 ### 2.1.7 Oct 3
 - Settings are now correctly stored in Detections.
 

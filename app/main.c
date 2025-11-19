@@ -60,43 +60,66 @@ OccupancySample occupancy_history[MAX_OCCUPANCY_HISTORY];
 int occupancy_history_start = 0;
 int occupancy_history_count = 0;
 
+
 cJSON* ProcessPaths(cJSON* tracker) {
     if (!PathCache)
         PathCache = cJSON_CreateObject();
-	
-    const char* id = cJSON_GetObjectItem(tracker, "id") ? cJSON_GetObjectItem(tracker, "id")->valuestring : 0;
+    
+    const char* id = cJSON_GetObjectItem(tracker, "id") ? 
+                     cJSON_GetObjectItem(tracker, "id")->valuestring : 0;
     if (!id) return 0;
 
-    const char* class = cJSON_GetObjectItem(tracker, "class") ? cJSON_GetObjectItem(tracker, "class")->valuestring : 0;
+    const char* class = cJSON_GetObjectItem(tracker, "class") ? 
+                        cJSON_GetObjectItem(tracker, "class")->valuestring : 0;
     if (!class) return 0;
 
-    int active = cJSON_GetObjectItem(tracker, "active") ? cJSON_GetObjectItem(tracker, "active")->type == cJSON_True : 0;
+    int active = cJSON_GetObjectItem(tracker, "active") ? 
+                 cJSON_GetObjectItem(tracker, "active")->type == cJSON_True : 0;
 
-    int confidence = cJSON_GetObjectItem(tracker, "confidence") ? cJSON_GetObjectItem(tracker, "confidence")->valueint : 0;
+    int confidence = cJSON_GetObjectItem(tracker, "confidence") ? 
+                     cJSON_GetObjectItem(tracker, "confidence")->valueint : 0;
     if (!confidence) return 0;
 
-    double age = cJSON_GetObjectItem(tracker, "age") ? cJSON_GetObjectItem(tracker, "age")->valuedouble : 0;
+    double age = cJSON_GetObjectItem(tracker, "age") ? 
+                 cJSON_GetObjectItem(tracker, "age")->valuedouble : 0;
     if (!age) return 0;
 
-    double distance = cJSON_GetObjectItem(tracker, "distance") ? cJSON_GetObjectItem(tracker, "distance")->valuedouble : 0;
+    double distance = cJSON_GetObjectItem(tracker, "distance") ? 
+                      cJSON_GetObjectItem(tracker, "distance")->valuedouble : 0;
     if (!distance) return 0;
 
+    // Get timestamps from tracker (passed from ObjectDetection.c)
+    double currentTimestamp = cJSON_GetObjectItem(tracker, "timestamp") ? 
+                              cJSON_GetObjectItem(tracker, "timestamp")->valuedouble : 0;
+    
+    double previousTimestamp = cJSON_GetObjectItem(tracker, "previousTimestamp") ? 
+                               cJSON_GetObjectItem(tracker, "previousTimestamp")->valuedouble : currentTimestamp;
+
     cJSON* path = cJSON_GetObjectItem(PathCache, id);
+    
     if (!path && active) {
+        // ============================================================
+        // NEW PATH CREATION - First time seeing this tracker
+        // ============================================================
         path = cJSON_CreateObject();
         cJSON_AddStringToObject(path, "class", class);
         cJSON_AddNumberToObject(path, "confidence", confidence);
         cJSON_AddNumberToObject(path, "age", age);
         cJSON_AddNumberToObject(path, "distance", distance);
+        
         if (cJSON_GetObjectItem(tracker, "color"))
             cJSON_AddStringToObject(path, "color", cJSON_GetObjectItem(tracker, "color")->valuestring);
         if (cJSON_GetObjectItem(tracker, "color2"))
             cJSON_AddStringToObject(path, "color2", cJSON_GetObjectItem(tracker, "color2")->valuestring);
+        
         cJSON_AddNumberToObject(path, "dx", cJSON_GetObjectItem(tracker, "dx")->valuedouble);
         cJSON_AddNumberToObject(path, "dy", cJSON_GetObjectItem(tracker, "dy")->valuedouble);
         cJSON_AddNumberToObject(path, "bx", cJSON_GetObjectItem(tracker, "bx")->valuedouble);
         cJSON_AddNumberToObject(path, "by", cJSON_GetObjectItem(tracker, "by")->valuedouble);
-        cJSON_AddNumberToObject(path, "timestamp", cJSON_GetObjectItem(tracker, "birth")->valuedouble);
+        
+        double birthTime = cJSON_GetObjectItem(tracker, "birth") ? 
+                          cJSON_GetObjectItem(tracker, "birth")->valuedouble : currentTimestamp;
+        cJSON_AddNumberToObject(path, "timestamp", currentTimestamp);
         cJSON_AddNumberToObject(path, "dwell", 0);
         cJSON_AddStringToObject(path, "id", id);
 
@@ -105,48 +128,64 @@ cJSON* ProcessPaths(cJSON* tracker) {
         cJSON* hat = cJSON_GetObjectItem(tracker, "hat");
         if (hat) cJSON_AddStringToObject(path, "hat", hat->valuestring);
 
-        double lat = cJSON_GetObjectItem(tracker, "lat") ? cJSON_GetObjectItem(tracker, "lat")->valuedouble : 0;
-        double lon = cJSON_GetObjectItem(tracker, "lon") ? cJSON_GetObjectItem(tracker, "lon")->valuedouble : 0;
+        double lat = cJSON_GetObjectItem(tracker, "lat") ? 
+                     cJSON_GetObjectItem(tracker, "lat")->valuedouble : 0;
+        double lon = cJSON_GetObjectItem(tracker, "lon") ? 
+                     cJSON_GetObjectItem(tracker, "lon")->valuedouble : 0;
         double blat = 0, blon = 0;
         if (lat && lon)
-            GeoSpace_transform(cJSON_GetObjectItem(tracker, "bx")->valueint, cJSON_GetObjectItem(tracker, "by")->valueint, &blat, &blon);
+            GeoSpace_transform(cJSON_GetObjectItem(tracker, "bx")->valueint, 
+                             cJSON_GetObjectItem(tracker, "by")->valueint, &blat, &blon);
 
         cJSON* pathArr = cJSON_CreateArray();
+        
+        // Position 0: Birth position (bx, by)
         cJSON* pos1 = cJSON_CreateObject();
         cJSON_AddNumberToObject(pos1, "x", cJSON_GetObjectItem(tracker, "bx")->valuedouble);
         cJSON_AddNumberToObject(pos1, "y", cJSON_GetObjectItem(tracker, "by")->valuedouble);
-        cJSON_AddNumberToObject(pos1, "d", cJSON_GetObjectItem(tracker, "idle")->valuedouble);
+        cJSON_AddNumberToObject(pos1, "d", 0);  // Will be updated on first tracker update
         if (blat && blon) {
             cJSON_AddNumberToObject(pos1, "lat", blat);
             cJSON_AddNumberToObject(pos1, "lon", blon);
         }
         cJSON_AddItemToArray(pathArr, pos1);
 
+        // Position 1: Current position (cx, cy)
         cJSON* pos2 = cJSON_CreateObject();
         cJSON_AddNumberToObject(pos2, "x", cJSON_GetObjectItem(tracker, "cx")->valuedouble);
         cJSON_AddNumberToObject(pos2, "y", cJSON_GetObjectItem(tracker, "cy")->valuedouble);
+        cJSON_AddNumberToObject(pos2, "d", 0);  // Will be updated on next tracker update
         if (lat && lon) {
             cJSON_AddNumberToObject(pos2, "lat", lat);
             cJSON_AddNumberToObject(pos2, "lon", lon);
         }
-        cJSON_AddNumberToObject(pos2, "d", 0);
         cJSON_AddItemToArray(pathArr, pos2);
 
         cJSON_AddItemToObject(path, "path", pathArr);
         cJSON_AddItemToObject(PathCache, id, path);
+        
+        // NO PreviousTimestamp cache operations needed anymore!
+        
         return 0;
     }
+    
     if (path && active) {
+        // ============================================================
+        // UPDATE EXISTING PATH - Tracker still active
+        // ============================================================
         cJSON_ReplaceItemInObject(path, "class", cJSON_Duplicate(cJSON_GetObjectItem(tracker, "class"), 1));
         cJSON_ReplaceItemInObject(path, "confidence", cJSON_Duplicate(cJSON_GetObjectItem(tracker, "confidence"), 1));
         cJSON_ReplaceItemInObject(path, "age", cJSON_Duplicate(cJSON_GetObjectItem(tracker, "age"), 1));
         cJSON_ReplaceItemInObject(path, "distance", cJSON_Duplicate(cJSON_GetObjectItem(tracker, "distance"), 1));
+        
         if (cJSON_GetObjectItem(tracker, "color"))
             cJSON_ReplaceItemInObject(path, "color", cJSON_Duplicate(cJSON_GetObjectItem(tracker, "color"), 1));
         if (cJSON_GetObjectItem(tracker, "color2"))
             cJSON_ReplaceItemInObject(path, "color2", cJSON_Duplicate(cJSON_GetObjectItem(tracker, "color2"), 1));
+        
         cJSON_ReplaceItemInObject(path, "dx", cJSON_Duplicate(cJSON_GetObjectItem(tracker, "dx"), 1));
         cJSON_ReplaceItemInObject(path, "dy", cJSON_Duplicate(cJSON_GetObjectItem(tracker, "dy"), 1));
+        cJSON_ReplaceItemInObject(path, "timestamp", cJSON_CreateNumber(currentTimestamp));
 
         cJSON* face = cJSON_GetObjectItem(tracker, "face");
         if (face) cJSON_ReplaceItemInObject(path, "face", cJSON_Duplicate(face, 1));
@@ -160,43 +199,79 @@ cJSON* ProcessPaths(cJSON* tracker) {
 
         cJSON* pathArr = cJSON_GetObjectItem(path, "path");
         int pathLen = cJSON_GetArraySize(pathArr);
-        if (pathLen > 0) {
-            cJSON* last = cJSON_GetArrayItem(pathArr, pathLen - 1);
-            cJSON_ReplaceItemInObject(last, "d", cJSON_Duplicate(cJSON_GetObjectItem(tracker, "idle"), 1));
+        
+        if (pathLen >= 2) {
+            // FIX #1: Update SECOND-TO-LAST position's duration
+            // This is position[pathLen-2], which represents where the object WAS
+            cJSON* secondToLast = cJSON_GetArrayItem(pathArr, pathLen - 2);
+            
+            // Calculate duration: time object spent at that position
+            double duration = (currentTimestamp - previousTimestamp) / 1000.0; // Convert ms to seconds
+            cJSON_ReplaceItemInObject(secondToLast, "d", cJSON_CreateNumber(duration));
         }
 
+        // Add NEW position with d=0 (will be calculated on next update or exit)
         cJSON* pos = cJSON_CreateObject();
         cJSON_AddNumberToObject(pos, "x", cJSON_GetObjectItem(tracker, "cx")->valuedouble);
         cJSON_AddNumberToObject(pos, "y", cJSON_GetObjectItem(tracker, "cy")->valuedouble);
-        cJSON_AddNumberToObject(pos, "d", 0);
-        double lat = cJSON_GetObjectItem(tracker, "lat") ? cJSON_GetObjectItem(tracker, "lat")->valuedouble : 0;
-        double lon = cJSON_GetObjectItem(tracker, "lon") ? cJSON_GetObjectItem(tracker, "lon")->valuedouble : 0;
+        cJSON_AddNumberToObject(pos, "d", 0);  // Always 0 for newest position
+        
+        double lat = cJSON_GetObjectItem(tracker, "lat") ? 
+                     cJSON_GetObjectItem(tracker, "lat")->valuedouble : 0;
+        double lon = cJSON_GetObjectItem(tracker, "lon") ? 
+                     cJSON_GetObjectItem(tracker, "lon")->valuedouble : 0;
         if (lat && lon) {
             cJSON_AddNumberToObject(pos, "lat", lat);
             cJSON_AddNumberToObject(pos, "lon", lon);
         }
         cJSON_AddItemToArray(pathArr, pos);
+        
+        // NO PreviousTimestamp cache operations needed anymore!
+        
         return 0;
     }
+    
     if (path && !active) {
+        // ============================================================
+        // FINALIZE PATH - Object exited scene
+        // ============================================================
         cJSON* pathArr = cJSON_GetObjectItem(path, "path");
         int pathLen = cJSON_GetArraySize(pathArr);
+        
         if (pathLen > 1) {
+            // FIX #1: Calculate LAST position's duration
+            // This is the final position where object was when it exited
+            cJSON* last = cJSON_GetArrayItem(pathArr, pathLen - 1);
+            double finalDuration = (currentTimestamp - previousTimestamp) / 1000.0; // Convert ms to seconds
+            cJSON_ReplaceItemInObject(last, "d", cJSON_CreateNumber(finalDuration));
+            
             cJSON_DetachItemFromObject(PathCache, id);
-			float speed = 0;
-			double distance = cJSON_GetObjectItem(path,"distance")->valuedouble;
-			double age = cJSON_GetObjectItem(path,"age")->valuedouble;
-			cJSON_AddNumberToObject(path, "directions", cJSON_GetObjectItem(tracker, "directions")->valueint);
-			if( cJSON_GetObjectItem(tracker,"anomaly") )
-				cJSON_AddStringToObject(path,"anomaly",cJSON_GetObjectItem(tracker,"anomaly")->valuestring);
-			if( cJSON_GetObjectItem(tracker,"maxSpeed") )
-				cJSON_AddNumberToObject(path,"maxSpeed",cJSON_GetObjectItem(tracker,"maxSpeed")->valuedouble);
+            
+            // FIX #2: Update final age and distance from tracker
+            // Ensures path properties match final tracker state
+            cJSON_ReplaceItemInObject(path, "age", cJSON_CreateNumber(age));
+            cJSON_ReplaceItemInObject(path, "distance", cJSON_CreateNumber(distance));
+            
+            // Update other final metadata
+            cJSON_AddNumberToObject(path, "directions", cJSON_GetObjectItem(tracker, "directions")->valueint);
+            if (cJSON_GetObjectItem(tracker, "anomaly"))
+                cJSON_AddStringToObject(path, "anomaly", cJSON_GetObjectItem(tracker, "anomaly")->valuestring);
+            if (cJSON_GetObjectItem(tracker, "maxSpeed"))
+                cJSON_AddNumberToObject(path, "maxSpeed", cJSON_GetObjectItem(tracker, "maxSpeed")->valuedouble);
+            
+            cJSON_ReplaceItemInObject(path, "timestamp", cJSON_CreateNumber(currentTimestamp));
+            
+            // NO PreviousTimestamp cache cleanup needed anymore!
+            
             return path;
         }
+        
         cJSON_DetachItemFromObject(PathCache, id);
+        // NO PreviousTimestamp cache cleanup needed anymore!
         cJSON_Delete(path);
         return 0;
     }
+    
     return 0;
 }
 
@@ -462,6 +537,11 @@ void Tracker_Data(cJSON *tracker, int timer) {
 
 	Check_Anomaly( tracker );
 
+    if (publishPath && !timer && tracker)
+		STICH_Path(ProcessPaths(tracker));
+
+    cJSON_DeleteItemFromObject(tracker,"previousTimestamp");
+
     if (publishTracker) {
         sprintf(topic, "tracker/%s", ACAP_DEVICE_Prop("serial"));
         MQTT_Publish_JSON(topic, tracker, 0, 0);
@@ -486,9 +566,6 @@ void Tracker_Data(cJSON *tracker, int timer) {
             cJSON_Delete(geospaceObject);
         }
     }
-
-    if (publishPath && !timer && tracker)
-		STICH_Path(ProcessPaths(tracker));
 
     cJSON_Delete(tracker);
 }

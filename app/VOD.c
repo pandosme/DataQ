@@ -10,14 +10,23 @@
 #include <syslog.h>
 #include "cJSON.h"
 
+
 #define LOG(fmt, args...) { syslog(LOG_INFO, fmt, ## args); printf(fmt, ## args); }
 #define LOG_WARN(fmt, args...) { syslog(LOG_WARNING, fmt, ## args); printf(fmt, ## args); }
 //#define LOG_TRACE(fmt, args...) { syslog(LOG_INFO, fmt, ## args); printf(fmt, ## args); }
 #define LOG_TRACE(fmt, args...) {}
-//#define LOG_DEEP(fmt, args...) { syslog(LOG_INFO, fmt, ## args); printf(fmt, ## args); }
-#define LOG_DEEP(fmt, args...) {}
 
 int vod_predictions = 0;
+
+
+// Watchdog variables
+static double last_detection_time = 0;
+static guint watchdog_timer_id = 0;
+static const double DETECTION_TIMEOUT_SECONDS = 300.0;
+static int consecutive_timeouts = 0;
+static const int MAX_CONSECUTIVE_TIMEOUTS = 2;
+static bool recovery_in_progress = false;
+
 
 typedef struct {
     uint32_t type_id;
@@ -26,6 +35,7 @@ typedef struct {
     char class_name[64];
     uint32_t score;
 } vod_tracked_attribute_t;
+
 
 typedef struct {
     float confidence;
@@ -39,11 +49,13 @@ typedef struct {
     bool detected_this_frame;
 } tracked_object_t;
 
+
 typedef struct object_map_entry {
     uint32_t id;
     tracked_object_t obj;
     struct object_map_entry *next;
 } object_map_entry_t;
+
 
 typedef struct {
     vod_callback_t cb;
@@ -54,9 +66,11 @@ typedef struct {
     object_map_entry_t *object_map;
 } vod_internal_ctx_t;
 
+
 static vod_internal_ctx_t g_ctx = {0};
 static video_object_detection_subscriber_t *subscriber = NULL;
 static pthread_mutex_t vod_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 
 // --- Helper to free a tracked object ---
 static void free_tracked_object(tracked_object_t *obj) {
@@ -66,6 +80,7 @@ static void free_tracked_object(tracked_object_t *obj) {
         obj->num_attributes = 0;
     }
 }
+
 
 // --- Helper to clear the entire object map ---
 static void clear_object_map(void) {
@@ -78,6 +93,7 @@ static void clear_object_map(void) {
     }
     g_ctx.object_map = NULL;
 }
+
 
 // --- Get or create a tracked object by id ---
 static tracked_object_t *get_or_create_tracked(uint32_t id) {
@@ -100,6 +116,7 @@ static tracked_object_t *get_or_create_tracked(uint32_t id) {
     return &entry->obj;
 }
 
+
 // --- Remove all inactive objects from the cache ---
 static void remove_inactive_objects_from_cache(void) {
     object_map_entry_t **pentry = &g_ctx.object_map;
@@ -115,6 +132,7 @@ static void remove_inactive_objects_from_cache(void) {
     }
 }
 
+
 // --- Attribute/class utilities ---
 static const char *get_class_name(int class_id) {
     for (int i = 0; i < g_ctx.num_classes; ++i) {
@@ -123,9 +141,10 @@ static const char *get_class_name(int class_id) {
             if (name && strlen(name) > 0) return name;
         }
     }
-	LOG_WARN("%s: Invalid class id %d\n", __func__,class_id);
+    LOG_WARN("%s: Invalid class id %d\n", __func__,class_id);
     return "Unknown";
 }
+
 
 static VOD__AttributeType *find_attr_type(uint32_t type_id) {
     if (!g_ctx.det_info) return NULL;
@@ -136,12 +155,14 @@ static VOD__AttributeType *find_attr_type(uint32_t type_id) {
     return NULL;
 }
 
+
 static const char *get_attr_type_name(uint32_t type_id) {
     VOD__AttributeType *type = find_attr_type(type_id);
     if (type && type->name && strlen(type->name) > 0)
         return type->name;
     return "UnknownType";
 }
+
 
 static const char *get_attr_class_name(uint32_t type_id, uint32_t class_id) {
     VOD__AttributeType *type = find_attr_type(type_id);
@@ -156,6 +177,7 @@ static const char *get_attr_class_name(uint32_t type_id, uint32_t class_id) {
     return "UnknownClass";
 }
 
+
 // --- Bounding box transformation ---
 static void transform_bbox(float left, float top, float right, float bottom, int *x, int *y, int *w, int *h) {
     int x1 = (int)(left * 4096) + 4096;
@@ -168,15 +190,111 @@ static void transform_bbox(float left, float top, float right, float bottom, int
     *h = ((y2 - y1) * 1000) / 8192;
 }
 
+
+// --- VOD Recovery Function ---
+static int vod_recover_subscription(void) {
+    LOG_WARN("VOD: Attempting to recover subscription...");
+    
+    if (recovery_in_progress) {
+        LOG_WARN("VOD: Recovery already in progress, skipping");
+        return -1;
+    }
+    
+    recovery_in_progress = true;
+    
+    // Step 1: Unsubscribe
+    if (subscriber) {
+        LOG("VOD: Unsubscribing...");
+        int ret = video_object_detection_subscriber_unsubscribe(subscriber);
+        if (ret != VIDEO_OBJECT_DETECTION_SUBSCRIBER_SUCCESS) {
+            LOG_WARN("VOD: Unsubscribe failed with error %d", ret);
+        }
+        
+        // Small delay to let service clean up
+        g_usleep(500000);  // 500ms
+    }
+    
+    // Step 2: Re-subscribe
+    if (subscriber) {
+        LOG("VOD: Re-subscribing...");
+        int ret = video_object_detection_subscriber_subscribe(subscriber);
+        if (ret == VIDEO_OBJECT_DETECTION_SUBSCRIBER_SUCCESS) {
+            LOG("VOD: Subscription recovered successfully");
+            last_detection_time = g_get_real_time() / 1000000.0;
+            consecutive_timeouts = 0;
+            recovery_in_progress = false;
+            return 0;
+        } else {
+            LOG_WARN("VOD: Re-subscribe failed with error %d", ret);
+            recovery_in_progress = false;
+            return ret;
+        }
+    }
+    
+    recovery_in_progress = false;
+    return -1;
+}
+
+
+// --- Watchdog Timer Callback ---
+static gboolean vod_watchdog_timer(gpointer user_data) {
+    pthread_mutex_lock(&vod_mutex);
+    
+    double now = g_get_real_time() / 1000000.0;
+    
+    if (last_detection_time > 0 && !recovery_in_progress) {
+        double elapsed = now - last_detection_time;
+        
+        if (elapsed > DETECTION_TIMEOUT_SECONDS) {
+            consecutive_timeouts++;
+            
+            LOG_WARN("VOD: No detection data received for %.1f seconds (timeout #%d/%d)", 
+                     elapsed, consecutive_timeouts, MAX_CONSECUTIVE_TIMEOUTS);
+            
+            if (consecutive_timeouts >= MAX_CONSECUTIVE_TIMEOUTS) {
+                LOG_WARN("VOD: Maximum consecutive timeouts reached, triggering recovery");
+                
+                // Attempt recovery
+                int ret = vod_recover_subscription();
+                if (ret != 0) {
+                    LOG_WARN("VOD: Recovery failed, will retry on next timeout");
+                } else {
+                    consecutive_timeouts = 0;
+                }
+            }
+        } else {
+            // Data received, reset timeout counter
+            if (consecutive_timeouts > 0) {
+                LOG("VOD: Data flow resumed, resetting timeout counter");
+                consecutive_timeouts = 0;
+            }
+        }
+    }
+    
+    pthread_mutex_unlock(&vod_mutex);
+    return G_SOURCE_CONTINUE;
+}
+
+
 // --- Main detection callback ---
 static void detection_callback(const uint8_t *data, size_t size, void *user_data) {
     pthread_mutex_lock(&vod_mutex);
+    
+    // Update watchdog timestamp
+    last_detection_time = g_get_real_time() / 1000000.0;
+    
+    // Reset timeout counter when data is received
+    if (consecutive_timeouts > 0) {
+        consecutive_timeouts = 0;
+    }
+    
     VOD__Scene *scene = vod__scene__unpack(NULL, size, data);
     if (!scene) {
         LOG_WARN("%s: Failed to unpack detection protobuf data", __func__);
         pthread_mutex_unlock(&vod_mutex);
         return;
     }
+
 
     // 1. Handle DeleteOperation events
     for (size_t e = 0; e < scene->n_events; ++e) {
@@ -193,17 +311,20 @@ static void detection_callback(const uint8_t *data, size_t size, void *user_data
         }
     }
 
+
     // 2. Mark all objects as not detected this frame
     for (object_map_entry_t *entry = g_ctx.object_map; entry; entry = entry->next) {
         entry->obj.detected_this_frame = false;
     }
 
+
     // 3. Process detections with validation
     for (size_t i = 0; i < scene->n_detections; ++i) {
-		
+        
         VOD__Detection *det = scene->detections[i];
         if (!det) continue;
         if (det->detection_status != VOD__DETECTION__DETECTION_STATUS__TRACKED_CONFIDENT && vod_predictions==0) continue;
+
 
         bool valid_class = (det->det_class >= 0) && (det->det_class < g_ctx.num_classes);
         bool valid_score = (det->score > 0);
@@ -212,8 +333,10 @@ static void detection_callback(const uint8_t *data, size_t size, void *user_data
             continue;
         }
 
+
         tracked_object_t *track = get_or_create_tracked(det->id);
         if (!track) continue;
+
 
         track->confidence = det->score;
         track->type = det->det_class;
@@ -227,7 +350,9 @@ static void detection_callback(const uint8_t *data, size_t size, void *user_data
             LOG_WARN("%s: Invalid track->class_name", __func__);
         }
 
+
         transform_bbox(det->left, det->top, det->right, det->bottom, &track->x, &track->y, &track->w, &track->h);
+
 
         // Attributes: Only process those with valid score
         for (size_t a = 0; a < det->n_attributes; ++a) {
@@ -235,11 +360,14 @@ static void detection_callback(const uint8_t *data, size_t size, void *user_data
             if (!attr) continue;
             if (attr->has_score_case != VOD__ATTRIBUTE__HAS_SCORE_SCORE) continue;
 
+
             size_t idx = 0;
             while (idx < track->num_attributes && track->attributes[idx].type_id != attr->type) idx++;
 
+
             const char *type_name = get_attr_type_name(attr->type);
             const char *class_name = get_attr_class_name(attr->type, attr->attr_class);
+
 
             if (idx == track->num_attributes) {
                 vod_tracked_attribute_t *new_attrs = realloc(track->attributes, (track->num_attributes + 1) * sizeof(vod_tracked_attribute_t));
@@ -264,23 +392,25 @@ static void detection_callback(const uint8_t *data, size_t size, void *user_data
             }
         }
 
+
         track->active = true;
         track->missing_frames = 0;
         track->detected_this_frame = true;
     }
 
-    // 4. Increment missing_frames for objects not detected this frame, and mark inactive if needed
+
+    // 4. Increment missing_frames for objects not detected this frame
     for (object_map_entry_t *entry = g_ctx.object_map; entry; entry = entry->next) {
         tracked_object_t *track = &entry->obj;
         if (!track->detected_this_frame) {
-//            track->missing_frames++;
             if (track->active && track->missing_frames >= 5) {
                 track->active = false;
             }
         }
     }
 
-    // 5. Prepare ALL objects in cache for callback (active or inactive)
+
+    // 5. Prepare ALL objects in cache for callback
     size_t count = 0;
     for (object_map_entry_t *entry = g_ctx.object_map; entry; entry = entry->next)
         count++;
@@ -290,7 +420,7 @@ static void detection_callback(const uint8_t *data, size_t size, void *user_data
             LOG_WARN("%s: Memory allocation failed for output objects", __func__);
             vod__scene__free_unpacked(scene, NULL);
             pthread_mutex_unlock(&vod_mutex);
-			LOG_DEEP("Error VOD>");
+            LOG_TRACE("Error VOD>");
             return;
         }
         size_t out_count = 0;
@@ -348,14 +478,17 @@ static void detection_callback(const uint8_t *data, size_t size, void *user_data
         free(out_objs);
     }
 
+
     // 6. Remove all inactive objects from cache
     remove_inactive_objects_from_cache();
 
+
     vod__scene__free_unpacked(scene, NULL);
-	LOG_DEEP("VOD>");
-	
+    LOG_TRACE("VOD>");
+    
     pthread_mutex_unlock(&vod_mutex);
 }
+
 
 // --- Optional: Periodic debug function ---
 gboolean VOD_Debug_timer(gpointer user_data) {
@@ -363,18 +496,21 @@ gboolean VOD_Debug_timer(gpointer user_data) {
     int count = 0;
     for (object_map_entry_t *entry = g_ctx.object_map; entry; entry = entry->next)
         count++;
-    LOG_DEEP("VOD Cache: %d\n", count);
+    LOG_TRACE("VOD Cache: %d\n", count);
     pthread_mutex_unlock(&vod_mutex);
     return G_SOURCE_CONTINUE;
 }
+
 
 cJSON* VOD_Label_List(void) {
     cJSON *det_info = VOD_Detector_Information();
     if (!det_info) return NULL;
 
+
     cJSON *labels = cJSON_GetObjectItem(det_info, "labels");
     cJSON *attributes = cJSON_GetObjectItem(det_info, "attributes");
     cJSON *result = cJSON_CreateArray();
+
 
     // Helper: add string to array if not already present
     #define ADD_UNIQUE_STR(arr, str) do { \
@@ -386,6 +522,7 @@ cJSON* VOD_Label_List(void) {
         if (!found) cJSON_AddItemToArray(arr, cJSON_CreateString(str)); \
     } while (0)
 
+
     // Add all label names
     if (labels) {
         for (int i = 0; i < cJSON_GetArraySize(labels); ++i) {
@@ -396,6 +533,7 @@ cJSON* VOD_Label_List(void) {
             }
         }
     }
+
 
     // Find vehicle_type attribute and add its class names
     if (attributes) {
@@ -413,15 +551,17 @@ cJSON* VOD_Label_List(void) {
                         }
                     }
                 }
-                break; // Only one vehicle_type expected
+                break;
             }
         }
     }
+
 
     cJSON_Delete(det_info);
     #undef ADD_UNIQUE_STR
     return result;
 }
+
 
 cJSON* VOD_Detector_Information() {
     uint8_t *buffer = NULL;
@@ -434,6 +574,7 @@ cJSON* VOD_Detector_Information() {
         return NULL;
     }
 
+
     VOD__DetectorInformation *det_info = vod__detector_information__unpack(NULL, size, buffer);
     if (!det_info) {
         LOG("Failed to unpack detector information\n");
@@ -442,7 +583,9 @@ cJSON* VOD_Detector_Information() {
         return NULL;
     }
 
+
     cJSON *root = cJSON_CreateObject();
+
 
     // Object Classes
     cJSON *arr_obj_classes = cJSON_CreateArray();
@@ -452,13 +595,16 @@ cJSON* VOD_Detector_Information() {
         cJSON_AddNumberToObject(jc, "id", obj_class->id);
         cJSON_AddStringToObject(jc, "name", obj_class->name ? obj_class->name : "");
 
+
         // Attribute Type IDs
         cJSON *attr_ids = cJSON_CreateIntArray((const int*)obj_class->attribute_type_ids, obj_class->n_attribute_type_ids);
         cJSON_AddItemToObject(jc, "attribute_type_ids", attr_ids);
 
+
         cJSON_AddItemToArray(arr_obj_classes, jc);
     }
     cJSON_AddItemToObject(root, "labels", arr_obj_classes);
+
 
     // Attribute Types
     cJSON *arr_attr_types = cJSON_CreateArray();
@@ -467,6 +613,7 @@ cJSON* VOD_Detector_Information() {
         cJSON *ja = cJSON_CreateObject();
         cJSON_AddNumberToObject(ja, "id", attr_type->id);
         cJSON_AddStringToObject(ja, "name", attr_type->name ? attr_type->name : "");
+
 
         // Classes
         cJSON *classes = cJSON_CreateArray();
@@ -479,9 +626,11 @@ cJSON* VOD_Detector_Information() {
         }
         cJSON_AddItemToObject(ja, "labels", classes);
 
+
         cJSON_AddItemToArray(arr_attr_types, ja);
     }
     cJSON_AddItemToObject(root, "attributes", arr_attr_types);
+
 
     // Cleanup
     vod__detector_information__free_unpacked(det_info, NULL);
@@ -491,8 +640,9 @@ cJSON* VOD_Detector_Information() {
 }
 
 
+
 // --- Initialization and shutdown ---
-int VOD_Init(int channel, vod_callback_t cb, void *user_data, int predictions ) {
+int VOD_Init(int channel, vod_callback_t cb, void *user_data, int predictions) {
     pthread_mutex_lock(&vod_mutex);
     LOG_TRACE("%s: Entry\n", __func__);
     if (!cb) {
@@ -505,23 +655,26 @@ int VOD_Init(int channel, vod_callback_t cb, void *user_data, int predictions ) 
     g_ctx.user_data = user_data;
 
 
-	int major,minor;
-	if( video_object_detection_subscriber_get_version(&major,&minor) != VIDEO_OBJECT_DETECTION_SUBSCRIBER_SUCCESS ) {
+
+    int major,minor;
+    if (video_object_detection_subscriber_get_version(&major,&minor) != VIDEO_OBJECT_DETECTION_SUBSCRIBER_SUCCESS) {
         LOG_WARN("%s: No version detected", __func__);
         pthread_mutex_unlock(&vod_mutex);
-	}
-	LOG("%s: Version = %d.%d\n",__func__,major,minor);
+    }
+    LOG("%s: Version = %d.%d\n",__func__,major,minor);
 
-	vod_predictions = predictions;
-	if( vod_predictions )
-		LOG("Predicted positions enabled");
-	
+
+    vod_predictions = predictions;
+    if (vod_predictions)
+        LOG("Predicted positions enabled");
+    
     g_ctx.num_classes = video_object_detection_subscriber_det_classes_get(&g_ctx.det_classes);
     if (g_ctx.num_classes <= 0) {
         LOG_WARN("%s: No detection classes found", __func__);
         pthread_mutex_unlock(&vod_mutex);
         return -2;
     }
+
 
     uint8_t *buffer = NULL;
     size_t size = 0;
@@ -539,11 +692,13 @@ int VOD_Init(int channel, vod_callback_t cb, void *user_data, int predictions ) 
     }
 
 
+
     if (video_object_detection_subscriber_create(&subscriber, NULL, channel) != 0) {
         LOG_WARN("%s: Failed to create subscriber", __func__);
         pthread_mutex_unlock(&vod_mutex);
         return -5;
     }
+
 
     if (video_object_detection_subscriber_set_get_detection_callback(subscriber, detection_callback) != 0) {
         LOG_WARN("%s: Failed to set detection callback", __func__);
@@ -551,25 +706,53 @@ int VOD_Init(int channel, vod_callback_t cb, void *user_data, int predictions ) 
         return -6;
     }
 
+
     if (video_object_detection_subscriber_set_receive_empty_hits(subscriber, detection_callback) != 0) {
         LOG_WARN("%s: Failed to set empty hits", __func__);
         pthread_mutex_unlock(&vod_mutex);
         return -7;
-	}
+    }
 
-	
+
+    
     if (video_object_detection_subscriber_subscribe(subscriber) != 0) {
         LOG_WARN("%s: Failed to subscribe to detection service", __func__);
         pthread_mutex_unlock(&vod_mutex);
         return -8;
     }
-    LOG("Object detection successsful on channel %d", channel);
+    
+    // Initialize watchdog
+    last_detection_time = g_get_real_time() / 1000000.0;
+    consecutive_timeouts = 0;
+    recovery_in_progress = false;
+    
+    if (watchdog_timer_id == 0) {
+        watchdog_timer_id = g_timeout_add_seconds(5, vod_watchdog_timer, NULL);
+        LOG("VOD watchdog timer started (timeout: %.0f seconds, max retries: %d)", 
+            DETECTION_TIMEOUT_SECONDS, MAX_CONSECUTIVE_TIMEOUTS);
+    }
+    
+    LOG("Object detection successful on channel %d", channel);
     pthread_mutex_unlock(&vod_mutex);
     return 0;
 }
 
+
 void VOD_Shutdown(void) {
     pthread_mutex_lock(&vod_mutex);
+    
+    // Stop watchdog timer
+    if (watchdog_timer_id != 0) {
+        g_source_remove(watchdog_timer_id);
+        watchdog_timer_id = 0;
+        LOG("VOD watchdog timer stopped");
+    }
+    
+    // Reset watchdog state
+    last_detection_time = 0;
+    consecutive_timeouts = 0;
+    recovery_in_progress = false;
+    
     if (subscriber) {
         video_object_detection_subscriber_unsubscribe(subscriber);
         video_object_detection_subscriber_delete(&subscriber);
@@ -590,6 +773,7 @@ void VOD_Shutdown(void) {
     pthread_mutex_unlock(&vod_mutex);
 }
 
+
 void VOD_Reset(void) {
     pthread_mutex_lock(&vod_mutex);
     LOG("VOD cache reset\n");
@@ -603,6 +787,11 @@ void VOD_Reset(void) {
         vod__detector_information__free_unpacked(g_ctx.det_info, NULL);
         g_ctx.det_info = NULL;
     }
+    
+    // Reset watchdog state
+    consecutive_timeouts = 0;
+    last_detection_time = g_get_real_time() / 1000000.0;
+    
     LOG("VOD_Reset: All caches cleared\n");
     pthread_mutex_unlock(&vod_mutex);
 }

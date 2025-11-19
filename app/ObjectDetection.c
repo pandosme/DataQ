@@ -84,6 +84,7 @@ typedef struct {
     int bx, by;
     int dx, dy;
     double timestamp; // ms epoch
+    double previousTimestamp; // ms epoch
     double birthTime; // ms epoch
     int prev_cx, prev_cy;
 	double prev_angle;
@@ -279,6 +280,7 @@ static void publish_tracker(detection_cache_entry_t *entry, int timer ) {
     cJSON_AddNumberToObject(obj, "bx", entry->bx);
     cJSON_AddNumberToObject(obj, "by", entry->by);
     cJSON_AddNumberToObject(obj, "timestamp", entry->timestamp);
+    cJSON_AddNumberToObject(obj, "previousTimestamp", entry->previousTimestamp);
     cJSON_AddNumberToObject(obj, "birth", entry->birthTime);
     cJSON_AddNumberToObject(obj, "idle", entry->idle_duration);	
     cJSON_AddNumberToObject(obj, "maxIdle", entry->max_idle_duration);	
@@ -342,6 +344,8 @@ static void publish_tracker(detection_cache_entry_t *entry, int timer ) {
     cJSON* payload = cJSON_Duplicate(obj,1);
     if( trackerCallback )
         trackerCallback(payload, timer);
+    if( !timer )
+        entry->previousTimestamp = entry->timestamp;
     cJSON_Delete(obj);
 }
 
@@ -578,6 +582,8 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
             entry->bx = cx;
             entry->by = cy;
             entry->birthTime = now;
+            entry->timestamp = now;
+            entry->previousTimestamp = now;
             entry->prev_cx = cx;
             entry->prev_cy = cy;
 			entry->prev_angle = NAN; // or -1000.0, but NAN is preferred for clarity
