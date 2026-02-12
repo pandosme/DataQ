@@ -235,6 +235,16 @@ For VMS (Video Mananagement Systems"), a stateful event "anomaly" will be fired 
 
 ## History
 
+### 4.1.20 Feb 12, 2026
+- Enhanced path stitching functionality
+  - Added conditional angle threshold checking (setting to 0 disables direction matching)
+  - Improved path holding logic for more reliable stitching behavior
+  - Minimum 2-point requirement for direction matching to ensure accurate angle calculations
+  - Allow class switching option - stitched paths can adopt the class from higher confidence segments
+- UI improvements
+  - Extended angle threshold range from 20-60° to 0-90° for greater flexibility
+  - Updated help text to clarify that 0 = ignore direction
+
 ### 2.1.10 Feb 4, 2026
 - Bug fixes
 
