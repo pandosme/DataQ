@@ -192,6 +192,7 @@ static void transform_bbox(float left, float top, float right, float bottom, int
 
 
 // --- VOD Recovery Function ---
+// Note: This function should be called with vod_mutex held
 static int vod_recover_subscription(void) {
     LOG_WARN("VOD: Attempting to recover subscription...");
     
@@ -205,6 +206,8 @@ static int vod_recover_subscription(void) {
     // Step 1: Unsubscribe
     if (subscriber) {
         LOG("VOD: Unsubscribing...");
+        // Unlock mutex during blocking operations
+        pthread_mutex_unlock(&vod_mutex);
         int ret = video_object_detection_subscriber_unsubscribe(subscriber);
         if (ret != VIDEO_OBJECT_DETECTION_SUBSCRIBER_SUCCESS) {
             LOG_WARN("VOD: Unsubscribe failed with error %d", ret);
@@ -212,12 +215,17 @@ static int vod_recover_subscription(void) {
         
         // Small delay to let service clean up
         g_usleep(500000);  // 500ms
+        pthread_mutex_lock(&vod_mutex);
     }
     
     // Step 2: Re-subscribe
     if (subscriber) {
         LOG("VOD: Re-subscribing...");
+        // Unlock mutex during blocking operations
+        pthread_mutex_unlock(&vod_mutex);
         int ret = video_object_detection_subscriber_subscribe(subscriber);
+        pthread_mutex_lock(&vod_mutex);
+        
         if (ret == VIDEO_OBJECT_DETECTION_SUBSCRIBER_SUCCESS) {
             LOG("VOD: Subscription recovered successfully");
             last_detection_time = g_get_real_time() / 1000000.0;
@@ -414,8 +422,14 @@ static void detection_callback(const uint8_t *data, size_t size, void *user_data
     size_t count = 0;
     for (object_map_entry_t *entry = g_ctx.object_map; entry; entry = entry->next)
         count++;
-    if (count > 0 && g_ctx.cb) {
-        vod_object_t *out_objs = calloc(count, sizeof(vod_object_t));
+
+    vod_object_t *out_objs = NULL;
+    size_t out_count = 0;
+    void *user_data_copy = g_ctx.user_data;
+    vod_callback_t callback = g_ctx.cb;
+
+    if (count > 0 && callback) {
+        out_objs = calloc(count, sizeof(vod_object_t));
         if (!out_objs) {
             LOG_WARN("%s: Memory allocation failed for output objects", __func__);
             vod__scene__free_unpacked(scene, NULL);
@@ -423,7 +437,6 @@ static void detection_callback(const uint8_t *data, size_t size, void *user_data
             LOG_TRACE("Error VOD>");
             return;
         }
-        size_t out_count = 0;
         for (object_map_entry_t *entry = g_ctx.object_map; entry; entry = entry->next) {
             tracked_object_t *track = &entry->obj;
             vod_object_t *obj = &out_objs[out_count++];
@@ -465,7 +478,19 @@ static void detection_callback(const uint8_t *data, size_t size, void *user_data
                 obj->attributes = NULL;
             }
         }
-        g_ctx.cb(out_objs, out_count, g_ctx.user_data);
+    }
+
+    // 6. Remove all inactive objects from cache
+    remove_inactive_objects_from_cache();
+
+    vod__scene__free_unpacked(scene, NULL);
+    LOG_TRACE("VOD>");
+
+    pthread_mutex_unlock(&vod_mutex);
+
+    // Now call callback WITHOUT holding the mutex
+    if (callback && out_objs) {
+        callback(out_objs, out_count, user_data_copy);
         for (size_t i = 0; i < out_count; ++i) {
             if (out_objs[i].attributes) {
                 for (size_t j = 0; j < out_objs[i].num_attributes; ++j) {
@@ -477,16 +502,6 @@ static void detection_callback(const uint8_t *data, size_t size, void *user_data
         }
         free(out_objs);
     }
-
-
-    // 6. Remove all inactive objects from cache
-    remove_inactive_objects_from_cache();
-
-
-    vod__scene__free_unpacked(scene, NULL);
-    LOG_TRACE("VOD>");
-    
-    pthread_mutex_unlock(&vod_mutex);
 }
 
 

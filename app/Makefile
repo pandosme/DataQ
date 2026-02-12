@@ -18,7 +18,7 @@ OBJS1	= main.c ACAP.c cJSON.c MQTT.c CERTS.c ObjectDetection.c VOD.c video_objec
         linmatrix/src/lm_symm_eigen.c
 PROGS	= $(PROG1) 
 
-PKGS = glib-2.0 gio-2.0 fcgi axevent libcurl video-object-detection-subscriber
+PKGS = glib-2.0 gio-2.0 fcgi axevent axparameter libcurl video-object-detection-subscriber
 
 CFLAGS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --cflags $(PKGS))
 LDLIBS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs $(PKGS))

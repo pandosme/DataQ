@@ -61,7 +61,7 @@ static const NameMapEntry name_map[] = {
     { "bag", "Bag" },
     { "bag_other", "Bag" },
     { "backpack", "Bag" },
-    { "bag", "suitcase" },
+    { "suitcase", "Bag" },
     { "red", "Red" },
     { "blue", "Blue" },
     { "black", "Black" },
@@ -253,16 +253,22 @@ void ObjectDetection_Config(cJSON* data) {
 }
 
 
-static void publish_tracker(detection_cache_entry_t *entry, int timer ) {
+typedef struct {
+    cJSON *payload;
+    int timer;
+} tracker_callback_data_t;
+
+static cJSON* build_tracker_json(detection_cache_entry_t *entry, int timer, bool *should_publish) {
+    *should_publish = false;
     cJSON *obj = cJSON_CreateObject();
-    if (!obj || !entry || !entry->id) return;
+    if (!obj || !entry || !entry->id) return NULL;
     if( entry->active == true ) {
-        if (!entry->valid) { cJSON_Delete(obj); return; }
-        if (entry->trackerSleep) { cJSON_Delete(obj); return; }
+        if (!entry->valid) { cJSON_Delete(obj); return NULL; }
+        if (entry->trackerSleep) { cJSON_Delete(obj); return NULL; }
     }
     const char* label = NiceName(entry->class_name);
-    if (!label) { cJSON_Delete(obj); return; }
-    if (ObjectDetection_Blacklisted(label)) { cJSON_Delete(obj); return; }
+    if (!label) { cJSON_Delete(obj); return NULL; }
+    if (ObjectDetection_Blacklisted(label)) { cJSON_Delete(obj); return NULL; }
 
     cJSON_AddStringToObject(obj, "class", label);
     cJSON_AddNumberToObject(obj, "confidence", entry->confidence);
@@ -282,8 +288,8 @@ static void publish_tracker(detection_cache_entry_t *entry, int timer ) {
     cJSON_AddNumberToObject(obj, "timestamp", entry->timestamp);
     cJSON_AddNumberToObject(obj, "previousTimestamp", entry->previousTimestamp);
     cJSON_AddNumberToObject(obj, "birth", entry->birthTime);
-    cJSON_AddNumberToObject(obj, "idle", entry->idle_duration);	
-    cJSON_AddNumberToObject(obj, "maxIdle", entry->max_idle_duration);	
+    cJSON_AddNumberToObject(obj, "idle", entry->idle_duration);
+    cJSON_AddNumberToObject(obj, "maxIdle", entry->max_idle_duration);
 	cJSON_AddNumberToObject(obj, "speed", entry->speed);
 	cJSON_AddNumberToObject(obj, "maxSpeed", entry->maxSpeed);
     cJSON_AddStringToObject(obj, "id", entry->id);
@@ -341,17 +347,15 @@ static void publish_tracker(detection_cache_entry_t *entry, int timer ) {
         }
     }
     entry->last_published_tracker = get_epoch_ms();
-    cJSON* payload = cJSON_Duplicate(obj,1);
-    if( trackerCallback )
-        trackerCallback(payload, timer);
     if( !timer )
         entry->previousTimestamp = entry->timestamp;
-    cJSON_Delete(obj);
+    *should_publish = true;
+    return obj;
 }
 
-static void publish_detections(GHashTable *cache) {
+static cJSON* build_detections_json(GHashTable *cache, GList **tracker_list) {
     cJSON *arr = cJSON_CreateArray();
-    if (!arr) return;
+    if (!arr) return NULL;
     GHashTableIter iter;
     gpointer key, value;
     g_hash_table_iter_init(&iter, cache);
@@ -382,11 +386,22 @@ static void publish_detections(GHashTable *cache) {
         if( config_max_idle && entry->idle_duration > config_max_idle && entry->active ) {
             cJSON_AddBoolToObject(obj, "active", 0);
             entry->sleep = true;
-        } else {			
+        } else {
             cJSON_AddBoolToObject(obj, "active", entry->active);
         }
         if( entry->active == false ) {
-            publish_tracker(entry, 0);
+            // Collect tracker for callback later (outside mutex)
+            bool should_publish = false;
+            cJSON *tracker_json = build_tracker_json(entry, 0, &should_publish);
+            if (should_publish && tracker_json) {
+                tracker_callback_data_t *cb_data = malloc(sizeof(tracker_callback_data_t));
+                if (cb_data) {
+                    cb_data->payload = cJSON_Duplicate(tracker_json, 1);
+                    cb_data->timer = 0;
+                    *tracker_list = g_list_prepend(*tracker_list, cb_data);
+                }
+                cJSON_Delete(tracker_json);
+            }
         }
         for (size_t a = 0; a < entry->num_attributes; ++a) {
             if (strlen(entry->attributes[a].name) && strlen(entry->attributes[a].value)) {
@@ -439,10 +454,7 @@ static void publish_detections(GHashTable *cache) {
         }
         cJSON_AddItemToArray(arr, obj);
     }
-    cJSON* payload = cJSON_Duplicate(arr,1);
-    cJSON_Delete(arr);
-    if( detectionsCallback )
-        detectionsCallback(payload);
+    return arr;
 }
 
 static od_attribute_t *clone_attributes(const vod_attribute_t *src, size_t num, size_t *out_num) {
@@ -534,6 +546,8 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
     double now = get_epoch_ms();
     GHashTableIter iter;
     gpointer key, value;
+    GList *pending_tracker_callbacks = NULL;
+
     for (size_t i = 0; i < num_objects; ++i) {
         const vod_object_t *obj = &objects[i];
         if (!obj || !obj->class_name) continue;
@@ -586,8 +600,8 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
             entry->previousTimestamp = now;
             entry->prev_cx = cx;
             entry->prev_cy = cy;
-			entry->prev_angle = NAN; // or -1000.0, but NAN is preferred for clarity
-			entry->directions = 0;			
+			entry->prev_angle = NAN;
+			entry->directions = 0;
             entry->age = 0.0f;
             entry->max_idle_duration = 0;
             entry->valid = valid;
@@ -605,11 +619,22 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
                 free_detection_cache_entry(entry);
                 continue;
             }
-			Adjust_For_VehicleType( entry);
-			if( valid )
-				publish_tracker( entry, 0 );
+			Adjust_For_VehicleType(entry);
+			if (valid) {
+                bool should_publish = false;
+                cJSON *tracker_json = build_tracker_json(entry, 0, &should_publish);
+                if (should_publish && tracker_json) {
+                    tracker_callback_data_t *cb_data = malloc(sizeof(tracker_callback_data_t));
+                    if (cb_data) {
+                        cb_data->payload = cJSON_Duplicate(tracker_json, 1);
+                        cb_data->timer = 0;
+                        pending_tracker_callbacks = g_list_prepend(pending_tracker_callbacks, cb_data);
+                    }
+                    cJSON_Delete(tracker_json);
+                }
+            }
             g_hash_table_insert(detectionCache, keycopy, entry);
-			
+
         } else {
             float dist = calc_distance(entry->prev_cx, entry->prev_cy, cx, cy);
             if (dist < IDLE_THRESHOLD_PCT) {
@@ -643,7 +668,17 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
 				if( entry->speed > entry->maxSpeed )
 					entry->maxSpeed = entry->speed;
                 entry->idle = false;
-                publish_tracker( entry, 0 );
+                bool should_publish = false;
+                cJSON *tracker_json = build_tracker_json(entry, 0, &should_publish);
+                if (should_publish && tracker_json) {
+                    tracker_callback_data_t *cb_data = malloc(sizeof(tracker_callback_data_t));
+                    if (cb_data) {
+                        cb_data->payload = cJSON_Duplicate(tracker_json, 1);
+                        cb_data->timer = 0;
+                        pending_tracker_callbacks = g_list_prepend(pending_tracker_callbacks, cb_data);
+                    }
+                    cJSON_Delete(tracker_json);
+                }
                 entry->idle_duration = 0.0f;
                 entry->idle_start_time = now;
                 entry->prev_cx = cx;
@@ -672,7 +707,13 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
 			Adjust_For_VehicleType(entry);
         }
     }
-    publish_detections(detectionCache);
+
+    // Build detections JSON (this also collects more tracker callbacks)
+    cJSON *detections_json = build_detections_json(detectionCache, &pending_tracker_callbacks);
+    cJSON *detections_payload = detections_json ? cJSON_Duplicate(detections_json, 1) : NULL;
+    if (detections_json) cJSON_Delete(detections_json);
+
+    // Remove inactive objects
     g_hash_table_iter_init(&iter, detectionCache);
     GList *remove_list = NULL;
     while (g_hash_table_iter_next(&iter, &key, &value)) {
@@ -685,13 +726,31 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
         g_hash_table_remove(detectionCache, l->data);
     }
     g_list_free(remove_list);
+
 	LOG_DEEP("%s:ObjectDetection>",__func__);
     g_mutex_unlock(&detection_mutex);
+
+    // Now call callbacks WITHOUT holding the mutex
+    if (detectionsCallback && detections_payload) {
+        detectionsCallback(detections_payload);
+    }
+
+    for (GList *l = pending_tracker_callbacks; l != NULL; l = l->next) {
+        tracker_callback_data_t *cb_data = (tracker_callback_data_t*)l->data;
+        if (trackerCallback && cb_data->payload) {
+            trackerCallback(cb_data->payload, cb_data->timer);
+        }
+        free(cb_data);
+    }
+    g_list_free(pending_tracker_callbacks);
 }
 
 void ObjectDetection_Reset() {
     g_mutex_lock(&detection_mutex);
     LOG_DEEP("%s: Object cache reset",__func__);
+
+    GList *pending_tracker_callbacks = NULL;
+    cJSON *detections_payload = NULL;
 
     if (detectionCache) {
         // Temporary hash table to hold valid objects for publishing
@@ -710,17 +769,29 @@ void ObjectDetection_Reset() {
             }
         }
 
-        // Publish trackers for valid objects
+        // Build trackers for valid objects
         GHashTableIter validIter;
         gpointer vkey, vvalue;
         g_hash_table_iter_init(&validIter, validCache);
         while (g_hash_table_iter_next(&validIter, &vkey, &vvalue)) {
             detection_cache_entry_t *entry = (detection_cache_entry_t*)vvalue;
-            publish_tracker(entry ,0);
+            bool should_publish = false;
+            cJSON *tracker_json = build_tracker_json(entry, 0, &should_publish);
+            if (should_publish && tracker_json) {
+                tracker_callback_data_t *cb_data = malloc(sizeof(tracker_callback_data_t));
+                if (cb_data) {
+                    cb_data->payload = cJSON_Duplicate(tracker_json, 1);
+                    cb_data->timer = 0;
+                    pending_tracker_callbacks = g_list_prepend(pending_tracker_callbacks, cb_data);
+                }
+                cJSON_Delete(tracker_json);
+            }
         }
 
-        // Publish detections for valid objects
-        publish_detections(validCache);
+        // Build detections for valid objects
+        cJSON *detections_json = build_detections_json(validCache, &pending_tracker_callbacks);
+        detections_payload = detections_json ? cJSON_Duplicate(detections_json, 1) : NULL;
+        if (detections_json) cJSON_Delete(detections_json);
 
         // Destroy the old cache
         g_hash_table_destroy(detectionCache);
@@ -734,6 +805,20 @@ void ObjectDetection_Reset() {
     detectionCache = g_hash_table_new_full(g_str_hash, g_str_equal, free, free_detection_cache_entry);
 
     g_mutex_unlock(&detection_mutex);
+
+    // Now call callbacks WITHOUT holding the mutex
+    if (detectionsCallback && detections_payload) {
+        detectionsCallback(detections_payload);
+    }
+
+    for (GList *l = pending_tracker_callbacks; l != NULL; l = l->next) {
+        tracker_callback_data_t *cb_data = (tracker_callback_data_t*)l->data;
+        if (trackerCallback && cb_data->payload) {
+            trackerCallback(cb_data->payload, cb_data->timer);
+        }
+        free(cb_data);
+    }
+    g_list_free(pending_tracker_callbacks);
 }
 
 gboolean update_trackers(gpointer user_data) {
@@ -745,14 +830,38 @@ gboolean update_trackers(gpointer user_data) {
     double now = get_epoch_ms();
     GHashTableIter iter;
     gpointer key, value;
+    GList *pending_callbacks = NULL;
+
     g_hash_table_iter_init(&iter, detectionCache);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
         detection_cache_entry_t *entry = (detection_cache_entry_t*)value;
-        if( entry->active == true && now - entry->last_published_tracker > 1500 )
-            publish_tracker(entry, 1);
+        if( entry->active == true && now - entry->last_published_tracker > 1500 ) {
+            bool should_publish = false;
+            cJSON *tracker_json = build_tracker_json(entry, 1, &should_publish);
+            if (should_publish && tracker_json) {
+                tracker_callback_data_t *cb_data = malloc(sizeof(tracker_callback_data_t));
+                if (cb_data) {
+                    cb_data->payload = cJSON_Duplicate(tracker_json, 1);
+                    cb_data->timer = 1;
+                    pending_callbacks = g_list_prepend(pending_callbacks, cb_data);
+                }
+                cJSON_Delete(tracker_json);
+            }
+        }
     }
     g_mutex_unlock(&detection_mutex);
-    return TRUE; 
+
+    // Call callbacks WITHOUT holding the mutex
+    for (GList *l = pending_callbacks; l != NULL; l = l->next) {
+        tracker_callback_data_t *cb_data = (tracker_callback_data_t*)l->data;
+        if (trackerCallback && cb_data->payload) {
+            trackerCallback(cb_data->payload, cb_data->timer);
+        }
+        free(cb_data);
+    }
+    g_list_free(pending_callbacks);
+
+    return TRUE;
 }
 
 int ObjectDetection_Init(ObjectDetection_Callback detections, TrackerDetection_Callback tracker) {

@@ -7,9 +7,9 @@
 
 typedef void (*stitch_callback)(cJSON*);
 
-int  STICH_Init(stitch_callback cb);
-int  STICH_Settings(cJSON* settings);
-void STICH_Path(cJSON* path);
+int  Stitch_Init(stitch_callback cb);
+int  Stitch_Settings(cJSON* settings);
+void Stitch_Path(cJSON* path);
 
 #ifdef __cplusplus
 }

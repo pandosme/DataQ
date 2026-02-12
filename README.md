@@ -235,6 +235,15 @@ For VMS (Video Mananagement Systems"), a stateful event "anomaly" will be fired 
 
 ## History
 
+### 2.1.10 Feb 4, 2026
+- Bug fixes
+
+### 2.1.9 Jan 1, 2026
+- Fixed critical deadlock vulnerability
+- Fixed path dwell calculation
+- Improved thread safety
+- Added properties in connect and status publish
+
 ### 2.1.8 Nov 17
 - Fixed time issues in Path.  Age and duration in path array is now correct.
 

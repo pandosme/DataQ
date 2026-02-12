@@ -390,7 +390,7 @@ MQTT_Publish_JSON(const char *topic, cJSON *payload, int qos, int retained) {
         if(name_item && name_item->valuestring && strlen(name_item->valuestring)) {
             cJSON_AddStringToObject(publish, "name", name_item->valuestring);
         }
-        if(location_item && location_item->valuestring && strlen(name_item->valuestring)) {
+        if(location_item && location_item->valuestring && strlen(location_item->valuestring)) {
             cJSON_AddStringToObject(publish, "location", location_item->valuestring);
         }
     }

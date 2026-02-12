@@ -20,7 +20,7 @@ html, body, #wrapper {
 
 /* Video/Map Containers */
 #video-view, #map {
-    height: 450px;
+    max-height: 800px;
     position: relative;
     background: #f8f9fa;
     overflow: hidden; /* Add this to prevent markers from overflowing */

@@ -8,6 +8,9 @@
     <link rel="stylesheet" href="css/app.css">
     <script src="js/jquery-3.7.1.min.js"></script>
     <script src="js/bootstrap.bundle.min.js"></script>
+    <script src="js/media-stream-player.min.js"></script>
+    <script src="js/paho-mqtt-min.js"></script>
+    <script src="js/areaselect.js"></script>
 </head>
 
 <body>
@@ -25,46 +28,156 @@
                 <a href="anomaly.html" class="list-group-item list-group-item-action">Anomaly</a>
                 <a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
                 <a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
+                <a href="advanced.html" class="list-group-item list-group-item-action active">Advanced</a>
                 <a href="about.html" class="list-group-item list-group-item-action">About</a>
             </div>
         </div>
-        <div id="page-content-wrapper" class="p-5">
+
+        <div id="page-content-wrapper" class="p-0">
             <div class="container-fluid">
-                <div class="row justify-content-center">
-                    <div class="col-12 col-lg-8">
-                        <div class="card shadow-sm">
-                            <div class="card-header bg-primary text-white">
-                                <h5 class="card-title mb-0">Advanced settings</h5>
+                <div class="col-12">
+                    <!-- Tracker Predictions Card -->
+                    <div class="card mt-3">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="card-title mb-0">Tracker Settings</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-4 align-items-center">
+                                <div class="col-md-6">
+                                    <div class="form-label mb-1">Tracker Predictions</div>
+                                    <div class="text-muted small mb-2">
+                                        Include predicted detection positions.<br>
+                                        Change requires ACAP restart.
+                                    </div>
+                                </div>
+                                <div class="col-md-6 text-end">
+                                    <div class="form-check form-switch d-inline-flex align-items-center">
+                                        <input class="form-check-input" type="checkbox" id="tracker-predictions-switch">
+                                        <label class="form-check-label ms-2" for="tracker-predictions-switch">
+                                            Enable Predictions
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="card-body" id="settings-form">
-								<div class="row g-4 align-items-center">
-									<div class="col-md-6">
-										<div class="form-label mb-1">Tracker Predictions</div>
-										<div class="text-muted small mb-2">
-											Include predicted detection positions.<br>
-											Change requires ACAP restart.
-										</div>
-									</div>
-									<div class="col-md-6 text-end">
-										<div class="form-check form-switch d-inline-flex align-items-center">
-											<input class="form-check-input" type="checkbox" id="tracker-predictions-switch">
-											<label class="form-check-label ms-2" for="tracker-predictions-switch">
-												Enable Predictions
-											</label>
-										</div>
-									</div>
-									<hr class="my-2"/>
-									<div class="col-md-6">
-										<div class="form-label mb-1">Path Stitch Angle Threshold</div>
-										<div class="text-muted small mb-2">
-											Defines the limit trajectory angles for stitching paths.
-										</div>
-									</div>
-									<div class="col-md-6 text-end">
-										<input type="number" id="angle-threshold-input" class="form-control w-50 d-inline-block" min="20" max="60" step="5">
-									</div>
-								</div>
-							</div>
+                        </div>
+                    </div>
+
+                    <!-- Path Stitching Card -->
+                    <div class="card mt-3">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">Path Stitching</h5>
+                            <div id="connectionStatus" class="connection-status">
+                                <span id="statusMessage">Connected</span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <!-- Enable/Disable Stitching -->
+                            <div class="row g-4 align-items-center mb-3">
+                                <div class="col-md-6">
+                                    <div class="form-label mb-1">Enable Path Stitching</div>
+                                    <div class="text-muted small mb-2">
+                                        Automatically merge paths from the same object that temporarily disappears.
+                                    </div>
+                                </div>
+                                <div class="col-md-6 text-end">
+                                    <div class="form-check form-switch d-inline-flex align-items-center">
+                                        <input class="form-check-input" type="checkbox" id="stitch-enable-switch">
+                                        <label class="form-check-label ms-2" for="stitch-enable-switch">
+                                            Enable Stitching
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="stitch-settings" class="hidden">
+                                <div class="row">
+                                    <!-- Left: Video and Stitch Area -->
+                                    <div class="col-lg-8 col-md-7">
+                                        <div id="video-view" style="display:block">
+                                            <div style="width:100%; height:100%; position:relative">
+                                                <div id="video" style="width:100%; height:100%; position:absolute; top:0; left:0;"></div>
+                                                <canvas id="path-canvas" width="1000" height="1000" style="width:100%; height:100%; position:absolute; top:0px; left:0px; z-index:2;"></canvas>
+                                                <canvas id="stitch-canvas" width="1000" height="1000" style="width:100%; height:100%; position:absolute; top:0px; left:0px; z-index:10; pointer-events:auto; border:2px solid blue;"></canvas>
+                                            </div>
+                                        </div>
+                                        <!-- Stitch Area Controls -->
+                                        <div class="mt-3">
+                                            <div class="card">
+                                                <div class="card-header">
+                                                    <h5 class="card-title mb-0">Stitching Area</h5>
+                                                </div>
+                                                <div class="card-body">
+                                                    <p class="text-muted small">
+                                                        Define the area where objects disappear and appear. Objects ending/starting outside this area will not be stitched.
+                                                    </p>
+                                                    <button type="button" class="btn btn-outline-primary btn-sm" id="btn-stitch-area">Set Stitching Area</button>
+                                                    <button type="button" class="btn btn-success btn-sm" id="btn-save-stitch-area">Save Area</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Right: Settings -->
+                                    <div class="col-lg-4 col-md-5">
+                                        <div class="card">
+                                            <div class="card-header">
+                                                <h5 class="card-title mb-0">Stitch Parameters</h5>
+                                            </div>
+                                            <div class="card-body">
+                                                <!-- Duration -->
+                                                <div class="form-group mb-3">
+                                                    <label for="stitch-duration" class="form-label">Max Duration (seconds)</label>
+                                                    <input type="number" id="stitch-duration" class="form-control" min="1" max="10" step="1">
+                                                    <div class="text-muted small mt-1">
+                                                        Maximum time between paths to consider stitching
+                                                    </div>
+                                                </div>
+
+                                                <!-- Angle Threshold -->
+                                                <div class="form-group mb-3">
+                                                    <label for="stitch-angle-threshold" class="form-label">Angle Threshold (degrees)</label>
+                                                    <input type="number" id="stitch-angle-threshold" class="form-control" min="0" max="90" step="5">
+                                                    <div class="text-muted small mt-1">
+                                                        Maximum angle difference between path directions (0 = ignore direction)
+                                                    </div>
+                                                </div>
+
+                                                <!-- Allow Class Switch -->
+                                                <div class="form-group mb-3">
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="stitch-allow-class-switch">
+                                                        <label class="form-check-label" for="stitch-allow-class-switch">
+                                                            Allow Class Switch
+                                                        </label>
+                                                    </div>
+                                                    <div class="text-muted small mt-1">
+                                                        When enabled, objects can be matched even if their class changes (e.g., "vehicle" → "car"). The class with highest confidence will be used.
+                                                    </div>
+                                                </div>
+
+                                                <button type="button" class="btn btn-success w-100" id="btn-save-stitch">Save Settings</button>
+                                            </div>
+                                        </div>
+
+                                        <!-- Legend -->
+                                        <div class="card mt-3">
+                                            <div class="card-header">
+                                                <h5 class="card-title mb-0">Path Legend</h5>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="d-flex align-items-center mb-2">
+                                                    <div style="width: 20px; height: 3px; background-color: #00FF00; margin-right: 10px;"></div>
+                                                    <span>Stitched Paths</span>
+                                                </div>
+                                                <div class="d-flex align-items-center">
+                                                    <div style="width: 20px; height: 3px; background-color: #FFFF00; margin-right: 10px;"></div>
+                                                    <span>Normal Paths</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -74,40 +187,12 @@
     </div>
 
 <script>
+let MQTT_Client = 0;
 let appData = null;
-
-
-
-function updateSetting(path, value) {
-    if (!appData) return;
-
-    // Update the value in the appData object
-    let keyParts = path.split('.');
-    let obj = appData.settings;
-    for (let i = 0; i < keyParts.length - 1; i++) {
-        obj = obj[keyParts[i]];
-        if (!obj) return;
-    }
-    obj[keyParts[keyParts.length - 1]] = value;
-
-    // Prepare payload for both scene and stitch (for safety)
-    let payload = {
-        scene: appData.settings.scene,
-        stitch: appData.settings.stitch
-    };
-
-    let url = 'settings?json=' + encodeURIComponent(JSON.stringify(payload));
-    $.ajax({
-        type: "GET",
-        url: url,
-        success: function(response) {
-            showToast('Settings updated', 'info');
-        },
-        error: function(xhr, status, error) {
-            showToast('Settings update failed', 'danger');
-        }
-    });
-}
+let width = 800;
+let height = 450;
+let paths = [];
+let areaSelector = null;
 
 $(document).ready(function() {
     $.ajax({
@@ -120,70 +205,302 @@ $(document).ready(function() {
             document.title = app.manifest.acapPackageConf.setup.friendlyName;
             $('.sidebar-heading').text(app.manifest.acapPackageConf.setup.friendlyName);
 
-            // -- TRACKER PREDICTIONS SWITCH: checked if tracker_confidence is FALSE --
-			$('#tracker-predictions-switch').prop('checked', !app.settings.scene.tracker_confidence);
-            // -- PATH STITCH ANGLE THRESHOLD --
-            $('#angle-threshold-input').val(
-                typeof app.settings.stitch.angle_threshold === "number" 
-                ? app.settings.stitch.angle_threshold : 40
-            );
+            const aspectRatio = app.device.aspect || '16:9';
+            const [aspectWidth, aspectHeight] = aspectRatio.split(':').map(Number);
+
+            // Load tracker predictions
+            $('#tracker-predictions-switch').prop('checked', !app.settings.scene.tracker_confidence);
+
+            // Load stitch settings
+            const stitchSettings = app.settings.stitch || {};
+            $('#stitch-enable-switch').prop('checked', stitchSettings.active || false);
+            $('#stitch-duration').val(stitchSettings.duration || 4);
+            $('#stitch-angle-threshold').val(stitchSettings.angle_threshold || 40);
+            $('#stitch-allow-class-switch').prop('checked', stitchSettings.allow_class_switch || false);
+
+            // Show/hide stitch settings based on enable switch
+            if (stitchSettings.active) {
+                $('#stitch-settings').removeClass('hidden');
+            }
+
+            // Connect to MQTT if available
+            if (app.status.mqtt.connected) {
+                ConnectWebSocketClient();
+            } else {
+                setTimeout(() => {
+                    updateConnectionStatus('disconnected');
+                    showToast("DataQ is not connected to a broker. Please go to MQTT Settings", "warning");
+                }, 100);
+            }
+
+            // Setup video
+            PlayVideo(aspectRatio, app.settings.scene.rotation);
+
+            // Setup area selector
+            const areaModes = [
+                { key: 'stitch',  button: '#btn-stitch-area', color: 'rgba(0,0,0,0.5)' }  // Black bounding box
+            ];
+
+            areaSelector = new AreaSelector('stitch-canvas', {
+                modes: areaModes,
+                onchange: function(areas) { },
+                minWidth: 50,
+                minHeight: 50
+            });
+
+            const stitchArea = {
+                x1: stitchSettings.x1 || 250,
+                y1: stitchSettings.y1 || 250,
+                x2: stitchSettings.x2 || 750,
+                y2: stitchSettings.y2 || 750
+            };
+
+            areaSelector.setAreas({ stitch: stitchArea });
+            areaSelector.setMode('stitch');
+            areaSelector.hideAreas();
+
+            window.addEventListener('resize', function() { areaSelector.resizeCanvas(); });
         },
-        error: function(response) { showToast(response.statusText, 'danger'); }
+        error: function(response) {
+            showToast("The application is not running", 'danger');
+        }
     });
 
-    // Inverted logic: predictions enabled if tracker_confidence is FALSE
-	$('#tracker-predictions-switch').on('change', function() {
-		if (!appData) return;
-		appData.settings.scene.tracker_confidence = !$(this).is(':checked');
-		const payload = {
-			scene: appData.settings.scene,
-		};
-		$.ajax({
-			type: "POST",
-			url: 'settings',
-			contentType: 'application/json',
-			data: JSON.stringify(payload),
-			success: () => showToast('Settings updated', 'info'),
-			error: () => showToast('Settings update failed', 'danger')
-		});
-	});
-
-    $('#angle-threshold-input').on('change', function() {
+    // Tracker predictions switch
+    $('#tracker-predictions-switch').on('change', function() {
         if (!appData) return;
-        let val = Math.round(parseInt(this.value, 10) / 5) * 5;
-        if (isNaN(val)) val = 40;
-        if (val < 20) val = 20;
-        if (val > 60) val = 60;
-        this.value = val;
-        appData.settings.stitch.angle_threshold = val;
-		const payload = {
-			stitch: appData.settings.stitch
-		};
-		$.ajax({
-			type: "POST",
-			url: 'settings',
-			contentType: 'application/json',
-			data: JSON.stringify(payload),
-			success: () => showToast('Settings updated', 'info'),
-			error: () => showToast('Settings update failed', 'danger')
-		});
+        appData.settings.scene.tracker_confidence = !$(this).is(':checked');
+        const payload = { scene: appData.settings.scene };
+        $.ajax({
+            type: "POST",
+            url: 'settings',
+            contentType: 'application/json',
+            data: JSON.stringify(payload),
+            success: () => showToast('Settings updated', 'info'),
+            error: () => showToast('Settings update failed', 'danger')
+        });
+    });
+
+    // Stitch enable switch
+    $('#stitch-enable-switch').on('change', function() {
+        if (!appData) return;
+        const isEnabled = $(this).is(':checked');
+        appData.settings.stitch.active = isEnabled;
+
+        if (isEnabled) {
+            $('#stitch-settings').removeClass('hidden');
+        } else {
+            $('#stitch-settings').addClass('hidden');
+        }
+
+        saveStitchSettings();
+    });
+
+    // Stitch area buttons
+    $('#btn-stitch-area').on('click', () => areaSelector.setMode('stitch'));
+    $('#btn-save-stitch-area').on('click', function() {
+        const areas = areaSelector.getAreas();
+        if (areas.stitch) {
+            appData.settings.stitch.x1 = areas.stitch.x1;
+            appData.settings.stitch.y1 = areas.stitch.y1;
+            appData.settings.stitch.x2 = areas.stitch.x2;
+            appData.settings.stitch.y2 = areas.stitch.y2;
+            saveStitchSettings();
+            areaSelector.hideAreas();
+        }
+    });
+
+    // Save stitch settings button
+    $('#btn-save-stitch').on('click', function() {
+        if (!appData) return;
+        appData.settings.stitch.duration = parseInt($('#stitch-duration').val());
+        appData.settings.stitch.angle_threshold = parseInt($('#stitch-angle-threshold').val());
+        appData.settings.stitch.allow_class_switch = $('#stitch-allow-class-switch').is(':checked');
+        saveStitchSettings();
     });
 });
+
+function saveStitchSettings() {
+    if (!appData) return;
+    const payload = { stitch: appData.settings.stitch };
+    $.ajax({
+        type: "POST",
+        url: 'settings',
+        contentType: 'application/json',
+        data: JSON.stringify(payload),
+        success: () => showToast('Stitch settings updated', 'info'),
+        error: () => showToast('Stitch settings update failed', 'danger')
+    });
+}
+
+function ConnectWebSocketClient() {
+    updateConnectionStatus('connecting');
+    const clientID = "WS-" + appData.manifest.acapPackageConf.setup.appName + "-" + appData.device.serial + "-" + Math.floor(Math.random() * 10000);
+    if (MQTT_Client) delete MQTT_Client;
+
+    var tls = appData.settings.tls;
+    if (location.protocol === 'https:') tls = true;
+    var port = tls ? appData.settings.WSS_Port : appData.settings.WS_Port;
+
+    MQTT_Client = new Paho.MQTT.Client(appData.mqtt.address, port, clientID);
+
+    MQTT_Client.onConnectionLost = onConnectionLost;
+    MQTT_Client.onMessageArrived = onMessageArrived;
+
+    var connectionOptions = {
+        useSSL: tls,
+        timeout: 3,
+        onSuccess: onConnect,
+        onFailure: onFailure
+    };
+
+    if (appData.mqtt.user && appData.mqtt.user.length)
+        connectionOptions.userName = appData.mqtt.user;
+    if (appData.mqtt.password && appData.mqtt.password.length)
+        connectionOptions.password = appData.mqtt.password;
+
+    MQTT_Client.connect(connectionOptions);
+}
+
+function updateConnectionStatus(status) {
+    const statusElement = document.getElementById('connectionStatus');
+    const messageElement = document.getElementById('statusMessage');
+
+    switch (status) {
+        case 'connected':
+            statusElement.style.backgroundColor = '#00ff00';
+            messageElement.textContent = 'Connected';
+            break;
+        case 'disconnected':
+            statusElement.style.backgroundColor = '#ff0000';
+            messageElement.textContent = 'Disconnected';
+            break;
+        case 'connecting':
+        case 'reconnecting':
+            statusElement.style.backgroundColor = '#ffff00';
+            messageElement.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+            break;
+    }
+}
+
+function onConnect() {
+    updateConnectionStatus('connected');
+    var topic = appData.mqtt.preTopic + "/path/" + appData.device.serial;
+    MQTT_Client.subscribe(topic);
+}
+
+function onFailure(message) {
+    updateConnectionStatus('disconnected');
+    showToast(message.errorMessage + " Check WebSocket connection in MQTT Settings", "warning");
+}
+
+function onConnectionLost(responseObject) {
+    if (responseObject.errorCode !== 0) {
+        showToast(responseObject.errorMessage, "warning");
+        updateConnectionStatus('disconnected');
+        setTimeout(() => {
+            console.log("Attempting to reconnect...");
+            ConnectWebSocketClient();
+        }, 5000);
+    }
+}
+
+function onMessageArrived(message) {
+    var payload = JSON.parse(message.payloadString);
+    if (!payload) return;
+
+    // Add new path to array (keep last 10)
+    paths.unshift(payload);
+    if (paths.length > 10) paths.pop();
+
+    DrawPaths();
+}
+
+function DrawPaths() {
+    var ctx = document.getElementById('path-canvas').getContext("2d");
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, 1000, 1000);
+
+    paths.forEach(function(path) {
+        if (!path.path || path.path.length < 2) return;
+
+        // Choose color based on stitched flag
+        ctx.strokeStyle = path.stitched ? '#00FF00' : '#FFFF00';  // Green if stitched, Yellow if normal
+        ctx.lineWidth = 2;
+
+        ctx.beginPath();
+        ctx.moveTo(path.path[0].x, path.path[0].y);
+        for (var i = 1; i < path.path.length; i++) {
+            ctx.lineTo(path.path[i].x, path.path[i].y);
+        }
+        ctx.stroke();
+
+        // Draw start and end markers
+        ctx.fillStyle = path.stitched ? '#00FF00' : '#FFFF00';
+        ctx.beginPath();
+        ctx.arc(path.path[0].x, path.path[0].y, 4, 0, 2 * Math.PI);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(path.path[path.path.length - 1].x, path.path[path.path.length - 1].y, 6, 0, 2 * Math.PI);
+        ctx.fill();
+    });
+}
+
+function PlayVideo(aspect, rotation) {
+    width = 800;
+    height = 450;
+    var videoWidth = 1280;
+    var videoHeight = 720;
+
+    switch (aspect) {
+        case '4:3': width = 800; height = 600; videoWidth = 800; videoHeight = 600; break;
+        case '1:1': width = 800; height = 800; videoWidth = 640; videoHeight = 640; break;
+        case '16:10': width = 800; height = 500; videoWidth = 800; videoHeight = 500; break;
+        default: width = 800; height = 450; videoWidth = 1280; videoHeight = 720; break;
+    }
+
+    if (rotation === 90 || rotation === 270) {
+        var temp = width;
+        width = height;
+        height = temp;
+    }
+
+    $("#video-view").css("width", width + "px");
+    $("#video-view").css("height", height + "px");
+
+    var secureConnection = "";
+    if (location.protocol === 'https:') secureConnection = " secure=true";
+    var player = '<media-stream-player hostname="' + window.location.hostname + '"' + secureConnection
+        + ' format="RTP_H264" compression="40" audio="0"'
+        + ' resolution="' + videoWidth + 'x' + videoHeight + '"'
+        + ' variant="basic" autoplay></media-stream-player>';
+    $("#video").append(player);
+}
 
 function showToast(message, type = 'danger') {
     const toastContainer = document.querySelector('.toast-container');
     const textColorClass = type === 'warning' ? 'text-dark' : 'text-white';
-    toastContainer.insertAdjacentHTML('beforeend', `
+    const toastHtml = `
         <div class="toast align-items-center ${textColorClass} bg-${type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
             <div class="d-flex">
                 <div class="toast-body">${message}</div>
                 <button type="button" class="btn-close${type === 'warning' ? '' : ' btn-close-white'} me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
             </div>
         </div>
-    `);
-    const toastEl = toastContainer.lastElementChild;
-    new bootstrap.Toast(toastEl, {autohide: true, delay: 4000}).show();
-    toastEl.addEventListener('hidden.bs.toast', function() { this.remove(); });
+    `;
+
+    toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+    const toastElement = toastContainer.lastElementChild;
+    const toast = new bootstrap.Toast(toastElement, {
+        autohide: true,
+        delay: 4000
+    });
+    toast.show();
+    toastElement.addEventListener('hidden.bs.toast', function() {
+        this.remove();
+    });
 }
 
 </script>

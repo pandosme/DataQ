@@ -104,11 +104,15 @@
 										<label for="scene-maxIdle" class="form-label">Max idle</label>
 										<select class="form-select" id="scene-maxIdle">
 											<option value="0">Forever</option>
+											<option value="1">1s</option>
+											<option value="2">2s</option>
+											<option value="3">3s</option>
+											<option value="4">4s</option>
 											<option value="5">5s</option>
 											<option value="10">10s</option>
 											<option value="15">15s</option>
 											<option value="20">20s</option>
-											<option value="30">30s</option>												
+											<option value="30">30s</option>
 											<option value="45">45s</option>
 											<option value="60">1m</option>
 											<option value="120">2m</option>
@@ -455,7 +459,7 @@ function PlayVideo(aspect, rotation) {
 
 	switch (aspect) {
 		case '4:3': width = 800; height = 600; videoWidth = 800; videoHeight = 600;break;
-		case '1:1': width = 640; height = 640; videoWidth = 640; videoHeight = 640;break;
+		case '1:1': width = 800; height = 800; videoWidth = 640; videoHeight = 640;break;
 		case '16:10': width = 800; height = 500; videoWidth = 800; videoHeight = 500;break;
 		default: width = 800; height = 450; videoWidth = 1280; videoHeight = 720;break;
 	}

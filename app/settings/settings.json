@@ -40,15 +40,6 @@
 			"upperArea": 30,
 			"lowerArea": 70,
 			"line": 400
-		},
-		"merge": {
-			"active": false,
-			"x1": 250,
-			"y1": 250,
-			"x2": 750,
-			"y2": 750,
-			"distance": 100,
-			"duration": 1000
 		}
 	},
 	"eventTopics": [
@@ -136,7 +127,8 @@
 		"y1": 250,
 		"y2": 750,
 		"duration": 4,
-		"angle_threshold": 40
+		"angle_threshold": 40,
+		"allow_class_switch": false
 	}
 		
 }

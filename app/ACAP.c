@@ -25,6 +25,7 @@
 #include <curl/curl.h>
 #include <gio/gio.h>
 #include <axsdk/axevent.h>
+#include <axsdk/axparameter.h>
 #include <pthread.h>
 #include "ACAP.h"
 
@@ -52,6 +53,7 @@ static void ACAP_ENDPOINT_app(const ACAP_HTTP_Response response, const ACAP_HTTP
 static char ACAP_package_name[ACAP_MAX_PACKAGE_NAME];
 static ACAP_Config_Update ACAP_UpdateCallback = NULL;
 cJSON* SplitString(const char* input, const char* delimiter);
+static char* get_parameter_value(const char* param_name);
 
 
 /*-----------------------------------------------------
@@ -208,11 +210,6 @@ ACAP_ENDPOINT_settings(const ACAP_HTTP_Response response, const ACAP_HTTP_Reques
         // Cleanup and save
         cJSON_Delete(params);
         ACAP_FILE_Write("localdata/settings.json", settings);
-
-        // Notify about update
-        if (ACAP_UpdateCallback) {
-            ACAP_UpdateCallback("settings", settings);
-        }
 
         ACAP_HTTP_Respond_Text(response, "Settings updated successfully");
         return;
@@ -1225,26 +1222,65 @@ cJSON* ACAP_DEVICE(void) {
 				data = cJSON_GetObjectItem(data,"propertyList");
 		}
 	}
+	// Serial Number
 	if( data && cJSON_GetObjectItem(data,"SerialNumber") )
 		cJSON_AddStringToObject(ACAP_DEVICE_Container,"serial",cJSON_GetObjectItem(data,"SerialNumber")->valuestring);
-	else
-		cJSON_AddStringToObject(ACAP_DEVICE_Container,"serial","000000000000");
+	else {
+		char* serial = get_parameter_value("root.Properties.System.SerialNumber");
+		if(serial) {
+			cJSON_AddStringToObject(ACAP_DEVICE_Container,"serial",serial);
+			free(serial);
+		} else
+			cJSON_AddStringToObject(ACAP_DEVICE_Container,"serial","000000000000");
+	}
+
+	// Model Number
 	if( data && cJSON_GetObjectItem(data,"ProdNbr") )
 		cJSON_AddStringToObject(ACAP_DEVICE_Container,"model",cJSON_GetObjectItem(data,"ProdNbr")->valuestring);
-	else
-		cJSON_AddStringToObject(ACAP_DEVICE_Container,"model","Unknown");
+	else {
+		char* model = get_parameter_value("root.Properties.System.ProdNbr");
+		if(model) {
+			cJSON_AddStringToObject(ACAP_DEVICE_Container,"model",model);
+			free(model);
+		} else
+			cJSON_AddStringToObject(ACAP_DEVICE_Container,"model","Unknown");
+	}
+
+	// Platform/SoC
 	if( data && cJSON_GetObjectItem(data,"Soc") )
 		cJSON_AddStringToObject(ACAP_DEVICE_Container,"platform",cJSON_GetObjectItem(data,"Soc")->valuestring);
-	else
-		cJSON_AddStringToObject(ACAP_DEVICE_Container,"platform","Unknown");
+	else {
+		char* soc = get_parameter_value("root.Properties.System.Soc");
+		if(soc) {
+			cJSON_AddStringToObject(ACAP_DEVICE_Container,"platform",soc);
+			free(soc);
+		} else
+			cJSON_AddStringToObject(ACAP_DEVICE_Container,"platform","Unknown");
+	}
+
+	// Architecture/Chip
 	if( data && cJSON_GetObjectItem(data,"Architecture") )
 		cJSON_AddStringToObject(ACAP_DEVICE_Container,"chip",cJSON_GetObjectItem(data,"Architecture")->valuestring);
-	else
-		cJSON_AddStringToObject(ACAP_DEVICE_Container,"chip","Unknown");
+	else {
+		char* arch = get_parameter_value("root.Properties.System.Architecture");
+		if(arch) {
+			cJSON_AddStringToObject(ACAP_DEVICE_Container,"chip",arch);
+			free(arch);
+		} else
+			cJSON_AddStringToObject(ACAP_DEVICE_Container,"chip","Unknown");
+	}
+
+	// Firmware Version
 	if( data && cJSON_GetObjectItem(data,"Version") )
 		cJSON_AddStringToObject(ACAP_DEVICE_Container,"firmware",cJSON_GetObjectItem(data,"Version")->valuestring);
-	else
-		cJSON_AddStringToObject(ACAP_DEVICE_Container,"firmware","0.0.0");
+	else {
+		char* firmware = get_parameter_value("root.Properties.Firmware.Version");
+		if(firmware) {
+			cJSON_AddStringToObject(ACAP_DEVICE_Container,"firmware",firmware);
+			free(firmware);
+		} else
+			cJSON_AddStringToObject(ACAP_DEVICE_Container,"firmware","0.0.0");
+	}
 	if( apiData )
 		cJSON_Delete(apiData);
 	apiData = 0;
@@ -1261,28 +1297,19 @@ cJSON* ACAP_DEVICE(void) {
 			cJSON_AddStringToObject(ACAP_DEVICE_Container,"IPv4","");
 		free(response);
 	} else {
-		cJSON_AddStringToObject(ACAP_DEVICE_Container,"IPv4","");
+		// VAPIX failed, try axparameter API (firmware 11.x fallback)
+		char* ipAddr = get_parameter_value("root.Network.eth0.IPAddress");
+		if(ipAddr) {
+			cJSON_AddStringToObject(ACAP_DEVICE_Container,"IPv4",ipAddr);
+			free(ipAddr);
+		} else
+			cJSON_AddStringToObject(ACAP_DEVICE_Container,"IPv4","");
 	}
 	if( items )
 		cJSON_Delete(items);
 
 	cJSON_AddItemToObject(ACAP_DEVICE_Container,"location",GetLocationData());
-	
-	//Get Camera Aspect ratio
-	response = ACAP_VAPIX_Get("param.cgi?action=list&group=root.ImageSource.I0.Sensor.AspectRatio");
-	if( response ) {
-		items = SplitString( response, "=" );
-		if( items && cJSON_GetArraySize(items) == 2 )
-			cJSON_AddStringToObject(ACAP_DEVICE_Container,"aspect",cJSON_GetArrayItem(items,1)->valuestring);
-		else
-			cJSON_AddStringToObject(ACAP_DEVICE_Container,"aspect","16:9");
-		free(response);
-	} else {
-		cJSON_AddStringToObject(ACAP_DEVICE_Container,"aspect","16:9");
-	}
-	if( items )
-		cJSON_Delete(items);
- 
+
 	//Get Camera Resolutions
 	cJSON* resolutions = cJSON_CreateObject();
 	cJSON_AddItemToObject(ACAP_DEVICE_Container,"resolutions",resolutions);
@@ -1295,6 +1322,7 @@ cJSON* ACAP_DEVICE(void) {
 	cJSON* resolutions1610 = cJSON_CreateArray();
 	cJSON_AddItemToObject(resolutions,"16:10",resolutions1610);
 
+	// Try VAPIX first for resolutions
 	response = ACAP_VAPIX_Get("param.cgi?action=list&group=root.Properties.Image.Resolution");
 	if( response ) {
 		items = SplitString( response, "=" );
@@ -1327,7 +1355,114 @@ cJSON* ACAP_DEVICE(void) {
 			}
 		}
 		free(response);
+	} else {
+		// VAPIX failed, try axparameter API (firmware 11.x fallback)
+		LOG("%s: VAPIX resolutions failed, trying axparameter API\n", __func__);
+		char* resValue = get_parameter_value("root.Properties.Image.Resolution");
+		if( resValue ) {
+			cJSON* apiResolutions = SplitString(resValue, "," );
+			free(resValue);
+			if( apiResolutions && cJSON_GetArraySize(apiResolutions) > 0 ) {
+				cJSON* resolution = apiResolutions->child;
+				while( resolution ) {
+					items = SplitString(resolution->valuestring,"x");
+					if( items && cJSON_GetArraySize(items) == 2 ) {
+						int w = atoi(cJSON_GetArrayItem(items,0)->valuestring);
+						int h = atoi(cJSON_GetArrayItem(items,1)->valuestring);
+						int a = (w*100)/h;
+						if( a == 177 )
+							cJSON_AddItemToArray(resolutions169, cJSON_CreateString(resolution->valuestring));
+						if( a == 133 )
+							cJSON_AddItemToArray(resolutions43, cJSON_CreateString(resolution->valuestring));
+						if( a == 160 )
+							cJSON_AddItemToArray(resolutions1610, cJSON_CreateString(resolution->valuestring));
+						if( a == 100 )
+							cJSON_AddItemToArray(resolutions11, cJSON_CreateString(resolution->valuestring));
+					}
+					if( items )
+						cJSON_Delete(items);
+					resolution = resolution->next;
+				}
+				if( apiResolutions )
+					cJSON_Delete(apiResolutions);
+			}
+		}
 	}
+
+	//Get Camera Aspect ratio
+	char detectedAspect[10] = "16:9";  // default
+
+	// Try VAPIX first (firmware 12.x and 11.x)
+	response = ACAP_VAPIX_Get("param.cgi?action=list&group=root.ImageSource.I0.Sensor.AspectRatio");
+	if( response ) {
+		items = SplitString( response, "=" );
+		if( items && cJSON_GetArraySize(items) == 2 ) {
+			const char* aspectValue = cJSON_GetArrayItem(items,1)->valuestring;
+			// Strip whitespace and newlines
+			size_t i = 0;
+			while( aspectValue[i] && (aspectValue[i] == ' ' || aspectValue[i] == '\t' ||
+			                          aspectValue[i] == '\r' || aspectValue[i] == '\n') ) i++;
+			strncpy(detectedAspect, &aspectValue[i], sizeof(detectedAspect) - 1);
+			detectedAspect[sizeof(detectedAspect) - 1] = '\0';
+			// Remove trailing whitespace
+			for( i = strlen(detectedAspect); i > 0 && (detectedAspect[i-1] == ' ' ||
+			     detectedAspect[i-1] == '\t' || detectedAspect[i-1] == '\r' ||
+			     detectedAspect[i-1] == '\n'); i-- ) {
+				detectedAspect[i-1] = '\0';
+			}
+		}
+		if( items )
+			cJSON_Delete(items);
+		free(response);
+		items = NULL;
+	}
+
+	// If VAPIX failed, try axparameter API (firmware 11.x fallback)
+	if( strcmp(detectedAspect, "16:9") == 0 ) {
+		LOG("%s: VAPIX aspect ratio failed, trying axparameter API\n", __func__);
+		char* paramValue = get_parameter_value("root.ImageSource.I0.Sensor.AspectRatio");
+		if( paramValue ) {
+			LOG("%s: axparameter returned aspect ratio: %s\n", __func__, paramValue);
+			strncpy(detectedAspect, paramValue, sizeof(detectedAspect) - 1);
+			detectedAspect[sizeof(detectedAspect) - 1] = '\0';
+			free(paramValue);
+		} else {
+			LOG_WARN("%s: axparameter also failed to get aspect ratio, will try auto-detection from resolutions\n", __func__);
+		}
+	}
+
+	// If VAPIX and axparameter didn't work, auto-detect from resolutions
+	if( strcmp(detectedAspect, "16:9") == 0 ) {
+		// Count resolutions in each category
+		int count169 = cJSON_GetArraySize(resolutions169);
+		int count43 = cJSON_GetArraySize(resolutions43);
+		int count11 = cJSON_GetArraySize(resolutions11);
+		int count1610 = cJSON_GetArraySize(resolutions1610);
+
+		LOG("%s: Auto-detecting from resolutions: 16:9=%d, 4:3=%d, 1:1=%d, 16:10=%d\n",
+		    __func__, count169, count43, count11, count1610);
+
+		// Use the category with most resolutions
+		if( count11 > 0 && count11 >= count169 && count11 >= count43 && count11 >= count1610 ) {
+			strncpy(detectedAspect, "1:1", sizeof(detectedAspect) - 1);
+			LOG("%s: Auto-detected aspect ratio: 1:1\n", __func__);
+		}
+		else if( count43 > 0 && count43 >= count169 && count43 >= count1610 ) {
+			strncpy(detectedAspect, "4:3", sizeof(detectedAspect) - 1);
+			LOG("%s: Auto-detected aspect ratio: 4:3\n", __func__);
+		}
+		else if( count1610 > 0 && count1610 >= count169 ) {
+			strncpy(detectedAspect, "16:10", sizeof(detectedAspect) - 1);
+			LOG("%s: Auto-detected aspect ratio: 16:10\n", __func__);
+		}
+		else {
+			LOG("%s: No auto-detection match, keeping default 16:9\n", __func__);
+		}
+	}
+
+	cJSON_AddStringToObject(ACAP_DEVICE_Container,"aspect", detectedAspect);
+	LOG("%s: Detected aspect ratio: %s\n", __func__, detectedAspect);
+
 	return ACAP_DEVICE_Container;
 }
 
@@ -2304,23 +2439,63 @@ static size_t append_to_buffer_callback(char* ptr, size_t size, size_t nmemb, vo
     return processed_bytes;
 }
 
+// Helper function to read parameters using axparameter API (firmware 11.x fallback)
+static char* get_parameter_value(const char* param_name) {
+    if (!param_name) return NULL;
+
+    GError* error = NULL;
+    AXParameter* axparameter = ax_parameter_new(ACAP_package_name, &error);
+    if (!axparameter) {
+        if (error) {
+            LOG_WARN("%s: Failed to create parameter handle: %s\n", __func__, error->message);
+            g_error_free(error);
+        }
+        return NULL;
+    }
+
+    gchar* value = NULL;
+
+    if (!ax_parameter_get(axparameter, param_name, &value, 0)) {
+        LOG_WARN("%s: Failed to get parameter %s\n", __func__, param_name);
+        ax_parameter_free(axparameter);
+        return NULL;
+    }
+
+    ax_parameter_free(axparameter);
+
+    if (!value) return NULL;
+
+    // Convert gchar* to char* and free gchar*
+    char* result = strdup(value);
+    g_free(value);
+
+    return result;
+}
+
 char* ACAP_VAPIX_Get(const char* endpoint) {
-    if (!VAPIX_Credentials || !VAPIX_CURL || !endpoint) {
+    if (!VAPIX_CURL || !endpoint) {
         LOG_WARN("%s: Invalid input\n", __func__);
         return NULL;
     }
 
     char* response = NULL; // Initialize response buffer
-    char* url = malloc(strlen("http://127.0.0.12/axis-cgi/") + strlen(endpoint) + 1);
+    char* url = malloc(strlen("http://127.0.0.1/axis-cgi/") + strlen(endpoint) + 1);
     if (!url) {
         LOG_WARN("%s: Memory allocation failed", __func__);
         return NULL;
     }
-    sprintf(url, "http://127.0.0.12/axis-cgi/%s", endpoint);
+    sprintf(url, "http://127.0.0.1/axis-cgi/%s", endpoint);
 
     curl_easy_setopt(VAPIX_CURL, CURLOPT_URL, url);
-    curl_easy_setopt(VAPIX_CURL, CURLOPT_USERPWD, VAPIX_Credentials);
-    curl_easy_setopt(VAPIX_CURL, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
+
+    // Only use credentials if available (firmware 12.x)
+    // For firmware 11.x, local calls to 127.0.0.1 typically don't require auth
+    if (VAPIX_Credentials) {
+        curl_easy_setopt(VAPIX_CURL, CURLOPT_USERPWD, VAPIX_Credentials);
+        curl_easy_setopt(VAPIX_CURL, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
+    } else {
+        curl_easy_setopt(VAPIX_CURL, CURLOPT_HTTPAUTH, 0L);
+    }
     curl_easy_setopt(VAPIX_CURL, CURLOPT_HTTPGET, 1L); // Explicitly set GET method
     curl_easy_setopt(VAPIX_CURL, CURLOPT_WRITEFUNCTION, append_to_buffer_callback);
     curl_easy_setopt(VAPIX_CURL, CURLOPT_WRITEDATA, &response);
@@ -2448,6 +2623,10 @@ ACAP_VAPIX_Init() {
 	LOG_TRACE("%s:\n",__func__);
 	VAPIX_CURL = curl_easy_init();
 	VAPIX_Credentials = retrieve_vapix_credentials("acap");
+	if (!VAPIX_Credentials) {
+		LOG_WARN("%s: Failed to retrieve VAPIX credentials via D-Bus (firmware 12.x method)\n", __func__);
+		LOG_WARN("%s: Falling back to unauthenticated local VAPIX calls and axparameter API (firmware 11.x compatible)\n", __func__);
+	}
 }
 
 /*------------------------------------------------------------------

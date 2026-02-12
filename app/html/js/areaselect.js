@@ -3,11 +3,17 @@ class AreaSelector {
     this.canvas = document.getElementById(canvasId);
     this.ctx = this.canvas.getContext('2d');
     this.modes = options.modes;
+
+    // Build colors from modes, with fallback to defaults
     this.colors = {
       aoi: 'rgba(0,255,0,0.4)',
       min: 'rgba(255,214,0,0.4)',
       max: 'rgba(25,118,210,0.4)'
     };
+    for (const m of this.modes) {
+      if (m.color) this.colors[m.key] = m.color;
+    }
+
     this.handleColor = "#ff8888";
     this.currentMode = this.modes[0].key;
     this.areas = {};
