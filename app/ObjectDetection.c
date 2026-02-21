@@ -125,6 +125,7 @@ static int config_x2 = 1000;
 static int config_y1 = 0;
 static int config_y2 = 1000;
 static int config_hanging_objects = 0;
+static double config_perspective_guard = 0;  // 0 = disabled, >0 = max allowed bbox area ratio
 
 static cJSON* config_blacklist = 0;
 
@@ -232,6 +233,7 @@ void ObjectDetection_Config(cJSON* data) {
     config_min_width = cJSON_GetObjectItem(data, "minWidth") ? cJSON_GetObjectItem(data, "minWidth")->valueint : 10;
     config_max_width = cJSON_GetObjectItem(data, "maxWidth") ? cJSON_GetObjectItem(data, "maxWidth")->valueint : 800;
     config_hanging_objects = 0;
+    config_perspective_guard = cJSON_GetObjectItem(data, "perspectiveGuard") ? cJSON_GetObjectItem(data, "perspectiveGuard")->valuedouble : 0;
     cJSON *aoi = cJSON_GetObjectItem(data, "aoi");
     if (aoi) {
         config_x1 = cJSON_GetObjectItem(aoi, "x1") ? cJSON_GetObjectItem(aoi, "x1")->valueint : 0;
@@ -636,6 +638,87 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
             g_hash_table_insert(detectionCache, keycopy, entry);
 
         } else {
+            // Perspective guard: detect when VOD reuses an ID for a different object
+            // Common in heavy perspective views or fisheye lenses where an object leaves
+            // at distance (small bbox) and a new object appears near camera (large bbox)
+            if (config_perspective_guard > 0 && entry->valid && entry->w > 0 && entry->h > 0 && rw > 0 && rh > 0) {
+                int old_area = entry->w * entry->h;
+                int new_area = rw * rh;
+                double size_ratio = (old_area > new_area)
+                    ? (double)old_area / new_area
+                    : (double)new_area / old_area;
+                if (size_ratio >= config_perspective_guard) {
+                    LOG("Perspective guard: ID %s size ratio %.1f (old %dx%d, new %dx%d) - treating as new object\n",
+                        entry->id, size_ratio, entry->w, entry->h, rw, rh);
+                    // Publish death of current identity
+                    entry->active = false;
+                    bool pg_should_publish = false;
+                    cJSON *death_json = build_tracker_json(entry, 0, &pg_should_publish);
+                    if (pg_should_publish && death_json) {
+                        tracker_callback_data_t *cb_data = malloc(sizeof(tracker_callback_data_t));
+                        if (cb_data) {
+                            cb_data->payload = cJSON_Duplicate(death_json, 1);
+                            cb_data->timer = 0;
+                            pending_tracker_callbacks = g_list_prepend(pending_tracker_callbacks, cb_data);
+                        }
+                        cJSON_Delete(death_json);
+                    }
+                    // Reinitialize entry as a new object
+                    strncpy(entry->class_name, obj->class_name, sizeof(entry->class_name)-1);
+                    entry->class_name[sizeof(entry->class_name) - 1] = '\0';
+                    entry->active = obj->active;
+                    entry->confidence = obj->confidence;
+                    entry->x = rx;
+                    entry->y = ry;
+                    entry->w = rw;
+                    entry->h = rh;
+                    entry->cx = cx;
+                    entry->cy = cy;
+                    entry->bx = cx;
+                    entry->by = cy;
+                    entry->dx = 0;
+                    entry->dy = 0;
+                    entry->birthTime = now;
+                    entry->timestamp = now;
+                    entry->previousTimestamp = now;
+                    entry->prev_cx = cx;
+                    entry->prev_cy = cy;
+                    entry->prev_angle = NAN;
+                    entry->directions = 0;
+                    entry->age = 0.0f;
+                    entry->distance = 0;
+                    entry->speed = 0;
+                    entry->maxSpeed = 0;
+                    entry->max_idle_duration = 0;
+                    entry->idle_duration = 0.0f;
+                    entry->idle_start_time = now;
+                    entry->idle = false;
+                    entry->sleep = false;
+                    entry->trackerSleep = false;
+                    if (entry->attributes) {
+                        free(entry->attributes);
+                        entry->attributes = NULL;
+                        entry->num_attributes = 0;
+                    }
+                    entry->attributes = clone_attributes(obj->attributes, obj->num_attributes, &entry->num_attributes);
+                    Adjust_For_VehicleType(entry);
+                    // Publish birth tracker for new identity
+                    if (entry->valid) {
+                        pg_should_publish = false;
+                        cJSON *birth_json = build_tracker_json(entry, 0, &pg_should_publish);
+                        if (pg_should_publish && birth_json) {
+                            tracker_callback_data_t *cb_data = malloc(sizeof(tracker_callback_data_t));
+                            if (cb_data) {
+                                cb_data->payload = cJSON_Duplicate(birth_json, 1);
+                                cb_data->timer = 0;
+                                pending_tracker_callbacks = g_list_prepend(pending_tracker_callbacks, cb_data);
+                            }
+                            cJSON_Delete(birth_json);
+                        }
+                    }
+                    continue;  // Skip normal update processing
+                }
+            }
             float dist = calc_distance(entry->prev_cx, entry->prev_cy, cx, cy);
             if (dist < IDLE_THRESHOLD_PCT) {
                 if (!entry->idle) {

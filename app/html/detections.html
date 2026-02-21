@@ -15,19 +15,21 @@
 </head>
 <body>
 <div class="d-flex" id="wrapper">
-    <div class="bg-light border-right" id="sidebar-wrapper">
+            <div class="bg-light border-right" id="sidebar-wrapper">
         <div class="sidebar-heading">&nbsp;</div>
         <div class="list-group list-group-flush">
-			<a href="index.html" class="list-group-item list-group-item-action">Overview</a>
-			<a href="events.html" class="list-group-item list-group-item-action">Events</a>
-			<a href="detections.html" class="list-group-item list-group-item-action active">Detections</a>
-			<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
-			<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
-			<a href="anomaly.html" class="list-group-item list-group-item-action">Anomaly</a>
-			<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
-			<a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
-			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
-			<a href="about.html" class="list-group-item list-group-item-action">About</a>
+            <a href="index.html" class="list-group-item list-group-item-action">Overview</a>
+            <a href="events.html" class="list-group-item list-group-item-action">Events</a>
+            <a href="detections.html" class="list-group-item list-group-item-action active">Detections</a>
+            <a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
+            <a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
+            <a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
+            <a href="anomaly.html" class="list-group-item list-group-item-action">Anomaly</a>
+            <a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
+            <hr class="sidebar-divider">
+            <a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
+            <a href="advanced.html" class="list-group-item list-group-item-action">Advanced</a>
+            <a href="about.html" class="list-group-item list-group-item-action">About</a>
         </div>
     </div>
     
@@ -212,7 +214,7 @@ $(document).ready(function() {
 							showToast("Settings updated", "info");
 						},
 						error: function(xhr, status, error) {
-							showToast("Calibration failed", "danger");
+							showToast("Settings update failed", "danger");
 						}
 					});
 					content.classList.toggle("hidden", !this.checked);
@@ -364,25 +366,22 @@ function ConnectWebSocketClient() {
 }
 
 function updateConnectionStatus(status) {
-    const statusElement = document.getElementById('connectionStatus');
-    const messageElement = document.getElementById('statusMessage');
-    
+    const el = document.getElementById('connectionStatus');
+    const msg = document.getElementById('statusMessage');
+    el.className = 'connection-status';
     switch (status) {
         case 'connected':
-            statusElement.style.backgroundColor = '#00ff00'; // Green
-            messageElement.textContent = 'Connected';
+            msg.textContent = 'Connected';
             break;
         case 'disconnected':
-            statusElement.style.backgroundColor = '#ff0000'; // Red
-            messageElement.textContent = 'Disconnected';
+            el.classList.add('status-disconnected');
+            msg.textContent = 'Disconnected';
             break;
         case 'connecting':
         case 'reconnecting':
-            statusElement.style.backgroundColor = '#ffff00'; // Yellow
-            messageElement.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+            el.classList.add('status-connecting');
+            msg.textContent = status.charAt(0).toUpperCase() + status.slice(1);
             break;
-        default:
-            console.log('Unknown status:', status);
     }
 }
 
@@ -495,7 +494,7 @@ function saveFilter() {
 			showToast("Settings updated",'info');
 		},
 		error: function(xhr, status, error) {
-			showToast("Filter updated failed",'danger');
+			showToast("Settings update failed",'danger');
 		}
 	});
 }

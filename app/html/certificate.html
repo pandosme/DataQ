@@ -10,97 +10,96 @@
     <script src="js/bootstrap.bundle.min.js"></script>
 
 <style>
-.cert-status-container {
-    max-width: 800px;
-}
-
-.cert-row {
-    display: flex;
-    align-items: center;
-    margin-bottom: 1rem;
-    padding: 0.5rem 0;
-    border-bottom: 1px solid #eee;
-}
-
-.cert-label {
-    min-width: 150px;
-    font-weight: 500;
-}
-
-.cert-status {
-    flex: 1;
-    color: #666;
-}
-
 .monospace {
     font-family: Consolas, Monaco, 'Lucida Console', monospace;
     font-size: 12px;
 }
-
 .modal-lg {
-    max-width: 1200px; /* Increased from default 800px */
-    width: 95%; /* Ensures some margin on smaller screens */
+    max-width: 1200px;
+    width: 95%;
 }
-
 .modal .modal-body textarea {
     width: 100%;
     min-width: 100%;
 }
-
-
+.cert-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: .8rem;
+    font-weight: 500;
+}
+.cert-badge.installed {
+    background: #f0fdf4;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+}
+.cert-badge.not-installed {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
 </style>
 
 </head>
 
 <body>
 <div class="d-flex" id="wrapper">
-	<div class="bg-light border-right" id="sidebar-wrapper">
+	        <div class="bg-light border-right" id="sidebar-wrapper">
         <div class="sidebar-heading">&nbsp;</div>
-		<div class="list-group list-group-flush">
-				<a href="index.html" class="list-group-item list-group-item-action">Publish</a>
-				<a href="events.html" class="list-group-item list-group-item-action">Events</a>
-				<a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
-				<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
-				<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
-				<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
-				<a href="anomaly.html" class="list-group-item list-group-item-action">Anomaly</a>
-				<a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
-				<a href="mqtt.html" class="list-group-item list-group-item-action active">MQTT Settings</a>
-				<a href="about.html" class="list-group-item list-group-item-action">About</a>
-		</div>
-	</div>
+        <div class="list-group list-group-flush">
+            <a href="index.html" class="list-group-item list-group-item-action">Overview</a>
+            <a href="events.html" class="list-group-item list-group-item-action">Events</a>
+            <a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
+            <a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
+            <a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
+            <a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
+            <a href="anomaly.html" class="list-group-item list-group-item-action">Anomaly</a>
+            <a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
+            <hr class="sidebar-divider">
+            <a href="mqtt.html" class="list-group-item list-group-item-action active">MQTT Settings</a>
+            <a href="advanced.html" class="list-group-item list-group-item-action">Advanced</a>
+            <a href="about.html" class="list-group-item list-group-item-action">About</a>
+        </div>
+    </div>
 	
 	<div id="page-content-wrapper" class="p-0">
-		<div class="col-md-12">
-			<br>
-			<div class="container">
-				<div class="row">
-					<div class="col-12">
-						<br>
-						<div class="card">
-							<div class="card-body">
-								<h3 class="card-title">TLS Certificates</h3>
-								
-								<div class="cert-status-container">
-									<div class="cert-row">
-										<div class="cert-label">Client Certificate:</div>
-										<div class="cert-status" id="certStatus">Not installed</div>
-										<button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#certModal">Click to upload</button>
-									</div>
-									
-									<div class="cert-row">
-										<div class="cert-label">Private Key:</div>
-										<div class="cert-status" id="keyStatus">Not installed</div>
-										<button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#keyModal">Click to upload</button>
-									</div>
-									
-									<div class="cert-row">
-										<div class="cert-label">CA Certificate:</div>
-										<div class="cert-status" id="caStatus">Not installed</div>
-										<button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#caModal">Click to upload</button>
-									</div>
-								</div>
-							</div>
+		<div class="container-fluid">
+			<div class="row">
+				<div class="col-lg-8">
+					<div class="card">
+						<div class="card-header">
+							<h5 class="card-title mb-0">TLS Certificates</h5>
+						</div>
+						<div class="card-body p-0">
+							<table class="table mb-0">
+								<thead>
+									<tr>
+										<th class="ps-3">Certificate</th>
+										<th>Status</th>
+										<th width="130px"></th>
+									</tr>
+								</thead>
+								<tbody>
+									<tr>
+										<td class="ps-3">Client Certificate</td>
+										<td><span id="certStatus" class="cert-badge not-installed">Not installed</span></td>
+										<td><button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#certModal">Upload</button></td>
+									</tr>
+									<tr>
+										<td class="ps-3">Private Key</td>
+										<td><span id="keyStatus" class="cert-badge not-installed">Not installed</span></td>
+										<td><button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#keyModal">Upload</button></td>
+									</tr>
+									<tr>
+										<td class="ps-3">CA Certificate</td>
+										<td><span id="caStatus" class="cert-badge not-installed">Not installed</span></td>
+										<td><button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#caModal">Upload</button></td>
+									</tr>
+								</tbody>
+							</table>
 						</div>
 					</div>
 				</div>
@@ -203,31 +202,30 @@ function CheckStatus() {
 		dataType: 'json',
 		cache: true,
 		success: function( certs ) {
-			if( certs.certfile ) {
-				$("#certStatus").text("Installed");
-			} else {
-				$("#certStatus").text("Not installed");
-			}
+			setCertBadge('#certStatus', certs.certfile);
 			
 			if( certs.keyfile ) {
-				if( certs.hasOwnProperty("password") )
-					$("#keyStatus").text("Installed with password");
-				else
-					$("#keyStatus").text("Installed");
+				var text = certs.hasOwnProperty("password") ? "Installed with password" : "Installed";
+				setCertBadge('#keyStatus', true, text);
 			} else {
-				$("#keyStatus").text("Not installed");
+				setCertBadge('#keyStatus', false);
 			}
 
-			if( certs.cafile ) {
-				$("#caStatus").text("Installed");
-			} else {
-				$("#caStatus").text("Not installed");
-			}
+			setCertBadge('#caStatus', certs.cafile);
 		},
 		error: function( response ){
-			alert("Error " + response.responseCode + ": Check if running");
+			alert("Error: Check if application is running");
 		}
 	});
+}
+
+function setCertBadge(selector, installed, text) {
+	var el = $(selector);
+	if (installed) {
+		el.text(text || 'Installed').removeClass('not-installed').addClass('installed');
+	} else {
+		el.text('Not installed').removeClass('installed').addClass('not-installed');
+	}
 }
 
 $("#saveCert").click(function() {

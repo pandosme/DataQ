@@ -13,29 +13,33 @@
 <body>
 <div class="d-flex" id="wrapper">
 	<!-- Sidebar -->
-	<div class="bg-light border-right" id="sidebar-wrapper">
-		<div class="sidebar-heading">&nbsp;</div>
-		<div class="list-group list-group-flush">
-			<a href="index.html" class="list-group-item list-group-item-action">Publish</a>
-			<a href="events.html" class="list-group-item list-group-item-action">Events</a>
-			<a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
-			<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
-			<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
-			<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
-			<a href="anomaly.html" class="list-group-item list-group-item-action">Anomaly</a>
-			<a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
-			<a href="mqtt.html" class="list-group-item list-group-item-action active">MQTT Settings</a>
-			<a href="about.html" class="list-group-item list-group-item-action">About</a>
-		</div>
-	</div>
+	        <div class="bg-light border-right" id="sidebar-wrapper">
+        <div class="sidebar-heading">&nbsp;</div>
+        <div class="list-group list-group-flush">
+            <a href="index.html" class="list-group-item list-group-item-action">Overview</a>
+            <a href="events.html" class="list-group-item list-group-item-action">Events</a>
+            <a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
+            <a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
+            <a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
+            <a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
+            <a href="anomaly.html" class="list-group-item list-group-item-action">Anomaly</a>
+            <a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
+            <hr class="sidebar-divider">
+            <a href="mqtt.html" class="list-group-item list-group-item-action active">MQTT Settings</a>
+            <a href="advanced.html" class="list-group-item list-group-item-action">Advanced</a>
+            <a href="about.html" class="list-group-item list-group-item-action">About</a>
+        </div>
+    </div>
 	
     <div id="page-content-wrapper" class="p-0">
         <div class="container-fluid">
             <div class="row mt-3">
                 <div class="col-xxl-4 col-xl-6 mb-4">
                     <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">MQTT Connection</h5>
+                        </div>
                         <div class="card-body">
-                            <h3 class="card-title">MQTT Connection</h3>
                             
                             <div class="form-group">
                                 <label for="mqtt_status">Status</label>
@@ -90,12 +94,11 @@
 
                 <div class="col-xxl-4 col-xl-6 mb-4">
                     <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">System Payload Properties</h5>
+                        </div>
                         <div class="card-body">
-                            <h3 class="card-title">System Payload Properties</h3>
-                            <p class="card-text">Additional properties can help a system with multiple devices.</p>
-                            <p class="card-text">Name is typically some sort of system device identifier.<br/></p>
-                            <p class="card-text">Location is typically a human readable location identifier such as City, Building, Address or network location such IP address or FQDN</p>
-                            <p class="card-text">These values may be left blank when not used</p>
+                            <p class="text-muted" style="font-size:.85rem">Additional properties to identify this device in a multi-camera system. <strong>Name</strong> is a system device identifier. <strong>Location</strong> is a human-readable identifier such as city, building, or IP address. Leave blank when not used.</p>
                             
                             <div class="form-group">
                                 <label for="payload_name">Name</label>
@@ -117,10 +120,11 @@
                 </div>
 				<div class="col-xxl-4 col-xl-6 mb-4">
 					<div class="card">
+						<div class="card-header">
+							<h5 class="card-title mb-0">WebSocket Connection</h5>
+						</div>
 						<div class="card-body">
-							<h3 class="card-title">WebSocket Connection</h3>
-                            <p class="card-text">The web page has its own MQTT client that is used to visualize data published by DataQ.<br/>
-							<i>If accessed over HTTPS, WSS will always be used</i></p>
+							<p class="text-muted" style="font-size:.85rem">The web UI uses its own MQTT WebSocket client to visualize live data. If accessed over HTTPS, WSS is always used.</p>
 							<div class="form-group">
 								<label for="ws_port">WS Port</label>
 								<input id="ws_port" type="text" class="form-control">
@@ -183,7 +187,6 @@ $(document).ready(function() {
 		},
 		error: function(response) {
 			showToast("The application is not running",'danger');
-			updateConnectionStatus("Disconnected");
 		}
 	});
 
@@ -273,7 +276,7 @@ function onConnect() {
 
 function onFailure(message) {
 	console.log("onFailure");
-	showToast("Web page not connect.<br/>" + message.errorMessage + "Check WebSocket connection in MQTT Settings","warning");
+	showToast("Web page not connected. " + message.errorMessage + " Check WebSocket connection in MQTT Settings","warning");
 }
 
 function onConnectionLost(message) {
@@ -300,12 +303,6 @@ function updateButtonState(mqtt) {
 			 .prop("disabled", false);
 	}
 }
-
-// Menu toggle handler
-$("#menu-toggle").click(function(e) {
-	e.preventDefault();
-	$("#wrapper").toggleClass("toggled");
-});
 
 // Connect button click handler
 $("#connect").click(function() {
@@ -385,11 +382,11 @@ $("#update_ws").click(function() {
 		contentType: 'application/json',
 		dataType: 'text',
 		success: function(response) {
-			showToast("WebSocket port update","success");
+			showToast("WebSocket settings updated","success");
 			ConnectWebSocketClient();
 		},
 		error: function(response) {
-			showToast("WebSocket port update faile","warning");
+			showToast("WebSocket settings update failed","warning");
 		}
 	});
 	
@@ -438,7 +435,7 @@ function showToast(message, type = 'danger') {
     const toastElement = toastContainer.lastElementChild;
     const toast = new bootstrap.Toast(toastElement, {
         autohide: true,
-        delay: 10000
+        delay: 4000
     });
     toast.show();
     toastElement.addEventListener('hidden.bs.toast', function() {

@@ -12,85 +12,137 @@
 </head>
 <body>
 <div class="d-flex" id="wrapper">
-	<div class="bg-light border-right" id="sidebar-wrapper">
+	        <div class="bg-light border-right" id="sidebar-wrapper">
         <div class="sidebar-heading">&nbsp;</div>
-		<div class="list-group list-group-flush">
-			<a href="index.html" class="list-group-item list-group-item-action active">Publish</a>
-			<a href="events.html" class="list-group-item list-group-item-action">Events</a>
-			<a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
-			<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
-			<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
-			<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
-			<a href="anomaly.html" class="list-group-item list-group-item-action">Anomaly</a>
-			<a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
-			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
-			<a href="about.html" class="list-group-item list-group-item-action">About</a>
-		</div>
-	</div>
+        <div class="list-group list-group-flush">
+            <a href="index.html" class="list-group-item list-group-item-action active">Overview</a>
+            <a href="events.html" class="list-group-item list-group-item-action">Events</a>
+            <a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
+            <a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
+            <a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
+            <a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
+            <a href="anomaly.html" class="list-group-item list-group-item-action">Anomaly</a>
+            <a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
+            <hr class="sidebar-divider">
+            <a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
+            <a href="advanced.html" class="list-group-item list-group-item-action">Advanced</a>
+            <a href="about.html" class="list-group-item list-group-item-action">About</a>
+        </div>
+    </div>
 	
 	<div id="page-content-wrapper" class="p-0">
 		<div class="container-fluid">
-			<div class="col-6">
-				<div class="card mt-3">
-					<div class="card-header">
-						<h5 class="card-title mb-0">Data published on MQTT</h5>
+			<!-- Status row -->
+			<div class="row g-3 mb-3">
+				<div class="col-md-4">
+					<div class="card h-100">
+						<div class="card-body d-flex align-items-center gap-3">
+							<div id="mqttStatusIcon" style="width:42px;height:42px;border-radius:50%;background:#ef4444;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+								<svg width="20" height="20" fill="white" viewBox="0 0 16 16"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 12.5a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z"/><path d="M7.25 4h1.5v5h-1.5zM7.25 10h1.5v1.5h-1.5z"/></svg>
+							</div>
+							<div>
+								<div class="text-muted" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em">MQTT Broker</div>
+								<div id="mqttStatusText" style="font-weight:600;font-size:.95rem">Checking…</div>
+								<div id="mqttAddress" class="text-muted" style="font-size:.8rem"></div>
+							</div>
+						</div>
 					</div>
-					<div class="alert alert-warning alert-dismissible fade d-none" id="liveDataAlert" role="alert">
-						<small id="liveDataMessage"></small>
-						<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+				</div>
+				<div class="col-md-4">
+					<div class="card h-100">
+						<div class="card-body d-flex align-items-center gap-3">
+							<div style="width:42px;height:42px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+								<svg width="20" height="20" fill="white" viewBox="0 0 16 16"><path d="M2 2h12v12H2V2zm1 1v10h10V3H3z"/><path d="M4 5h8v1H4zM4 7h8v1H4zM4 9h5v1H4z"/></svg>
+							</div>
+							<div>
+								<div class="text-muted" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em">Device</div>
+								<div id="deviceModel" style="font-weight:600;font-size:.95rem">—</div>
+								<div id="deviceSerial" class="text-muted" style="font-size:.8rem"></div>
+							</div>
+						</div>
 					</div>
-					<div class="card-body">
-						<table class="table">
-							<thead>
-								<tr>
-									<th width="50px"><input type="checkbox" id="selectAll" class="form-check-input"></th>
-									<th>Name</th>
-									<th>Subscription topic</th>
-								</tr>
-							</thead>
-							<tbody id="publishTable">
-								<tr>
-									<td><input type="checkbox" class="form-check-input publish-check" data-type="events"></td>
-									<td>Events</td>
-									<td><span id="EventTopic"></span></td>
-								</tr>
-								<tr>
-									<td><input type="checkbox" class="form-check-input publish-check" data-type="detections"></td>
-									<td>Detections</td>
-									<td><span id="DetectionsTopic"></span></td>
-								</tr>
-								<tr>
-									<td><input type="checkbox" class="form-check-input publish-check" data-type="tracker"></td>
-									<td>Trackers</td>
-									<td><span id="TrackerTopic"></span></td>
-								</tr>
-								<tr>
-									<td><input type="checkbox" class="form-check-input publish-check" data-type="path"></td>
-									<td>Paths</td>
-									<td><span id="PathsTopic"></span></td>
-								</tr>
-								<tr>
-									<td><input type="checkbox" class="form-check-input publish-check" data-type="occupancy"></td>
-									<td>Occupancy</td>
-									<td><span id="OccupancyTopic"></span></td>
-								</tr>
-								<tr>
-									<td><input type="checkbox" class="form-check-input publish-check" data-type="anomaly"></td>
-									<td>Anomaly</td>
-									<td><span id="AnomalyTopic"></span></td>
-								</tr>
-								<tr>
-									<td><input type="checkbox" class="form-check-input publish-check" data-type="geospace"></td>
-									<td>Geospace</td>
-									<td><span id="GeoSpaceTopic"></span></td>
-								</tr>
-								<tr>
-									<td><input type="checkbox" class="form-check-input publish-check" data-type="status"></td>
-									<td>Status</td>
-									<td><span id="StatusTopic"></span></td>
-								</tr>
-							</tbody>
-						</table>
+				</div>
+				<div class="col-md-4">
+					<div class="card h-100">
+						<div class="card-body d-flex align-items-center gap-3">
+							<div style="width:42px;height:42px;border-radius:50%;background:#8b5cf6;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+								<svg width="20" height="20" fill="white" viewBox="0 0 16 16"><path d="M8 1L1 5v6l7 4 7-4V5L8 1zm0 1.5L13.5 5.5 8 8.5 2.5 5.5 8 2.5zM2 6.27l5.5 3.14v4.32L2 10.59V6.27zm6.5 3.14L14 6.27v4.32l-5.5 3.14V9.41z"/></svg>
+							</div>
+							<div>
+								<div class="text-muted" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em">Active Topics</div>
+								<div id="activeTopicCount" style="font-weight:600;font-size:.95rem">0 / 8</div>
+								<div class="text-muted" style="font-size:.8rem">publishing</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="alert alert-warning alert-dismissible fade d-none" id="liveDataAlert" role="alert">
+				<small id="liveDataMessage"></small>
+				<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+			</div>
+
+			<!-- Publish table -->
+			<div class="row">
+				<div class="col-lg-8">
+					<div class="card">
+						<div class="card-header">
+							<h5 class="card-title mb-0">MQTT Data Streams</h5>
+						</div>
+						<div class="card-body p-0">
+							<table class="table table-hover mb-0">
+								<thead>
+									<tr>
+										<th width="50px" class="ps-3"><input type="checkbox" id="selectAll" class="form-check-input"></th>
+										<th>Stream</th>
+										<th>Subscription Topic</th>
+									</tr>
+								</thead>
+								<tbody id="publishTable">
+									<tr>
+										<td class="ps-3"><input type="checkbox" class="form-check-input publish-check" data-type="events"></td>
+										<td>Events</td>
+										<td><code id="EventTopic" style="font-size:.8rem"></code></td>
+									</tr>
+									<tr>
+										<td class="ps-3"><input type="checkbox" class="form-check-input publish-check" data-type="detections"></td>
+										<td>Detections</td>
+										<td><code id="DetectionsTopic" style="font-size:.8rem"></code></td>
+									</tr>
+									<tr>
+										<td class="ps-3"><input type="checkbox" class="form-check-input publish-check" data-type="tracker"></td>
+										<td>Trackers</td>
+										<td><code id="TrackerTopic" style="font-size:.8rem"></code></td>
+									</tr>
+									<tr>
+										<td class="ps-3"><input type="checkbox" class="form-check-input publish-check" data-type="path"></td>
+										<td>Paths</td>
+										<td><code id="PathsTopic" style="font-size:.8rem"></code></td>
+									</tr>
+									<tr>
+										<td class="ps-3"><input type="checkbox" class="form-check-input publish-check" data-type="occupancy"></td>
+										<td>Occupancy</td>
+										<td><code id="OccupancyTopic" style="font-size:.8rem"></code></td>
+									</tr>
+									<tr>
+										<td class="ps-3"><input type="checkbox" class="form-check-input publish-check" data-type="anomaly"></td>
+										<td>Anomaly</td>
+										<td><code id="AnomalyTopic" style="font-size:.8rem"></code></td>
+									</tr>
+									<tr>
+										<td class="ps-3"><input type="checkbox" class="form-check-input publish-check" data-type="geospace"></td>
+										<td>Geospace</td>
+										<td><code id="GeoSpaceTopic" style="font-size:.8rem"></code></td>
+									</tr>
+									<tr>
+										<td class="ps-3"><input type="checkbox" class="form-check-input publish-check" data-type="status"></td>
+										<td>Status</td>
+										<td><code id="StatusTopic" style="font-size:.8rem"></code></td>
+									</tr>
+								</tbody>
+							</table>
+						</div>
 					</div>
 				</div>
 			</div>
@@ -108,7 +160,6 @@ var app = null;
 
 $(document).ready(function() {
 
-	let App = 0;
 	// Main AJAX call
 	$.ajax({
 		type: "GET",
@@ -120,9 +171,15 @@ $(document).ready(function() {
 			document.title = app.manifest.acapPackageConf.setup.friendlyName;
 			$('.sidebar-heading').text(app.manifest.acapPackageConf.setup.friendlyName);
 
+			// Populate device info card
+			$('#deviceModel').text(app.device.model || '—');
+			$('#deviceSerial').text(app.device.serial || '');
+
 			if( app.status.mqtt.connected ) {
+				updateMQTTStatusCard(true, app.mqtt.address);
 				ConnectWebSocketClient();
 			} else {
+				updateMQTTStatusCard(false, app.mqtt.address);
 				setTimeout(() => {
 					showLiveDataMessage("Live data visualization in unavailable. Check MQTT Settings");
 					showToast("DataQ is not connected to a broker.  Please go to MQTT Settings");
@@ -141,7 +198,6 @@ $(document).ready(function() {
 			$('#GeoSpaceTopic').text(pretopic + '/geospace/' + serial);
 			$('#StatusTopic').text(pretopic + '/status/' + serial);
 
-			// Change these lines in the AJAX success callback
 			$('.publish-check[data-type="events"]').prop('checked', app.settings.publish.events);
 			$('.publish-check[data-type="occupancy"]').prop('checked', app.settings.publish.occupancy || false);
 			$('.publish-check[data-type="anomaly"]').prop('checked', app.settings.publish.anomaly || false);
@@ -150,11 +206,36 @@ $(document).ready(function() {
 			$('.publish-check[data-type="path"]').prop('checked', app.settings.publish.path);
 			$('.publish-check[data-type="geospace"]').prop('checked', app.settings.publish.geospace);
 			$('.publish-check[data-type="status"]').prop('checked', app.settings.publish.status);
+
+			updateSelectAllCheckbox();
+			updateActiveTopicCount();
 		},
         error: function(response) {
 			showToast("The application is not running",'danger');
 		}
 	});
+
+	function updateMQTTStatusCard(connected, address) {
+		const icon = document.getElementById('mqttStatusIcon');
+		const text = document.getElementById('mqttStatusText');
+		const addr = document.getElementById('mqttAddress');
+		if (connected) {
+			icon.style.background = '#22c55e';
+			text.textContent = 'Connected';
+			text.style.color = '#16a34a';
+		} else {
+			icon.style.background = '#ef4444';
+			text.textContent = 'Disconnected';
+			text.style.color = '#dc2626';
+		}
+		if (address) addr.textContent = address;
+	}
+
+	function updateActiveTopicCount() {
+		const total = $('.publish-check').length;
+		const checked = $('.publish-check:checked').length;
+		$('#activeTopicCount').text(checked + ' / ' + total);
+	}
 
 	function showLiveDataMessage(message) {
 		const alert = document.getElementById('liveDataAlert');
@@ -181,15 +262,15 @@ $(document).ready(function() {
 			contentType: 'application/json',
 			data: JSON.stringify(payload),
 			success: function(response) {
-				showToast("Filter updated",'info');
+				showToast("Settings updated",'info');
 			},
 			error: function(xhr, status, error) {
-				showToast("Filter updated failed",'danger');
+				showToast("Settings update failed",'danger');
 			}
 		});
 		
 		updateSelectAllCheckbox();
-		
+		updateActiveTopicCount();
 	});
 
 	$('#selectAll').on('change', function() {
@@ -197,22 +278,16 @@ $(document).ready(function() {
 		$('.publish-check').prop('checked', isChecked).trigger('change');
 	});
 
-	// Update select all checkbox state based on individual checkboxes
 	function updateSelectAllCheckbox() {
 		const totalCheckboxes = $('.publish-check').length;
 		const checkedCheckboxes = $('.publish-check:checked').length;
 		$('#selectAll').prop('checked', totalCheckboxes === checkedCheckboxes);
 	}
 
-	// Call initially to set the select all checkbox state
-	updateSelectAllCheckbox();
-
 	function ConnectWebSocketClient() {
 		const clientID = "WS-" + app.manifest.acapPackageConf.setup.appName + "-" + app.device.serial + "-" + Math.floor(Math.random() * 10000);
 		if(MQTT_Client)
 			delete MQTT_Client;
-		
-		// Use WSS if page is loaded over HTTPS
 		
 		var tls = app.settings.tls;
 		if( location.protocol === 'https:')
@@ -242,12 +317,14 @@ $(document).ready(function() {
 
 	function onFailure(message) {
 		console.log("onFailure");
+		updateMQTTStatusCard(false, null);
 		showLiveDataMessage("Live data visualization is temporarily unavailable - Web client is not connected to broker.");
-		showToast("Web page not connect. " + message.errorMessage + "Check WebSocket connection in MQTT Settings","warning");
+		showToast("Web page not connected. " + message.errorMessage + " Check WebSocket connection in MQTT Settings","warning");
 	}
 
 	function onConnectionLost(responseObject) {
 	  if (responseObject.errorCode !== 0) {
+		updateMQTTStatusCard(false, null);
 		showLiveDataMessage("Live data visualization is temporarily unavailable - Web client is not connected to broker.");
 		showToast("Web page lost connection. " + responseObject.errorMessage,"warning");
 	  }

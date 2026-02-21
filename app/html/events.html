@@ -7,12 +7,7 @@
     <link rel="stylesheet" href="css/bootstrap.min.css">
     <link rel="stylesheet" href="css/app.css">
     <style>
-        .message-row {
-            cursor: pointer;
-        }
-        .message-row:hover {
-            background-color: rgba(0,0,0,.075);
-        }
+        .message-row { cursor: pointer; }
     </style>
     <script src="js/jquery-3.7.1.min.js"></script>
     <script src="js/bootstrap.bundle.min.js"></script>
@@ -20,18 +15,20 @@
 </head>
 <body>
 <div class="d-flex" id="wrapper">
-    <div class="bg-light border-right" id="sidebar-wrapper">
+            <div class="bg-light border-right" id="sidebar-wrapper">
         <div class="sidebar-heading">&nbsp;</div>
         <div class="list-group list-group-flush">
-            <a href="index.html" class="list-group-item list-group-item-action">Publish</a>
+            <a href="index.html" class="list-group-item list-group-item-action">Overview</a>
             <a href="events.html" class="list-group-item list-group-item-action active">Events</a>
             <a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
             <a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
             <a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
-			<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
-			<a href="anomaly.html" class="list-group-item list-group-item-action">Anomaly</a>
-			<a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
+            <a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
+            <a href="anomaly.html" class="list-group-item list-group-item-action">Anomaly</a>
+            <a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
+            <hr class="sidebar-divider">
             <a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
+            <a href="advanced.html" class="list-group-item list-group-item-action">Advanced</a>
             <a href="about.html" class="list-group-item list-group-item-action">About</a>
         </div>
     </div>
@@ -55,19 +52,18 @@
 					<div id="locationContent" class="location-content">
 						<div class="card-body" id="settings-form">
 				
-							<div class="row mt-3">
-								<!-- Topics Card -->
-								<div class="col-6">
-									<div class="card">
-										<div class="card-header">
-											<h5 class="card-title mb-0">Topics to be published</h5>
-										</div>
-										<div class="alert alert-warning alert-dismissible fade d-none" id="liveDataAlert" role="alert">
-											<small id="liveDataMessage"></small>
-											<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-										</div>
-										
-										<div class="card-body">
+						<div class="row g-3">
+							<!-- Topics Card -->
+							<div class="col-lg-6">
+								<div class="card">
+									<div class="card-header">
+										<h5 class="card-title mb-0">Event Topics</h5>
+									</div>
+									<div class="alert alert-warning alert-dismissible fade d-none" id="liveDataAlert" role="alert">
+										<small id="liveDataMessage"></small>
+										<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+									</div>
+									<div class="card-body p-0">
 											<table class="table table-hover">
 												<thead>
 													<tr>
@@ -81,15 +77,15 @@
 											</table>
 										</div>
 									</div>
-								</div>
-								
-								<!-- Messages Card -->
-								<div class="col-6">
-									<div class="card">
-										<div class="card-header">
-											<h5 class="card-title mb-0">Message monitor (click to view payload)</h5>
-										</div>
-										<div class="card-body">
+							</div>
+							
+							<!-- Messages Card -->
+							<div class="col-lg-6">
+								<div class="card">
+									<div class="card-header">
+										<h5 class="card-title mb-0">Message Monitor</h5>
+									</div>
+									<div class="card-body p-0">
 											<table class="table table-hover">
 												<thead>
 													<tr>
@@ -135,7 +131,6 @@ var app = null;
 let messages = [];
 
 $(document).ready(function() {
-    let App = 0;
     // Main AJAX call
     $.ajax({
         type: "GET",
@@ -166,14 +161,14 @@ $(document).ready(function() {
 						contentType: 'application/json',
 						data: JSON.stringify(payload),
 						error: function(xhr, status, error) {
-							showToast("Calibration failed", 'danger');
+							showToast("Settings update failed", 'danger');
 						}
 					});
 					
 					// Show/hide content
 					content.classList.toggle('hidden', !this.checked);
 				} catch (error) {
-					console.error('Failed to update geolocation setting:', error);
+					console.error('Failed to update setting:', error);
 					// Revert the toggle if saving failed
 					this.checked = !this.checked;
 					alert('Failed to update location settings');
@@ -231,25 +226,22 @@ function ConnectWebSocketClient() {
 }
 
 function updateConnectionStatus(status) {
-    const statusElement = document.getElementById('connectionStatus');
-    const messageElement = document.getElementById('statusMessage');
-    
+    const el = document.getElementById('connectionStatus');
+    const msg = document.getElementById('statusMessage');
+    el.className = 'connection-status';
     switch (status) {
         case 'connected':
-            statusElement.style.backgroundColor = '#00ff00'; // Green
-            messageElement.textContent = 'Connected';
+            msg.textContent = 'Connected';
             break;
         case 'disconnected':
-            statusElement.style.backgroundColor = '#ff0000'; // Red
-            messageElement.textContent = 'Disconnected';
+            el.classList.add('status-disconnected');
+            msg.textContent = 'Disconnected';
             break;
         case 'connecting':
         case 'reconnecting':
-            statusElement.style.backgroundColor = '#ffff00'; // Yellow
-            messageElement.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+            el.classList.add('status-connecting');
+            msg.textContent = status.charAt(0).toUpperCase() + status.slice(1);
             break;
-        default:
-            console.log('Unknown status:', status);
     }
 }
 
@@ -297,10 +289,10 @@ document.getElementById('topicsList').addEventListener('change', function(event)
 				contentType: 'application/json',
 				data: JSON.stringify(payload),
 				success: function(response) {
-					showToast("Filter updated",'info');
+					showToast("Settings updated",'info');
 				},
 				error: function(xhr, status, error) {
-					showToast("Filter updated failed",'danger');
+					showToast("Settings update failed",'danger');
 				}
 			});
         }

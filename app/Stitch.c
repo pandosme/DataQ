@@ -237,7 +237,7 @@ static cJSON* merge_paths(cJSON* a, cJSON* b) {
 }
 
 void Stitch_Path(cJSON* path) {
-    if(!path) { stitch_publish(path); return; }
+    if(!path) return;
     if(!stitch_active) { stitch_publish(path); return; }
 
     cJSON* arr = cJSON_GetObjectItem(path, "path");
@@ -368,19 +368,15 @@ void Stitch_Path(cJSON* path) {
             return;
         }
 
-        // If both in area but no match, publish immediately (short path that stays in area)
-        if(birth_in && death_in) {
-            stitch_publish(path);
-            g_mutex_unlock(&stitch_mutex);
-            return;
-        }
-        // If birth in and death out without match: fall through to hold for matching
+        // No match found - publish immediately
+        // (both in area = short path, or birth in area but exited = not the same object)
+        stitch_publish(path);
+        g_mutex_unlock(&stitch_mutex);
+        return;
     }
 
     // Hold path for future matching
-    // This handles:
-    //   1. !birth_in && death_in (path entering area)
-    //   2. birth_in && !death_in without match (path leaving area)
+    // Path entered from outside and died in stitch area - wait for a new path born in the area
     StitchHeldPath* hp = malloc(sizeof(StitchHeldPath));
     hp->path = path;
     hp->expiry_timer = g_timer_new();

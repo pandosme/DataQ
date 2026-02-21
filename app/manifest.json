@@ -7,7 +7,7 @@
             "vendor": "Fred Juhlin",
             "embeddedSdkVersion": "3.0",
             "vendorUrl": "https://pandosme.github.io",
-            "runMode": "once",
+            "runMode": "respawn",
             "version": "2.1.10"
         },
         "configuration": {

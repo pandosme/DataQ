@@ -148,6 +148,7 @@ cJSON* ProcessPaths(cJSON* tracker) {
         cJSON_AddNumberToObject(pos1, "x", bxItem ? bxItem->valuedouble : 0);
         cJSON_AddNumberToObject(pos1, "y", byItem ? byItem->valuedouble : 0);
         cJSON_AddNumberToObject(pos1, "d", 0);  // Will be updated on first tracker update
+        cJSON_AddNumberToObject(pos1, "t", birthTime / 1000.0);  // Epoch seconds for stitch matching
         if (blat && blon) {
             cJSON_AddNumberToObject(pos1, "lat", blat);
             cJSON_AddNumberToObject(pos1, "lon", blon);
@@ -155,10 +156,14 @@ cJSON* ProcessPaths(cJSON* tracker) {
         cJSON_AddItemToArray(pathArr, pos1);
 
         // Position 1: Current position (cx, cy)
+        cJSON* cxNew = cJSON_GetObjectItem(tracker, "cx");
+        cJSON* cyNew = cJSON_GetObjectItem(tracker, "cy");
+        if (!cxNew || !cyNew) return 0;
         cJSON* pos2 = cJSON_CreateObject();
-        cJSON_AddNumberToObject(pos2, "x", cJSON_GetObjectItem(tracker, "cx")->valuedouble);
-        cJSON_AddNumberToObject(pos2, "y", cJSON_GetObjectItem(tracker, "cy")->valuedouble);
+        cJSON_AddNumberToObject(pos2, "x", cxNew->valuedouble);
+        cJSON_AddNumberToObject(pos2, "y", cyNew->valuedouble);
         cJSON_AddNumberToObject(pos2, "d", 0);  // Will be updated on next tracker update
+        cJSON_AddNumberToObject(pos2, "t", currentTimestamp / 1000.0);  // Epoch seconds for stitch matching
         if (lat && lon) {
             cJSON_AddNumberToObject(pos2, "lat", lat);
             cJSON_AddNumberToObject(pos2, "lon", lon);
@@ -199,13 +204,13 @@ cJSON* ProcessPaths(cJSON* tracker) {
         int pathLen = cJSON_GetArraySize(pathArr);
 
         if (pathLen >= 2) {
-            // FIX #1: Update SECOND-TO-LAST position's duration
-            // This is position[pathLen-2], which represents where the object WAS
-            cJSON* secondToLast = cJSON_GetArrayItem(pathArr, pathLen - 2);
+            // Update the LAST position's duration — this is where the object WAS
+            // between the previous tracker event and this new movement event
+            cJSON* lastPos = cJSON_GetArrayItem(pathArr, pathLen - 1);
 
             // Calculate duration: time object spent at that position
             double duration = (currentTimestamp - previousTimestamp) / 1000.0; // Convert ms to seconds
-            cJSON_ReplaceItemInObject(secondToLast, "d", cJSON_CreateNumber(duration));
+            cJSON_ReplaceItemInObject(lastPos, "d", cJSON_CreateNumber(duration));
         }
 
         // Update dwell to be the maximum "d" value in the path array
@@ -223,10 +228,14 @@ cJSON* ProcessPaths(cJSON* tracker) {
         }
 
         // Add NEW position with d=0 (will be calculated on next update or exit)
+        cJSON* cxUpd = cJSON_GetObjectItem(tracker, "cx");
+        cJSON* cyUpd = cJSON_GetObjectItem(tracker, "cy");
+        if (!cxUpd || !cyUpd) return 0;
         cJSON* pos = cJSON_CreateObject();
-        cJSON_AddNumberToObject(pos, "x", cJSON_GetObjectItem(tracker, "cx")->valuedouble);
-        cJSON_AddNumberToObject(pos, "y", cJSON_GetObjectItem(tracker, "cy")->valuedouble);
+        cJSON_AddNumberToObject(pos, "x", cxUpd->valuedouble);
+        cJSON_AddNumberToObject(pos, "y", cyUpd->valuedouble);
         cJSON_AddNumberToObject(pos, "d", 0);  // Always 0 for newest position
+        cJSON_AddNumberToObject(pos, "t", currentTimestamp / 1000.0);  // Epoch seconds for stitch matching
         
         double lat = cJSON_GetObjectItem(tracker, "lat") ? 
                      cJSON_GetObjectItem(tracker, "lat")->valuedouble : 0;
@@ -276,11 +285,18 @@ cJSON* ProcessPaths(cJSON* tracker) {
             cJSON_ReplaceItemInObject(path, "distance", cJSON_CreateNumber(distance));
 
             // Update other final metadata
-            cJSON_AddNumberToObject(path, "directions", cJSON_GetObjectItem(tracker, "directions")->valueint);
-            if (cJSON_GetObjectItem(tracker, "anomaly"))
-                cJSON_AddStringToObject(path, "anomaly", cJSON_GetObjectItem(tracker, "anomaly")->valuestring);
-            if (cJSON_GetObjectItem(tracker, "maxSpeed"))
-                cJSON_AddNumberToObject(path, "maxSpeed", cJSON_GetObjectItem(tracker, "maxSpeed")->valuedouble);
+            cJSON* pathDirItem = cJSON_GetObjectItem(tracker, "directions");
+            if (pathDirItem)
+                cJSON_AddNumberToObject(path, "directions", pathDirItem->valueint);
+            cJSON* pathAnomalyItem = cJSON_GetObjectItem(tracker, "anomaly");
+            if (pathAnomalyItem && pathAnomalyItem->valuestring)
+                cJSON_AddStringToObject(path, "anomaly", pathAnomalyItem->valuestring);
+            cJSON* pathMaxSpeedItem = cJSON_GetObjectItem(tracker, "maxSpeed");
+            if (pathMaxSpeedItem)
+                cJSON_AddNumberToObject(path, "maxSpeed", pathMaxSpeedItem->valuedouble);
+            cJSON* pathMaxIdleItem = cJSON_GetObjectItem(tracker, "maxIdle");
+            if (pathMaxIdleItem)
+                cJSON_AddNumberToObject(path, "maxIdle", pathMaxIdleItem->valuedouble);
 
             // NO PreviousTimestamp cache cleanup needed anymore!
 
@@ -324,7 +340,9 @@ void
 Check_Anomaly(cJSON* tracker) {
 
     int is_human = 0, is_vehicle = 0;
-    const char* label = cJSON_GetObjectItem(tracker, "class")->valuestring;
+    cJSON* classItem = cJSON_GetObjectItem(tracker, "class");
+    if (!classItem || !classItem->valuestring) return;
+    const char* label = classItem->valuestring;
     if (strcmp("Human", label) == 0) is_human = 1;
     // If vehicle-like class
     if (strcmp("Car", label) == 0 || strcmp("Truck", label) == 0 ||
@@ -333,7 +351,8 @@ Check_Anomaly(cJSON* tracker) {
         is_vehicle = 1;
 
     // Save stats
-    if (cJSON_GetObjectItem(tracker,"active")->type == cJSON_False) {
+    cJSON* activeCheck = cJSON_GetObjectItem(tracker, "active");
+    if (activeCheck && activeCheck->type == cJSON_False) {
         char* group_label = is_human ? "humans" : "vehicles";
         cJSON* stats;
 
@@ -341,26 +360,30 @@ Check_Anomaly(cJSON* tracker) {
         if(!stats) stats = cJSON_CreateArray();
         while( cJSON_GetArraySize(stats) > 200 )
             cJSON_DeleteItemFromArray(stats, 0);
-        cJSON_AddItemToArray(stats, cJSON_CreateNumber(cJSON_GetObjectItem(tracker, "directions")->valueint));
+        cJSON* dirItem = cJSON_GetObjectItem(tracker, "directions");
+        cJSON_AddItemToArray(stats, cJSON_CreateNumber(dirItem ? dirItem->valueint : 0));
         ACAP_STATUS_SetObject(group_label, "directions", stats);
 
         stats = ACAP_STATUS_Object(group_label, "age");
         if(!stats) stats = cJSON_CreateArray();
-        cJSON_AddItemToArray(stats, cJSON_CreateNumber(cJSON_GetObjectItem(tracker, "age")->valuedouble));
+        cJSON* ageStatItem = cJSON_GetObjectItem(tracker, "age");
+        cJSON_AddItemToArray(stats, cJSON_CreateNumber(ageStatItem ? ageStatItem->valuedouble : 0));
         while( cJSON_GetArraySize(stats) > 200 )
             cJSON_DeleteItemFromArray(stats, 0);
         ACAP_STATUS_SetObject(group_label, "age", stats);
 
         stats = ACAP_STATUS_Object(group_label, "idle");
         if(!stats) stats = cJSON_CreateArray();
-        cJSON_AddItemToArray(stats, cJSON_CreateNumber(cJSON_GetObjectItem(tracker, "maxIdle")->valuedouble));
+        cJSON* maxIdleStatItem = cJSON_GetObjectItem(tracker, "maxIdle");
+        cJSON_AddItemToArray(stats, cJSON_CreateNumber(maxIdleStatItem ? maxIdleStatItem->valuedouble : 0));
         while( cJSON_GetArraySize(stats) > 200 )
             cJSON_DeleteItemFromArray(stats, 0);
         ACAP_STATUS_SetObject(group_label, "idle", stats);
 
         stats = ACAP_STATUS_Object(group_label, "speed");
         if(!stats) stats = cJSON_CreateArray();
-        double speed = cJSON_GetObjectItem(tracker, "maxSpeed")->valuedouble;
+        cJSON* maxSpeedStatItem = cJSON_GetObjectItem(tracker, "maxSpeed");
+        double speed = maxSpeedStatItem ? maxSpeedStatItem->valuedouble : 0;
         if (speed > 0) {
             cJSON_AddItemToArray(stats, cJSON_CreateNumber(speed));
             while( cJSON_GetArraySize(stats) > 200 )
@@ -370,7 +393,8 @@ Check_Anomaly(cJSON* tracker) {
 
         stats = ACAP_STATUS_Object(group_label, "horizontal");
         if(!stats) stats = cJSON_CreateArray();
-        int dx = cJSON_GetObjectItem(tracker, "dx")->valueint;
+        cJSON* dxStatItem = cJSON_GetObjectItem(tracker, "dx");
+        int dx = dxStatItem ? dxStatItem->valueint : 0;
         cJSON_AddItemToArray(stats, cJSON_CreateNumber(dx));
         while( cJSON_GetArraySize(stats) > 200 )
             cJSON_DeleteItemFromArray(stats, 0);
@@ -378,7 +402,8 @@ Check_Anomaly(cJSON* tracker) {
 
         stats = ACAP_STATUS_Object(group_label, "vertical");
         if(!stats) stats = cJSON_CreateArray();
-        int dy = cJSON_GetObjectItem(tracker, "dy")->valueint;
+        cJSON* dyStatItem = cJSON_GetObjectItem(tracker, "dy");
+        int dy = dyStatItem ? dyStatItem->valueint : 0;
         cJSON_AddItemToArray(stats, cJSON_CreateNumber(dy));
         while( cJSON_GetArraySize(stats) > 200 )
             cJSON_DeleteItemFromArray(stats, 0);
@@ -403,10 +428,15 @@ Check_Anomaly(cJSON* tracker) {
     cJSON* common = cJSON_GetObjectItem(group, "common");
     cJSON* restricted = cJSON_GetObjectItem(group, "restricted");
 
-    int cx = cJSON_GetObjectItem(tracker, "cx")->valueint;
-    int cy = cJSON_GetObjectItem(tracker, "cy")->valueint;
-    int bx = cJSON_GetObjectItem(tracker, "bx")->valueint;
-    int by = cJSON_GetObjectItem(tracker, "by")->valueint;
+    cJSON* cxItem_a = cJSON_GetObjectItem(tracker, "cx");
+    cJSON* cyItem_a = cJSON_GetObjectItem(tracker, "cy");
+    cJSON* bxItem_a = cJSON_GetObjectItem(tracker, "bx");
+    cJSON* byItem_a = cJSON_GetObjectItem(tracker, "by");
+    if (!cxItem_a || !cyItem_a || !bxItem_a || !byItem_a) return;
+    int cx = cxItem_a->valueint;
+    int cy = cyItem_a->valueint;
+    int bx = bxItem_a->valueint;
+    int by = byItem_a->valueint;
 
     // AREA VALIDATION
 
@@ -433,7 +463,8 @@ Check_Anomaly(cJSON* tracker) {
     }
 
     found_common = 0;
-    if (common && cJSON_GetArraySize(common) && cJSON_GetObjectItem(tracker,"active")->type == cJSON_False) {
+    cJSON* activeExitCheck = cJSON_GetObjectItem(tracker, "active");
+    if (common && cJSON_GetArraySize(common) && activeExitCheck && activeExitCheck->type == cJSON_False) {
         cJSON* item = common->child;
         while(item && !found_common) {
             int x1 = cJSON_GetObjectItem(item,"x1")->valueint;
@@ -457,8 +488,9 @@ Check_Anomaly(cJSON* tracker) {
     int found_restricted = 0;
     if (restricted && cJSON_GetArraySize(restricted)) {
         cJSON* item = restricted->child;
-		if( cJSON_GetObjectItem(item,"distance")->valueint < 20 )
-			item = 0;
+        cJSON* distCheck = item ? cJSON_GetObjectItem(item, "distance") : NULL;
+        if (distCheck && distCheck->valueint < 20)
+            item = 0;
         while(item && !found_restricted) {
             int x1 = cJSON_GetObjectItem(item,"x1")->valueint;
             int x2 = cJSON_GetObjectItem(item,"x2")->valueint;
@@ -558,6 +590,7 @@ Check_Anomaly(cJSON* tracker) {
 }
 
 void Tracker_Data(cJSON *tracker, int timer) {
+    if (!tracker) return;
     char topic[128];
 
 	Check_Anomaly( tracker );
@@ -573,24 +606,34 @@ void Tracker_Data(cJSON *tracker, int timer) {
     }
 
     if (publishGeospace && ACAP_STATUS_Bool("geospace", "active")) {
+        cJSON* geoCx = cJSON_GetObjectItem(tracker, "cx");
+        cJSON* geoCy = cJSON_GetObjectItem(tracker, "cy");
+        if (!geoCx || !geoCy) goto skip_geospace;
         double lat = 0, lon = 0;
-        GeoSpace_transform(cJSON_GetObjectItem(tracker, "cx")->valueint, cJSON_GetObjectItem(tracker, "cy")->valueint, &lat, &lon);
+        GeoSpace_transform(geoCx->valueint, geoCy->valueint, &lat, &lon);
         if (lat && lon) {
             cJSON_AddNumberToObject(tracker, "lat", lat);
             cJSON_AddNumberToObject(tracker, "lon", lon);
             cJSON* geospaceObject = cJSON_CreateObject();
-            cJSON_AddStringToObject(geospaceObject, "class", cJSON_GetObjectItem(tracker, "class")->valuestring);
+            cJSON* geoClass = cJSON_GetObjectItem(tracker, "class");
+            if (geoClass && geoClass->valuestring)
+                cJSON_AddStringToObject(geospaceObject, "class", geoClass->valuestring);
             cJSON_AddNumberToObject(geospaceObject, "lat", lat);
             cJSON_AddNumberToObject(geospaceObject, "lon", lon);
-            cJSON_AddNumberToObject(geospaceObject, "age", cJSON_GetObjectItem(tracker, "age")->valuedouble);
-            cJSON_AddNumberToObject(geospaceObject, "idle", cJSON_GetObjectItem(tracker, "idle")->valuedouble);
-            cJSON_AddStringToObject(geospaceObject, "id", cJSON_GetObjectItem(tracker, "id")->valuestring);
-			cJSON_AddItemToObject(geospaceObject, "active", cJSON_Duplicate(cJSON_GetObjectItem(tracker,"active"), 1));
+            cJSON* geoAge = cJSON_GetObjectItem(tracker, "age");
+            cJSON* geoIdle = cJSON_GetObjectItem(tracker, "idle");
+            cJSON* geoId = cJSON_GetObjectItem(tracker, "id");
+            cJSON* geoActive = cJSON_GetObjectItem(tracker, "active");
+            if (geoAge) cJSON_AddNumberToObject(geospaceObject, "age", geoAge->valuedouble);
+            if (geoIdle) cJSON_AddNumberToObject(geospaceObject, "idle", geoIdle->valuedouble);
+            if (geoId && geoId->valuestring) cJSON_AddStringToObject(geospaceObject, "id", geoId->valuestring);
+            if (geoActive) cJSON_AddItemToObject(geospaceObject, "active", cJSON_Duplicate(geoActive, 1));
             snprintf(topic, sizeof(topic), "geospace/%s", ACAP_DEVICE_Prop("serial"));
             MQTT_Publish_JSON(topic, geospaceObject, 0, 0);
             cJSON_Delete(geospaceObject);
         }
     }
+    skip_geospace:
 
     cJSON_Delete(tracker);
 }
@@ -602,10 +645,11 @@ void Publish_Path( cJSON* path ){
 	MQTT_Publish_JSON(topic, path, 0, 0);
 	
     cJSON* statusPaths = ACAP_STATUS_Object("detections", "paths");
-	
-    cJSON_AddItemToArray(statusPaths, cJSON_Duplicate(path, 1));
-    while (cJSON_GetArraySize(statusPaths) > 10)
-        cJSON_DeleteItemFromArray(statusPaths, 0);
+	if (statusPaths) {
+		cJSON_AddItemToArray(statusPaths, cJSON_Duplicate(path, 1));
+		while (cJSON_GetArraySize(statusPaths) > 10)
+			cJSON_DeleteItemFromArray(statusPaths, 0);
+	}
 	cJSON_Delete(path);
 }
 
@@ -731,9 +775,14 @@ cJSON* ProcessOccupancy(cJSON* list) {
     cJSON* counters = cJSON_CreateObject();
     for (int i = 0; i < listSize; ++i) {
         cJSON* det = cJSON_GetArrayItem(list, i);
-        const char* cls = cJSON_GetObjectItem(det, "class")->valuestring;
-        double age = cJSON_GetObjectItem(det, "age")->valuedouble;
-        double idle = cJSON_GetObjectItem(det, "idle")->valuedouble;
+        if (!det) continue;
+        cJSON* clsItem = cJSON_GetObjectItem(det, "class");
+        cJSON* ageItem_o = cJSON_GetObjectItem(det, "age");
+        cJSON* idleItem_o = cJSON_GetObjectItem(det, "idle");
+        if (!clsItem || !clsItem->valuestring || !ageItem_o || !idleItem_o) continue;
+        const char* cls = clsItem->valuestring;
+        double age = ageItem_o->valuedouble;
+        double idle = idleItem_o->valuedouble;
         int is_moving = (age >= ageThreshold) && (idle < idleThreshold);
         int is_stationary = (age >= ageThreshold) && (idle >= idleThreshold);
         if ((moving && is_moving) || (stationary && is_stationary)) {
@@ -787,7 +836,7 @@ void Detections_Data(cJSON *list) {
     char topic[128];
     if (publishDetections) {
         if (cJSON_GetArraySize(list) > 0 || !lasty_detections_was_empty) {
-            sprintf(topic, "detections/%s", ACAP_DEVICE_Prop("serial"));
+            snprintf(topic, sizeof(topic), "detections/%s", ACAP_DEVICE_Prop("serial"));
             cJSON* payload = cJSON_CreateObject();
             cJSON_AddItemReferenceToObject(payload, "list", list);
             MQTT_Publish_JSON(topic, payload, 0, 0);
@@ -816,7 +865,7 @@ void Detections_Data(cJSON *list) {
 				cJSON* payload = cJSON_CreateObject();
 				cJSON_AddItemToObject(payload, "occupancy", stabilized);
 				cJSON_AddNumberToObject(payload, "timestamp", now);
-				sprintf(topic, "occupancy/%s", ACAP_DEVICE_Prop("serial"));
+				snprintf(topic, sizeof(topic), "occupancy/%s", ACAP_DEVICE_Prop("serial"));
 				MQTT_Publish_JSON(topic, payload, 0, 0);
 				cJSON_Delete(payload);
 			}
@@ -861,7 +910,8 @@ void Event_Callback(cJSON *event, void* userdata) {
 
     cJSON* eventFilter = cJSON_GetObjectItem(settings, "eventTopics") ? cJSON_GetObjectItem(settings, "eventTopics")->child : 0;
     while (eventFilter) {
-        if (cJSON_GetObjectItem(eventFilter, "enabled")->type == cJSON_False) {
+        cJSON* enabledItem = cJSON_GetObjectItem(eventFilter, "enabled");
+        if (enabledItem && enabledItem->type == cJSON_False) {
             const char* ignoreTopic = cJSON_GetObjectItem(eventFilter, "topic") ? cJSON_GetObjectItem(eventFilter, "topic")->valuestring : 0;
             if (ignoreTopic && strstr(eventTopic->valuestring, ignoreTopic)) {
                 cJSON_Delete(eventTopic);
@@ -872,7 +922,7 @@ void Event_Callback(cJSON *event, void* userdata) {
     }
 
     char topic[256];
-    sprintf(topic, "event/%s/%s", ACAP_DEVICE_Prop("serial"), eventTopic->valuestring);
+    snprintf(topic, sizeof(topic), "event/%s/%s", ACAP_DEVICE_Prop("serial"), eventTopic->valuestring);
     cJSON_Delete(eventTopic);
     MQTT_Publish_JSON(topic, event, 0, 0);
 }
@@ -888,7 +938,7 @@ static gboolean MQTT_Publish_Device_Status(gpointer user_data) {
     cJSON_AddNumberToObject(payload, "Uptime_Hours", (int)(ACAP_DEVICE_Uptime() / 3600));
 
     char topic[256];
-    sprintf(topic, "status/%s", ACAP_DEVICE_Prop("serial"));
+    snprintf(topic, sizeof(topic), "status/%s", ACAP_DEVICE_Prop("serial"));
     MQTT_Publish_JSON(topic, payload, 0, 0);
     cJSON_Delete(payload);
 
@@ -908,7 +958,7 @@ void Main_MQTT_Status(int state) {
             break;
         case MQTT_CONNECTED:
             LOG("%s: Connected\n", __func__);
-            sprintf(topic, "connect/%s", ACAP_DEVICE_Prop("serial"));
+            snprintf(topic, sizeof(topic), "connect/%s", ACAP_DEVICE_Prop("serial"));
             message = cJSON_CreateObject();
             cJSON_AddTrueToObject(message, "connected");
             cJSON_AddStringToObject(message, "model", ACAP_DEVICE_Prop("model"));
@@ -918,7 +968,7 @@ void Main_MQTT_Status(int state) {
 			MQTT_Publish_Device_Status(0);
             break;
         case MQTT_DISCONNECTING:
-            sprintf(topic, "connect/%s", ACAP_DEVICE_Prop("serial"));
+            snprintf(topic, sizeof(topic), "connect/%s", ACAP_DEVICE_Prop("serial"));
             message = cJSON_CreateObject();
             cJSON_AddFalseToObject(message, "connected");
             cJSON_AddStringToObject(message, "address", ACAP_DEVICE_Prop("IPv4"));
@@ -980,7 +1030,12 @@ void Settings_Updated_Callback(const char* service, cJSON* data) {
 }
 
 void HandleVersionUpdateConfigurations(cJSON* settings) {
+    if (!settings) return;
     cJSON* scene = cJSON_GetObjectItem(settings, "scene");
+    if (!scene) {
+        scene = cJSON_CreateObject();
+        cJSON_AddItemToObject(settings, "scene", scene);
+    }
     if (!cJSON_GetObjectItem(scene, "maxIdle"))
         cJSON_AddNumberToObject(scene, "maxIdle", 0);
     if (!cJSON_GetObjectItem(scene, "tracker_confidence"))
@@ -1006,8 +1061,14 @@ void HandleVersionUpdateConfigurations(cJSON* settings) {
     }
     if (!cJSON_GetObjectItem(scene, "ignoreClass"))
         cJSON_AddArrayToObject(scene, "ignoreClass");
+    if (!cJSON_GetObjectItem(scene, "perspectiveGuard"))
+        cJSON_AddNumberToObject(scene, "perspectiveGuard", 0);
 
     cJSON* publish = cJSON_GetObjectItem(settings, "publish");
+    if (!publish) {
+        publish = cJSON_CreateObject();
+        cJSON_AddItemToObject(settings, "publish", publish);
+    }
     if (!cJSON_GetObjectItem(publish, "geospace"))
         cJSON_AddFalseToObject(publish, "geospace");
 }

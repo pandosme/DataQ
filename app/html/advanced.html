@@ -16,22 +16,23 @@
 <body>
     <div class="d-flex" id="wrapper">
         <!-- Sidebar -->
-        <div class="bg-light border-right" id="sidebar-wrapper">
-            <div class="sidebar-heading">&nbsp;</div>
-            <div class="list-group list-group-flush">
-                <a href="index.html" class="list-group-item list-group-item-action">Publish</a>
-                <a href="events.html" class="list-group-item list-group-item-action">Events</a>
-                <a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
-                <a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
-                <a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
-                <a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
-                <a href="anomaly.html" class="list-group-item list-group-item-action">Anomaly</a>
-                <a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
-                <a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
-                <a href="advanced.html" class="list-group-item list-group-item-action active">Advanced</a>
-                <a href="about.html" class="list-group-item list-group-item-action">About</a>
-            </div>
+                <div class="bg-light border-right" id="sidebar-wrapper">
+        <div class="sidebar-heading">&nbsp;</div>
+        <div class="list-group list-group-flush">
+            <a href="index.html" class="list-group-item list-group-item-action">Overview</a>
+            <a href="events.html" class="list-group-item list-group-item-action">Events</a>
+            <a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
+            <a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
+            <a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
+            <a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
+            <a href="anomaly.html" class="list-group-item list-group-item-action">Anomaly</a>
+            <a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
+            <hr class="sidebar-divider">
+            <a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
+            <a href="advanced.html" class="list-group-item list-group-item-action active">Advanced</a>
+            <a href="about.html" class="list-group-item list-group-item-action">About</a>
         </div>
+    </div>
 
         <div id="page-content-wrapper" class="p-0">
             <div class="container-fluid">
@@ -56,6 +57,49 @@
                                         <label class="form-check-label ms-2" for="tracker-predictions-switch">
                                             Enable Predictions
                                         </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Perspective Guard Card -->
+                    <div class="card mt-3">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">Perspective Guard</h5>
+                            <div class="form-check form-switch d-inline-flex align-items-center">
+                                <input class="form-check-input" type="checkbox" id="perspectiveGuard-switch">
+                                <label class="form-check-label ms-2" for="perspectiveGuard-switch">Enable</label>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-4">
+                                <div class="col-md-8">
+                                    <p class="mb-2">
+                                        <strong>Problem:</strong> In scenes with strong perspective or fisheye lenses,
+                                        an object moving <em>away</em> from the camera may disappear and a
+                                        <em>new</em> object moving <em>toward</em> the camera gets assigned the same tracker ID.
+                                        This creates a false path that appears to reverse direction.
+                                    </p>
+                                    <p class="text-muted small mb-0">
+                                        When enabled, DataQ monitors each object's bounding box size.
+                                        If the size changes dramatically between frames (indicating a near/far switch),
+                                        the old object is finalized and the new one is treated as a separate object
+                                        with its own path. This does not affect objects that are correctly idle
+                                        (e.g. a vehicle stopped at a red light keeps the same bounding box size).
+                                    </p>
+                                </div>
+                                <div class="col-md-4" id="perspectiveGuard-settings" style="display:none;">
+                                    <label for="scene-perspectiveGuard" class="form-label">Sensitivity</label>
+                                    <select class="form-select" id="scene-perspectiveGuard">
+                                        <option value="2">High &mdash; triggers on 2&times; size change</option>
+                                        <option value="3">Medium &mdash; triggers on 3&times; size change</option>
+                                        <option value="4">Low &mdash; triggers on 4&times; size change</option>
+                                        <option value="5">Very low &mdash; triggers on 5&times; size change</option>
+                                    </select>
+                                    <div class="text-muted small mt-1">
+                                        Higher sensitivity catches more ID switches but may split
+                                        objects that naturally change in size. Start with Medium.
                                     </div>
                                 </div>
                             </div>
@@ -211,6 +255,12 @@ $(document).ready(function() {
             // Load tracker predictions
             $('#tracker-predictions-switch').prop('checked', !app.settings.scene.tracker_confidence);
 
+            // Load perspective guard
+            $('#scene-perspectiveGuard').val(app.settings.scene.perspectiveGuard || 3);
+            var pgEnabled = (app.settings.scene.perspectiveGuard || 0) > 0;
+            $('#perspectiveGuard-switch').prop('checked', pgEnabled);
+            if (pgEnabled) $('#perspectiveGuard-settings').show();
+
             // Load stitch settings
             const stitchSettings = app.settings.stitch || {};
             $('#stitch-enable-switch').prop('checked', stitchSettings.active || false);
@@ -281,6 +331,26 @@ $(document).ready(function() {
         });
     });
 
+    // Perspective Guard switch
+    $('#perspectiveGuard-switch').on('change', function() {
+        if (!appData) return;
+        var enabled = $(this).is(':checked');
+        if (enabled) {
+            $('#perspectiveGuard-settings').show();
+            appData.settings.scene.perspectiveGuard = parseInt($('#scene-perspectiveGuard').val()) || 3;
+        } else {
+            $('#perspectiveGuard-settings').hide();
+            appData.settings.scene.perspectiveGuard = 0;
+        }
+        saveSceneSettings();
+    });
+
+    $('#scene-perspectiveGuard').on('change', function() {
+        if (!appData) return;
+        appData.settings.scene.perspectiveGuard = parseInt($(this).val());
+        saveSceneSettings();
+    });
+
     // Stitch enable switch
     $('#stitch-enable-switch').on('change', function() {
         if (!appData) return;
@@ -319,6 +389,19 @@ $(document).ready(function() {
         saveStitchSettings();
     });
 });
+
+function saveSceneSettings() {
+    if (!appData) return;
+    const payload = { scene: appData.settings.scene };
+    $.ajax({
+        type: "POST",
+        url: 'settings',
+        contentType: 'application/json',
+        data: JSON.stringify(payload),
+        success: () => showToast('Settings updated', 'info'),
+        error: () => showToast('Settings update failed', 'danger')
+    });
+}
 
 function saveStitchSettings() {
     if (!appData) return;
@@ -363,22 +446,21 @@ function ConnectWebSocketClient() {
 }
 
 function updateConnectionStatus(status) {
-    const statusElement = document.getElementById('connectionStatus');
-    const messageElement = document.getElementById('statusMessage');
-
+    const el = document.getElementById('connectionStatus');
+    const msg = document.getElementById('statusMessage');
+    el.className = 'connection-status';
     switch (status) {
         case 'connected':
-            statusElement.style.backgroundColor = '#00ff00';
-            messageElement.textContent = 'Connected';
+            msg.textContent = 'Connected';
             break;
         case 'disconnected':
-            statusElement.style.backgroundColor = '#ff0000';
-            messageElement.textContent = 'Disconnected';
+            el.classList.add('status-disconnected');
+            msg.textContent = 'Disconnected';
             break;
         case 'connecting':
         case 'reconnecting':
-            statusElement.style.backgroundColor = '#ffff00';
-            messageElement.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+            el.classList.add('status-connecting');
+            msg.textContent = status.charAt(0).toUpperCase() + status.slice(1);
             break;
     }
 }
