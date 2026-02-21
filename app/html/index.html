@@ -32,63 +32,30 @@
 	
 	<div id="page-content-wrapper" class="p-0">
 		<div class="container-fluid">
-			<!-- Status row -->
-			<div class="row g-3 mb-3">
-				<div class="col-md-4">
-					<div class="card h-100">
-						<div class="card-body d-flex align-items-center gap-3">
-							<div id="mqttStatusIcon" style="width:42px;height:42px;border-radius:50%;background:#ef4444;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-								<svg width="20" height="20" fill="white" viewBox="0 0 16 16"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 12.5a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z"/><path d="M7.25 4h1.5v5h-1.5zM7.25 10h1.5v1.5h-1.5z"/></svg>
-							</div>
-							<div>
-								<div class="text-muted" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em">MQTT Broker</div>
-								<div id="mqttStatusText" style="font-weight:600;font-size:.95rem">Checking…</div>
-								<div id="mqttAddress" class="text-muted" style="font-size:.8rem"></div>
-							</div>
-						</div>
-					</div>
-				</div>
-				<div class="col-md-4">
-					<div class="card h-100">
-						<div class="card-body d-flex align-items-center gap-3">
-							<div style="width:42px;height:42px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-								<svg width="20" height="20" fill="white" viewBox="0 0 16 16"><path d="M2 2h12v12H2V2zm1 1v10h10V3H3z"/><path d="M4 5h8v1H4zM4 7h8v1H4zM4 9h5v1H4z"/></svg>
-							</div>
-							<div>
-								<div class="text-muted" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em">Device</div>
-								<div id="deviceModel" style="font-weight:600;font-size:.95rem">—</div>
-								<div id="deviceSerial" class="text-muted" style="font-size:.8rem"></div>
-							</div>
-						</div>
-					</div>
-				</div>
-				<div class="col-md-4">
-					<div class="card h-100">
-						<div class="card-body d-flex align-items-center gap-3">
-							<div style="width:42px;height:42px;border-radius:50%;background:#8b5cf6;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-								<svg width="20" height="20" fill="white" viewBox="0 0 16 16"><path d="M8 1L1 5v6l7 4 7-4V5L8 1zm0 1.5L13.5 5.5 8 8.5 2.5 5.5 8 2.5zM2 6.27l5.5 3.14v4.32L2 10.59V6.27zm6.5 3.14L14 6.27v4.32l-5.5 3.14V9.41z"/></svg>
-							</div>
-							<div>
-								<div class="text-muted" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em">Active Topics</div>
-								<div id="activeTopicCount" style="font-weight:600;font-size:.95rem">0 / 8</div>
-								<div class="text-muted" style="font-size:.8rem">publishing</div>
-							</div>
-						</div>
-					</div>
-				</div>
-			</div>
 
 			<div class="alert alert-warning alert-dismissible fade d-none" id="liveDataAlert" role="alert">
 				<small id="liveDataMessage"></small>
 				<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
 			</div>
 
-			<!-- Publish table -->
-			<div class="row">
-				<div class="col-lg-8">
+			<!-- MQTT Data Streams -->
+			<div class="row g-3 mb-3">
+				<div class="col-12">
 					<div class="card">
-						<div class="card-header">
-							<h5 class="card-title mb-0">MQTT Data Streams</h5>
+						<div class="card-header d-flex justify-content-between align-items-center">
+							<h5 class="card-title mb-0">MQTT Data Streams
+								<span id="detectionStatusBadge" class="badge bg-secondary ms-2" style="font-size:.7rem;font-weight:500">No detections</span>
+							</h5>
+							<div class="d-flex align-items-center gap-3">
+								<div class="d-flex align-items-center gap-2">
+									<span class="text-muted" style="font-size:.75rem">ACAP</span>
+									<span id="acapStatus" class="badge bg-danger" style="font-size:.65rem">Disconnected</span>
+								</div>
+								<div class="d-flex align-items-center gap-2">
+									<span class="text-muted" style="font-size:.75rem">Web</span>
+									<span id="webStatus" class="badge bg-danger" style="font-size:.65rem">Disconnected</span>
+								</div>
+							</div>
 						</div>
 						<div class="card-body p-0">
 							<table class="table table-hover mb-0">
@@ -146,6 +113,28 @@
 					</div>
 				</div>
 			</div>
+
+			<!-- Device -->
+			<div class="row g-3">
+				<div class="col-lg-6">
+					<div class="card">
+						<div class="card-header">
+							<h5 class="card-title mb-0">Device</h5>
+						</div>
+						<div class="card-body p-0">
+							<table class="table mb-0">
+								<tbody>
+									<tr><td class="ps-3 text-muted" style="width:140px">Model</td><td id="deviceModel"></td></tr>
+									<tr><td class="ps-3 text-muted">Firmware</td><td id="deviceFirmware"></td></tr>
+									<tr><td class="ps-3 text-muted">Serial</td><td id="deviceSerial"></td></tr>
+									<tr><td class="ps-3 text-muted">Chip</td><td id="deviceChip"></td></tr>
+									<tr><td class="ps-3 text-muted">Architecture</td><td id="deviceArch"></td></tr>
+								</tbody>
+							</table>
+						</div>
+					</div>
+				</div>
+			</div>
 		</div>
 	</div>
 	
@@ -157,6 +146,8 @@
 
 let MQTT_Client = 0;
 var app = null;
+let lastDetectionTime = 0;
+let detectionTimeout = null;
 
 $(document).ready(function() {
 
@@ -173,16 +164,20 @@ $(document).ready(function() {
 
 			// Populate device info card
 			$('#deviceModel').text(app.device.model || '—');
+			$('#deviceFirmware').text(app.device.firmware || '');
 			$('#deviceSerial').text(app.device.serial || '');
+			$('#deviceChip').text(app.device.chip || '');
+			$('#deviceArch').text(app.device.platform || '');
 
-			if( app.status.mqtt.connected ) {
-				updateMQTTStatusCard(true, app.mqtt.address);
+			// Update ACAP MQTT status
+			if (app.status.mqtt.connected) {
+				$('#acapStatus').removeClass('bg-danger').addClass('bg-success').text('Connected');
 				ConnectWebSocketClient();
 			} else {
-				updateMQTTStatusCard(false, app.mqtt.address);
+				$('#acapStatus').removeClass('bg-success').addClass('bg-danger').text('Disconnected');
 				setTimeout(() => {
-					showLiveDataMessage("Live data visualization in unavailable. Check MQTT Settings");
-					showToast("DataQ is not connected to a broker.  Please go to MQTT Settings");
+					showLiveDataMessage("Live data visualization is unavailable. Check MQTT Settings");
+					showToast("DataQ is not connected to a broker. Please go to MQTT Settings");
 				}, 100);
 			}
 
@@ -208,44 +203,32 @@ $(document).ready(function() {
 			$('.publish-check[data-type="status"]').prop('checked', app.settings.publish.status);
 
 			updateSelectAllCheckbox();
-			updateActiveTopicCount();
 		},
-        error: function(response) {
+		error: function(response) {
 			showToast("The application is not running",'danger');
 		}
 	});
 
-	function updateMQTTStatusCard(connected, address) {
-		const icon = document.getElementById('mqttStatusIcon');
-		const text = document.getElementById('mqttStatusText');
-		const addr = document.getElementById('mqttAddress');
-		if (connected) {
-			icon.style.background = '#22c55e';
-			text.textContent = 'Connected';
-			text.style.color = '#16a34a';
-		} else {
-			icon.style.background = '#ef4444';
-			text.textContent = 'Disconnected';
-			text.style.color = '#dc2626';
-		}
-		if (address) addr.textContent = address;
-	}
-
-	function updateActiveTopicCount() {
-		const total = $('.publish-check').length;
-		const checked = $('.publish-check:checked').length;
-		$('#activeTopicCount').text(checked + ' / ' + total);
-	}
-
 	function showLiveDataMessage(message) {
 		const alert = document.getElementById('liveDataAlert');
 		const messageElement = document.getElementById('liveDataMessage');
-		
 		messageElement.textContent = message;
 		alert.classList.remove('d-none');
 		alert.classList.add('show');
 	}
 
+	function updateDetectionBadge(count) {
+		const badge = document.getElementById('detectionStatusBadge');
+		if (count > 0) {
+			badge.textContent = count + ' detection' + (count !== 1 ? 's' : '');
+			badge.className = 'badge bg-success ms-2';
+			badge.style.cssText = 'font-size:.7rem;font-weight:500';
+		} else {
+			badge.textContent = 'No detections';
+			badge.className = 'badge bg-secondary ms-2';
+			badge.style.cssText = 'font-size:.7rem;font-weight:500';
+		}
+	}
 
 	$('.publish-check').on('change', function() {
 		const checkboxType = $(this).data('type');
@@ -268,9 +251,8 @@ $(document).ready(function() {
 				showToast("Settings update failed",'danger');
 			}
 		});
-		
+
 		updateSelectAllCheckbox();
-		updateActiveTopicCount();
 	});
 
 	$('#selectAll').on('change', function() {
@@ -288,46 +270,64 @@ $(document).ready(function() {
 		const clientID = "WS-" + app.manifest.acapPackageConf.setup.appName + "-" + app.device.serial + "-" + Math.floor(Math.random() * 10000);
 		if(MQTT_Client)
 			delete MQTT_Client;
-		
+
 		var tls = app.settings.tls;
-		if( location.protocol === 'https:')
+		if (location.protocol === 'https:')
 			tls = true;
-		var port = tls?app.settings.WSS_Port:app.settings.WS_Port;
+		var port = tls ? app.settings.WSS_Port : app.settings.WS_Port;
 
 		MQTT_Client = new Paho.MQTT.Client(app.mqtt.address, port, clientID);
-		
+
 		MQTT_Client.onConnectionLost = onConnectionLost;
+		MQTT_Client.onMessageArrived = onMessageArrived;
 		var connectionOptions = {
 			useSSL: tls,
 			timeout: 3,
 			onSuccess: onConnect,
 			onFailure: onFailure
 		};
-		
+
 		if(app.mqtt.user && app.mqtt.user.length)
 			connectionOptions.userName = app.mqtt.user;
 		if(app.mqtt.password && app.mqtt.password.length)
 			connectionOptions.password = app.mqtt.password;
-			
+
 		MQTT_Client.connect(connectionOptions);
 	}
-	
+
 	function onConnect() {
+		$('#webStatus').removeClass('bg-danger').addClass('bg-success').text('Connected');
+		// Subscribe to detections topic for live status
+		var topic = app.mqtt.preTopic + '/detections/' + app.device.serial;
+		MQTT_Client.subscribe(topic);
+	}
+
+	function onMessageArrived(message) {
+		try {
+			var payload = JSON.parse(message.payloadString);
+			if (payload && payload.length !== undefined) {
+				updateDetectionBadge(payload.length);
+			} else if (payload) {
+				updateDetectionBadge(1);
+			}
+			// Reset badge to "No detections" after 3 seconds of silence
+			if (detectionTimeout) clearTimeout(detectionTimeout);
+			detectionTimeout = setTimeout(() => updateDetectionBadge(0), 3000);
+		} catch(e) {}
 	}
 
 	function onFailure(message) {
-		console.log("onFailure");
-		updateMQTTStatusCard(false, null);
+		$('#webStatus').removeClass('bg-success').addClass('bg-danger').text('Disconnected');
 		showLiveDataMessage("Live data visualization is temporarily unavailable - Web client is not connected to broker.");
 		showToast("Web page not connected. " + message.errorMessage + " Check WebSocket connection in MQTT Settings","warning");
 	}
 
 	function onConnectionLost(responseObject) {
-	  if (responseObject.errorCode !== 0) {
-		updateMQTTStatusCard(false, null);
-		showLiveDataMessage("Live data visualization is temporarily unavailable - Web client is not connected to broker.");
-		showToast("Web page lost connection. " + responseObject.errorMessage,"warning");
-	  }
+		if (responseObject.errorCode !== 0) {
+			$('#webStatus').removeClass('bg-success').addClass('bg-danger').text('Disconnected');
+			showLiveDataMessage("Live data visualization is temporarily unavailable - Web client is not connected to broker.");
+			showToast("Web page lost connection. " + responseObject.errorMessage,"warning");
+		}
 	}
 });
 

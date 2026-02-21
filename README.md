@@ -150,6 +150,50 @@ MQTT Heartbeat published every 15 minutes
 
 ***
 
+## Advanced Settings
+
+The Advanced page provides tools for optimizing DataQ behavior in challenging scenes where the default analytics may produce fragmented or inaccurate data. Access it from the sidebar under **Advanced**.
+
+### Perspective Guard
+
+Defines a cut-off boundary on the camera view. When a tracked object's center crosses from inside to outside this boundary, the object is finalized and any subsequent reuse of the same tracker ID by the analytics engine is treated as a new, separate object.
+
+**When to use:**  
+In scenes with strong perspective (e.g., a street receding from the camera) where an outgoing object disappears at a distance and an incoming object is assigned the same tracker ID — creating a false path that reverses direction.
+
+**Tips:**
+- Draw the boundary generously so legitimate objects near the edge are not cut off prematurely.
+- Objects that first appear *outside* the boundary are still tracked normally — the guard only fires on inside-to-outside transitions.
+- Works independently of the Area-of-Interest filter on the Detections page.
+
+### Object Stitching
+
+Automatically merges path segments from the same physical object that temporarily disappears and reappears (e.g., a person walking behind a pillar). Without stitching, each disappearance produces a separate path; with stitching, they are joined into one continuous path.
+
+**Settings:**
+- **Max Duration (s)** — Maximum gap between the end of one path and the start of the next for them to be considered the same object (1–10 seconds).
+- **Angle Threshold (°)** — Maximum allowed difference between the direction of the outgoing and incoming paths (0–90°). Set to 0 to ignore direction entirely.
+- **Allow Class Switch** — When enabled, objects can be matched even if their classification label changes (e.g., "vehicle" → "car"). The label with the highest confidence is kept.
+- **Stitch Area** — An area in the video where objects are expected to disappear and reappear. Only paths that end or start within this area are candidates for stitching.
+
+**Tips:**
+- Too large a duration or angle threshold may incorrectly merge different objects.
+- Stitched paths are shown in green on the video overlay; normal paths in yellow.
+
+### Tracker Predictions
+
+When enabled, the analytics engine includes predicted positions for objects that are temporarily not visible. This helps maintain tracking continuity during brief occlusions.
+
+**When to use:**  
+In scenes where objects frequently pass behind obstacles (poles, pillars, signs) and you want smoother, more continuous tracking.
+
+**Things to consider:**
+- Predictions are estimates and may be inaccurate for objects that change speed or direction while occluded.
+- **Changing this setting requires an ACAP restart** to take effect.
+- May slightly increase CPU usage on the camera.
+
+***
+
 ## Anomaly Detection Settings & Usage
 
 The anomaly detection service helps highlight abnormal object behaviors in your scene, assisting users to focus attention where needed most. Objects marked with `"anomaly": "<reason>"` are flagged in MQTT data, and a stateful event is triggered as long as the anomaly persists.
@@ -235,17 +279,19 @@ For VMS (Video Mananagement Systems"), a stateful event "anomaly" will be fired 
 
 ## History
 
-### 4.1.20 Feb 12, 2026
+### 3.0.0 Feb 21, 2026
+- New Advanced settings page for scene optimization
+  - **Perspective Guard** — Cut-off boundary to prevent false path reversals in perspective scenes
+  - **Object Stitching** — Automatic path merging for objects that temporarily disappear behind obstacles
+  - **Tracker Predictions** — Enable predicted positions during brief occlusions for smoother tracking
 - Enhanced path stitching functionality
-  - Added conditional angle threshold checking (setting to 0 disables direction matching)
+  - Conditional angle threshold checking (setting to 0 disables direction matching)
   - Improved path holding logic for more reliable stitching behavior
-  - Minimum 2-point requirement for direction matching to ensure accurate angle calculations
-  - Allow class switching option - stitched paths can adopt the class from higher confidence segments
+  - Allow class switching — stitched paths can adopt the class from higher confidence segments
 - UI improvements
   - Extended angle threshold range from 20-60° to 0-90° for greater flexibility
   - Updated help text to clarify that 0 = ignore direction
-
-### 2.1.10 Feb 4, 2026
+- Stability fixes
 - Bug fixes
 
 ### 2.1.9 Jan 1, 2026

@@ -37,180 +37,113 @@
         <div id="page-content-wrapper" class="p-0">
             <div class="container-fluid">
                 <div class="col-12">
-                    <!-- Tracker Predictions Card -->
-                    <div class="card mt-3">
-                        <div class="card-header bg-primary text-white">
-                            <h5 class="card-title mb-0">Tracker Settings</h5>
-                        </div>
-                        <div class="card-body">
-                            <div class="row g-4 align-items-center">
-                                <div class="col-md-6">
-                                    <div class="form-label mb-1">Tracker Predictions</div>
-                                    <div class="text-muted small mb-2">
-                                        Include predicted detection positions.<br>
-                                        Change requires ACAP restart.
-                                    </div>
-                                </div>
-                                <div class="col-md-6 text-end">
-                                    <div class="form-check form-switch d-inline-flex align-items-center">
-                                        <input class="form-check-input" type="checkbox" id="tracker-predictions-switch">
-                                        <label class="form-check-label ms-2" for="tracker-predictions-switch">
-                                            Enable Predictions
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Cut-off Area Card -->
+                    <!-- Main Card -->
                     <div class="card mt-3">
                         <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 class="card-title mb-0">Cut-off Area</h5>
-                            <div class="form-check form-switch d-inline-flex align-items-center">
-                                <input class="form-check-input" type="checkbox" id="cutoff-enable-switch">
-                                <label class="form-check-label ms-2" for="cutoff-enable-switch">Enable</label>
-                            </div>
-                        </div>
-                        <div class="card-body">
-                            <div class="row g-4 align-items-center">
-                                <div class="col-md-8">
-                                    <p class="mb-2">
-                                        Define a boundary area on the camera view.
-                                        When a tracked object's center leaves this boundary it is <strong>finalized</strong> ("lost").
-                                        If the analytics engine later reuses the same tracker ID, DataQ treats the new
-                                        detection as a <strong>separate object</strong> with its own path.
-                                    </p>
-                                    <p class="text-muted small mb-0">
-                                        This prevents false paths that appear to reverse direction when an outgoing
-                                        object disappears at the edge and an incoming object is assigned the same ID.
-                                        Draw the cut-off boundary on the video below (shared with Path Stitching).
-                                    </p>
-                                </div>
-                                <div class="col-md-4" id="cutoff-area-controls" style="display:none;">
-                                    <button type="button" class="btn btn-outline-danger btn-sm w-100 mb-2" id="btn-cutoff-area">Draw Cut-off Boundary</button>
-                                    <button type="button" class="btn btn-success btn-sm w-100" id="btn-save-cutoff-area">Save Boundary</button>
-                                    <div class="text-muted small mt-2">
-                                        Objects whose center moves outside the red boundary will be finalized.
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Path Stitching Card -->
-                    <div class="card mt-3">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 class="card-title mb-0">Path Stitching</h5>
+                            <h5 class="card-title mb-0">Detection Management</h5>
                             <div id="connectionStatus" class="connection-status">
                                 <span id="statusMessage">Connected</span>
                             </div>
                         </div>
-                        <div class="card-body">
-                            <!-- Enable/Disable Stitching -->
-                            <div class="row g-4 align-items-center mb-3">
-                                <div class="col-md-6">
-                                    <div class="form-label mb-1">Enable Path Stitching</div>
-                                    <div class="text-muted small mb-2">
-                                        Automatically merge paths from the same object that temporarily disappears.
-                                    </div>
-                                </div>
-                                <div class="col-md-6 text-end">
-                                    <div class="form-check form-switch d-inline-flex align-items-center">
-                                        <input class="form-check-input" type="checkbox" id="stitch-enable-switch">
-                                        <label class="form-check-label ms-2" for="stitch-enable-switch">
-                                            Enable Stitching
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div id="stitch-settings" class="hidden">
-                                <div class="row">
-                                    <!-- Left: Video and Stitch Area -->
-                                    <div class="col-lg-8 col-md-7">
-                                        <div id="video-view" style="display:block">
-                                            <div style="width:100%; height:100%; position:relative">
-                                                <div id="video" style="width:100%; height:100%; position:absolute; top:0; left:0;"></div>
-                                                <canvas id="path-canvas" width="1000" height="1000" style="width:100%; height:100%; position:absolute; top:0px; left:0px; z-index:2;"></canvas>
-                                                <canvas id="stitch-canvas" width="1000" height="1000" style="width:100%; height:100%; position:absolute; top:0px; left:0px; z-index:10; pointer-events:auto; border:2px solid blue;"></canvas>
-                                            </div>
-                                        </div>
-                                        <!-- Stitch Area Controls -->
-                                        <div class="mt-3">
-                                            <div class="card">
-                                                <div class="card-header">
-                                                    <h5 class="card-title mb-0">Stitching Area</h5>
-                                                </div>
-                                                <div class="card-body">
-                                                    <p class="text-muted small">
-                                                        Define the area where objects disappear and appear. Objects ending/starting outside this area will not be stitched.
-                                                    </p>
-                                                    <button type="button" class="btn btn-outline-primary btn-sm" id="btn-stitch-area">Set Stitching Area</button>
-                                                    <button type="button" class="btn btn-success btn-sm" id="btn-save-stitch-area">Save Area</button>
-                                                </div>
-                                            </div>
+                        <div class="card-body p-0">
+                            <div class="row g-0">
+                                <!-- Left: Video + Overlay -->
+                                <div class="col-lg-8 col-md-7 p-3">
+                                    <div id="video-view" style="display:block">
+                                        <div style="width:100%; height:100%; position:relative">
+                                            <div id="video" style="width:100%; height:100%; position:absolute; top:0; left:0;"></div>
+                                            <canvas id="path-canvas" width="1000" height="1000" style="width:100%; height:100%; position:absolute; top:0px; left:0px; z-index:2;"></canvas>
+                                            <canvas id="area-canvas" width="1000" height="1000" style="width:100%; height:100%; position:absolute; top:0px; left:0px; z-index:10; pointer-events:auto;"></canvas>
                                         </div>
                                     </div>
+                                    <!-- Legend -->
+                                    <div class="d-flex gap-4 mt-2 small text-muted">
+                                        <span><span style="display:inline-block;width:14px;height:3px;background:#ff4444;vertical-align:middle;margin-right:4px"></span>Cut-off boundary</span>
+                                        <span><span style="display:inline-block;width:14px;height:3px;background:#000;vertical-align:middle;margin-right:4px"></span>Stitch area</span>
+                                        <span><span style="display:inline-block;width:14px;height:3px;background:#00FF00;vertical-align:middle;margin-right:4px"></span>Stitched path</span>
+                                        <span><span style="display:inline-block;width:14px;height:3px;background:#FFFF00;vertical-align:middle;margin-right:4px"></span>Normal path</span>
+                                    </div>
+                                </div>
 
-                                    <!-- Right: Settings -->
-                                    <div class="col-lg-4 col-md-5">
+                                <!-- Right: Settings panels -->
+                                <div class="col-lg-4 col-md-5 border-start" style="background:var(--card-header-bg);">
+                                    <div class="p-3 d-flex flex-column gap-3">
+
+                                        <!-- 1. Perspective Guard (Cut-off Area) -->
                                         <div class="card">
-                                            <div class="card-header">
-                                                <h5 class="card-title mb-0">Stitch Parameters</h5>
+                                            <div class="card-header d-flex justify-content-between align-items-center py-2">
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <h6 class="card-title mb-0">Perspective Guard</h6>
+                                                    <a href="#" class="text-muted" data-bs-toggle="modal" data-bs-target="#info-perspective" title="About Perspective Guard">
+                                                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 6.588zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0z"/></svg>
+                                                    </a>
+                                                </div>
+                                                <div class="form-check form-switch mb-0">
+                                                    <input class="form-check-input" type="checkbox" id="cutoff-enable-switch">
+                                                </div>
                                             </div>
-                                            <div class="card-body">
-                                                <!-- Duration -->
-                                                <div class="form-group mb-3">
-                                                    <label for="stitch-duration" class="form-label">Max Duration (seconds)</label>
-                                                    <input type="number" id="stitch-duration" class="form-control" min="1" max="10" step="1">
-                                                    <div class="text-muted small mt-1">
-                                                        Maximum time between paths to consider stitching
-                                                    </div>
+                                            <div class="card-body py-2 px-3" id="cutoff-controls" style="display:none;">
+                                                <div class="d-grid gap-2">
+                                                    <button type="button" class="btn btn-outline-danger btn-sm" id="btn-cutoff-area">
+                                                        <svg width="14" height="14" fill="currentColor" class="me-1" viewBox="0 0 16 16"><path d="M14.5 3a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h13zm-13-1A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h13a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2h-13z"/></svg>
+                                                        Set Area
+                                                    </button>
+                                                    <button type="button" class="btn btn-success btn-sm" id="btn-save-cutoff-area">Save Area</button>
                                                 </div>
-
-                                                <!-- Angle Threshold -->
-                                                <div class="form-group mb-3">
-                                                    <label for="stitch-angle-threshold" class="form-label">Angle Threshold (degrees)</label>
-                                                    <input type="number" id="stitch-angle-threshold" class="form-control" min="0" max="90" step="5">
-                                                    <div class="text-muted small mt-1">
-                                                        Maximum angle difference between path directions (0 = ignore direction)
-                                                    </div>
-                                                </div>
-
-                                                <!-- Allow Class Switch -->
-                                                <div class="form-group mb-3">
-                                                    <div class="form-check">
-                                                        <input class="form-check-input" type="checkbox" id="stitch-allow-class-switch">
-                                                        <label class="form-check-label" for="stitch-allow-class-switch">
-                                                            Allow Class Switch
-                                                        </label>
-                                                    </div>
-                                                    <div class="text-muted small mt-1">
-                                                        When enabled, objects can be matched even if their class changes (e.g., "vehicle" → "car"). The class with highest confidence will be used.
-                                                    </div>
-                                                </div>
-
-                                                <button type="button" class="btn btn-success w-100" id="btn-save-stitch">Save Settings</button>
                                             </div>
                                         </div>
 
-                                        <!-- Legend -->
-                                        <div class="card mt-3">
-                                            <div class="card-header">
-                                                <h5 class="card-title mb-0">Path Legend</h5>
-                                            </div>
-                                            <div class="card-body">
-                                                <div class="d-flex align-items-center mb-2">
-                                                    <div style="width: 20px; height: 3px; background-color: #00FF00; margin-right: 10px;"></div>
-                                                    <span>Stitched Paths</span>
+                                        <!-- 2. Object Stitching -->
+                                        <div class="card">
+                                            <div class="card-header d-flex justify-content-between align-items-center py-2">
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <h6 class="card-title mb-0">Object Stitching</h6>
+                                                    <a href="#" class="text-muted" data-bs-toggle="modal" data-bs-target="#info-stitching" title="About Object Stitching">
+                                                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 6.588zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0z"/></svg>
+                                                    </a>
                                                 </div>
-                                                <div class="d-flex align-items-center">
-                                                    <div style="width: 20px; height: 3px; background-color: #FFFF00; margin-right: 10px;"></div>
-                                                    <span>Normal Paths</span>
+                                                <div class="form-check form-switch mb-0">
+                                                    <input class="form-check-input" type="checkbox" id="stitch-enable-switch">
+                                                </div>
+                                            </div>
+                                            <div class="card-body py-2 px-3" id="stitch-controls" style="display:none;">
+                                                <div class="mb-2">
+                                                    <label for="stitch-duration" class="form-label small mb-1">Max Duration (s)</label>
+                                                    <input type="number" id="stitch-duration" class="form-control form-control-sm" min="1" max="10" step="1">
+                                                </div>
+                                                <div class="mb-2">
+                                                    <label for="stitch-angle-threshold" class="form-label small mb-1">Angle Threshold (°)</label>
+                                                    <input type="number" id="stitch-angle-threshold" class="form-control form-control-sm" min="0" max="90" step="5">
+                                                </div>
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input" type="checkbox" id="stitch-allow-class-switch">
+                                                    <label class="form-check-label small" for="stitch-allow-class-switch">Allow Class Switch</label>
+                                                </div>
+                                                <div class="d-grid gap-2">
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-stitch-area">
+                                                        <svg width="14" height="14" fill="currentColor" class="me-1" viewBox="0 0 16 16"><path d="M14.5 3a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h13zm-13-1A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h13a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2h-13z"/></svg>
+                                                        Set Area
+                                                    </button>
+                                                    <button type="button" class="btn btn-success btn-sm" id="btn-save-stitch">Save Settings</button>
                                                 </div>
                                             </div>
                                         </div>
+
+                                        <!-- 3. Tracker Predictions -->
+                                        <div class="card">
+                                            <div class="card-header d-flex justify-content-between align-items-center py-2">
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <h6 class="card-title mb-0">Tracker Predictions</h6>
+                                                    <a href="#" class="text-muted" data-bs-toggle="modal" data-bs-target="#info-predictions" title="About Tracker Predictions">
+                                                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 6.588zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0z"/></svg>
+                                                    </a>
+                                                </div>
+                                                <div class="form-check form-switch mb-0">
+                                                    <input class="form-check-input" type="checkbox" id="tracker-predictions-switch">
+                                                </div>
+                                            </div>
+                                        </div>
+
                                     </div>
                                 </div>
                             </div>
@@ -219,6 +152,81 @@
                 </div>
             </div>
         </div>
+
+        <!-- Info Modals -->
+        <div class="modal fade" id="info-perspective" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Perspective Guard</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <h6>What it does</h6>
+                        <p>Defines a boundary on the camera view. When a tracked object's center moves outside this boundary, the object is finalized ("lost"). If the analytics engine later reuses the same tracker ID, DataQ treats it as a new, separate object with its own path.</p>
+                        <h6>When to use it</h6>
+                        <p>In scenes with strong perspective (e.g. a street receding from the camera) where an outgoing object disappears at a distance and an incoming object is assigned the same tracker ID — creating a false path that reverses direction.</p>
+                        <h6>Things to consider</h6>
+                        <ul class="mb-0">
+                            <li>Draw the boundary generously — objects that legitimately move near the edge should not be cut off prematurely.</li>
+                            <li>New objects that first appear <em>outside</em> the boundary are still tracked normally. The guard only fires on the inside → outside transition.</li>
+                            <li>Works independently of the Area of Interest filter on the Detections page.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="info-stitching" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Object Stitching</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <h6>What it does</h6>
+                        <p>Automatically merges paths from the same physical object that temporarily disappears and reappears. For example, a person walking behind a pillar will produce two path segments — stitching joins them into one continuous path.</p>
+                        <h6>Settings</h6>
+                        <ul>
+                            <li><strong>Max Duration</strong> — Maximum time (seconds) between the end of one path and the start of the next for them to be considered the same object.</li>
+                            <li><strong>Angle Threshold</strong> — Maximum angle difference between the direction of the outgoing and incoming paths. Set to 0 to ignore direction.</li>
+                            <li><strong>Allow Class Switch</strong> — When enabled, objects can be matched even if their class label changes (e.g. "vehicle" → "car"). The label with the highest confidence will be used.</li>
+                            <li><strong>Stitch Area</strong> — The area where objects are expected to disappear and reappear. Only paths that end/start within this area are candidates for stitching.</li>
+                        </ul>
+                        <h6>Things to consider</h6>
+                        <ul class="mb-0">
+                            <li>Too large a duration or angle may incorrectly merge two different objects.</li>
+                            <li>Stitched paths are shown in green on the video overlay; normal paths in yellow.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="info-predictions" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Tracker Predictions</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <h6>What it does</h6>
+                        <p>When enabled, the analytics engine includes predicted detection positions for objects that are temporarily not visible. This can help maintain tracking continuity during brief occlusions.</p>
+                        <h6>When to use it</h6>
+                        <p>Enable this in scenes where objects frequently pass behind obstacles (poles, pillars, signs) and you want smoother, more continuous tracking.</p>
+                        <h6>Things to consider</h6>
+                        <ul class="mb-0">
+                            <li>Predictions are estimates and may not be accurate for objects that change speed or direction while occluded.</li>
+                            <li><strong>Changing this setting requires an ACAP restart</strong> to take effect.</li>
+                            <li>May slightly increase CPU usage on the camera.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="toast-container position-fixed top-0 end-0 p-3"></div>
     </div>
 
@@ -242,7 +250,6 @@ $(document).ready(function() {
             $('.sidebar-heading').text(app.manifest.acapPackageConf.setup.friendlyName);
 
             const aspectRatio = app.device.aspect || '16:9';
-            const [aspectWidth, aspectHeight] = aspectRatio.split(':').map(Number);
 
             // Load tracker predictions
             $('#tracker-predictions-switch').prop('checked', !app.settings.scene.tracker_confidence);
@@ -250,7 +257,7 @@ $(document).ready(function() {
             // Load cut-off area
             const cutoffSettings = app.settings.scene.cutoff || {};
             $('#cutoff-enable-switch').prop('checked', cutoffSettings.active || false);
-            if (cutoffSettings.active) $('#cutoff-area-controls').show();
+            if (cutoffSettings.active) $('#cutoff-controls').show();
 
             // Load stitch settings
             const stitchSettings = app.settings.stitch || {};
@@ -258,11 +265,7 @@ $(document).ready(function() {
             $('#stitch-duration').val(stitchSettings.duration || 4);
             $('#stitch-angle-threshold').val(stitchSettings.angle_threshold || 40);
             $('#stitch-allow-class-switch').prop('checked', stitchSettings.allow_class_switch || false);
-
-            // Show/hide stitch settings based on enable switch
-            if (stitchSettings.active || cutoffSettings.active) {
-                $('#stitch-settings').removeClass('hidden');
-            }
+            if (stitchSettings.active) $('#stitch-controls').show();
 
             // Connect to MQTT if available
             if (app.status.mqtt.connected) {
@@ -283,7 +286,7 @@ $(document).ready(function() {
                 { key: 'cutoff',  button: '#btn-cutoff-area',  color: 'rgba(255,0,0,0.35)' }
             ];
 
-            areaSelector = new AreaSelector('stitch-canvas', {
+            areaSelector = new AreaSelector('area-canvas', {
                 modes: areaModes,
                 onchange: function(areas) { },
                 minWidth: 50,
@@ -305,7 +308,6 @@ $(document).ready(function() {
             };
 
             areaSelector.setAreas({ stitch: stitchArea, cutoff: cutoffArea });
-            areaSelector.setMode('stitch');
             areaSelector.hideAreas();
 
             window.addEventListener('resize', function() { areaSelector.resizeCanvas(); });
@@ -319,15 +321,7 @@ $(document).ready(function() {
     $('#tracker-predictions-switch').on('change', function() {
         if (!appData) return;
         appData.settings.scene.tracker_confidence = !$(this).is(':checked');
-        const payload = { scene: appData.settings.scene };
-        $.ajax({
-            type: "POST",
-            url: 'settings',
-            contentType: 'application/json',
-            data: JSON.stringify(payload),
-            success: () => showToast('Settings updated', 'info'),
-            error: () => showToast('Settings update failed', 'danger')
-        });
+        saveSceneSettings();
     });
 
     // Cut-off area enable switch
@@ -337,11 +331,9 @@ $(document).ready(function() {
         if (!appData.settings.scene.cutoff) appData.settings.scene.cutoff = {};
         appData.settings.scene.cutoff.active = enabled;
         if (enabled) {
-            $('#cutoff-area-controls').show();
-            // Also show the stitch settings panel since they share the video
-            $('#stitch-settings').removeClass('hidden');
+            $('#cutoff-controls').show();
         } else {
-            $('#cutoff-area-controls').hide();
+            $('#cutoff-controls').hide();
         }
         saveSceneSettings();
     });
@@ -367,41 +359,32 @@ $(document).ready(function() {
         if (!appData) return;
         const isEnabled = $(this).is(':checked');
         appData.settings.stitch.active = isEnabled;
-
         if (isEnabled) {
-            $('#stitch-settings').removeClass('hidden');
+            $('#stitch-controls').show();
         } else {
-            // Only hide if cut-off is also disabled
-            var cutoffActive = appData.settings.scene.cutoff && appData.settings.scene.cutoff.active;
-            if (!cutoffActive) {
-                $('#stitch-settings').addClass('hidden');
-            }
+            $('#stitch-controls').hide();
         }
-
         saveStitchSettings();
     });
 
     // Stitch area buttons
     $('#btn-stitch-area').on('click', () => areaSelector.setMode('stitch'));
-    $('#btn-save-stitch-area').on('click', function() {
+
+    // Save stitch settings button (also saves area)
+    $('#btn-save-stitch').on('click', function() {
+        if (!appData) return;
+        appData.settings.stitch.duration = parseInt($('#stitch-duration').val());
+        appData.settings.stitch.angle_threshold = parseInt($('#stitch-angle-threshold').val());
+        appData.settings.stitch.allow_class_switch = $('#stitch-allow-class-switch').is(':checked');
         const areas = areaSelector.getAreas();
         if (areas.stitch) {
             appData.settings.stitch.x1 = areas.stitch.x1;
             appData.settings.stitch.y1 = areas.stitch.y1;
             appData.settings.stitch.x2 = areas.stitch.x2;
             appData.settings.stitch.y2 = areas.stitch.y2;
-            saveStitchSettings();
-            areaSelector.hideAreas();
         }
-    });
-
-    // Save stitch settings button
-    $('#btn-save-stitch').on('click', function() {
-        if (!appData) return;
-        appData.settings.stitch.duration = parseInt($('#stitch-duration').val());
-        appData.settings.stitch.angle_threshold = parseInt($('#stitch-angle-threshold').val());
-        appData.settings.stitch.allow_class_switch = $('#stitch-allow-class-switch').is(':checked');
         saveStitchSettings();
+        areaSelector.hideAreas();
     });
 });
 

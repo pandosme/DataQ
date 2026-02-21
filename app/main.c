@@ -640,6 +640,12 @@ void Tracker_Data(cJSON *tracker, int timer) {
 
 void Publish_Path( cJSON* path ){
 	if( !path ) return;
+	// Discard paths with fewer than 3 sampled positions
+	cJSON* pathArray = cJSON_GetObjectItem(path, "path");
+	if( !pathArray || cJSON_GetArraySize(pathArray) < 3 ) {
+		cJSON_Delete(path);
+		return;
+	}
     char topic[128];
 	snprintf(topic, sizeof(topic), "path/%s", ACAP_DEVICE_Prop("serial"));
 	MQTT_Publish_JSON(topic, path, 0, 0);
