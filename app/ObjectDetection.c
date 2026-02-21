@@ -125,7 +125,11 @@ static int config_x2 = 1000;
 static int config_y1 = 0;
 static int config_y2 = 1000;
 static int config_hanging_objects = 0;
-static double config_perspective_guard = 0;  // 0 = disabled, >0 = max allowed bbox area ratio
+static int config_cutoff_active = 0;   // 0 = disabled, 1 = enabled
+static int config_cutoff_x1 = 50;
+static int config_cutoff_y1 = 50;
+static int config_cutoff_x2 = 950;
+static int config_cutoff_y2 = 950;
 
 static cJSON* config_blacklist = 0;
 
@@ -233,7 +237,16 @@ void ObjectDetection_Config(cJSON* data) {
     config_min_width = cJSON_GetObjectItem(data, "minWidth") ? cJSON_GetObjectItem(data, "minWidth")->valueint : 10;
     config_max_width = cJSON_GetObjectItem(data, "maxWidth") ? cJSON_GetObjectItem(data, "maxWidth")->valueint : 800;
     config_hanging_objects = 0;
-    config_perspective_guard = cJSON_GetObjectItem(data, "perspectiveGuard") ? cJSON_GetObjectItem(data, "perspectiveGuard")->valuedouble : 0;
+    cJSON *cutoff = cJSON_GetObjectItem(data, "cutoff");
+    if (cutoff) {
+        config_cutoff_active = cJSON_GetObjectItem(cutoff, "active") ? cJSON_IsTrue(cJSON_GetObjectItem(cutoff, "active")) : 0;
+        config_cutoff_x1 = cJSON_GetObjectItem(cutoff, "x1") ? cJSON_GetObjectItem(cutoff, "x1")->valueint : 50;
+        config_cutoff_y1 = cJSON_GetObjectItem(cutoff, "y1") ? cJSON_GetObjectItem(cutoff, "y1")->valueint : 50;
+        config_cutoff_x2 = cJSON_GetObjectItem(cutoff, "x2") ? cJSON_GetObjectItem(cutoff, "x2")->valueint : 950;
+        config_cutoff_y2 = cJSON_GetObjectItem(cutoff, "y2") ? cJSON_GetObjectItem(cutoff, "y2")->valueint : 950;
+    } else {
+        config_cutoff_active = 0;
+    }
     cJSON *aoi = cJSON_GetObjectItem(data, "aoi");
     if (aoi) {
         config_x1 = cJSON_GetObjectItem(aoi, "x1") ? cJSON_GetObjectItem(aoi, "x1")->valueint : 0;
@@ -638,23 +651,23 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
             g_hash_table_insert(detectionCache, keycopy, entry);
 
         } else {
-            // Perspective guard: detect when VOD reuses an ID for a different object
-            // Common in heavy perspective views or fisheye lenses where an object leaves
-            // at distance (small bbox) and a new object appears near camera (large bbox)
-            if (config_perspective_guard > 0 && entry->valid && entry->w > 0 && entry->h > 0 && rw > 0 && rh > 0) {
-                int old_area = entry->w * entry->h;
-                int new_area = rw * rh;
-                double size_ratio = (old_area > new_area)
-                    ? (double)old_area / new_area
-                    : (double)new_area / old_area;
-                if (size_ratio >= config_perspective_guard) {
-                    LOG("Perspective guard: ID %s size ratio %.1f (old %dx%d, new %dx%d) - treating as new object\n",
-                        entry->id, size_ratio, entry->w, entry->h, rw, rh);
+            // Cut-off area guard: detect when an existing tracked object moves outside the
+            // defined cut-off boundary.  When the object's center exits the area, it is
+            // finalized ("lost").  If VOD later reuses the same ID (the object re-enters),
+            // it will be treated as a brand-new object with its own path.
+            if (config_cutoff_active && entry->valid) {
+                int inside_cutoff = (cx >= config_cutoff_x1 && cx <= config_cutoff_x2 &&
+                                     cy >= config_cutoff_y1 && cy <= config_cutoff_y2);
+                int was_inside = (entry->cx >= config_cutoff_x1 && entry->cx <= config_cutoff_x2 &&
+                                  entry->cy >= config_cutoff_y1 && entry->cy <= config_cutoff_y2);
+                if (was_inside && !inside_cutoff) {
+                    LOG("Cut-off area: ID %s left the area (was %d,%d now %d,%d) - treating as lost\n",
+                        entry->id, entry->cx, entry->cy, cx, cy);
                     // Publish death of current identity
                     entry->active = false;
-                    bool pg_should_publish = false;
-                    cJSON *death_json = build_tracker_json(entry, 0, &pg_should_publish);
-                    if (pg_should_publish && death_json) {
+                    bool co_should_publish = false;
+                    cJSON *death_json = build_tracker_json(entry, 0, &co_should_publish);
+                    if (co_should_publish && death_json) {
                         tracker_callback_data_t *cb_data = malloc(sizeof(tracker_callback_data_t));
                         if (cb_data) {
                             cb_data->payload = cJSON_Duplicate(death_json, 1);
@@ -704,9 +717,9 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
                     Adjust_For_VehicleType(entry);
                     // Publish birth tracker for new identity
                     if (entry->valid) {
-                        pg_should_publish = false;
-                        cJSON *birth_json = build_tracker_json(entry, 0, &pg_should_publish);
-                        if (pg_should_publish && birth_json) {
+                        co_should_publish = false;
+                        cJSON *birth_json = build_tracker_json(entry, 0, &co_should_publish);
+                        if (co_should_publish && birth_json) {
                             tracker_callback_data_t *cb_data = malloc(sizeof(tracker_callback_data_t));
                             if (cb_data) {
                                 cb_data->payload = cJSON_Duplicate(birth_json, 1);

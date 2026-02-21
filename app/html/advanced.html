@@ -63,43 +63,35 @@
                         </div>
                     </div>
 
-                    <!-- Perspective Guard Card -->
+                    <!-- Cut-off Area Card -->
                     <div class="card mt-3">
                         <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 class="card-title mb-0">Perspective Guard</h5>
+                            <h5 class="card-title mb-0">Cut-off Area</h5>
                             <div class="form-check form-switch d-inline-flex align-items-center">
-                                <input class="form-check-input" type="checkbox" id="perspectiveGuard-switch">
-                                <label class="form-check-label ms-2" for="perspectiveGuard-switch">Enable</label>
+                                <input class="form-check-input" type="checkbox" id="cutoff-enable-switch">
+                                <label class="form-check-label ms-2" for="cutoff-enable-switch">Enable</label>
                             </div>
                         </div>
                         <div class="card-body">
-                            <div class="row g-4">
+                            <div class="row g-4 align-items-center">
                                 <div class="col-md-8">
                                     <p class="mb-2">
-                                        <strong>Problem:</strong> In scenes with strong perspective or fisheye lenses,
-                                        an object moving <em>away</em> from the camera may disappear and a
-                                        <em>new</em> object moving <em>toward</em> the camera gets assigned the same tracker ID.
-                                        This creates a false path that appears to reverse direction.
+                                        Define a boundary area on the camera view.
+                                        When a tracked object's center leaves this boundary it is <strong>finalized</strong> ("lost").
+                                        If the analytics engine later reuses the same tracker ID, DataQ treats the new
+                                        detection as a <strong>separate object</strong> with its own path.
                                     </p>
                                     <p class="text-muted small mb-0">
-                                        When enabled, DataQ monitors each object's bounding box size.
-                                        If the size changes dramatically between frames (indicating a near/far switch),
-                                        the old object is finalized and the new one is treated as a separate object
-                                        with its own path. This does not affect objects that are correctly idle
-                                        (e.g. a vehicle stopped at a red light keeps the same bounding box size).
+                                        This prevents false paths that appear to reverse direction when an outgoing
+                                        object disappears at the edge and an incoming object is assigned the same ID.
+                                        Draw the cut-off boundary on the video below (shared with Path Stitching).
                                     </p>
                                 </div>
-                                <div class="col-md-4" id="perspectiveGuard-settings" style="display:none;">
-                                    <label for="scene-perspectiveGuard" class="form-label">Sensitivity</label>
-                                    <select class="form-select" id="scene-perspectiveGuard">
-                                        <option value="2">High &mdash; triggers on 2&times; size change</option>
-                                        <option value="3">Medium &mdash; triggers on 3&times; size change</option>
-                                        <option value="4">Low &mdash; triggers on 4&times; size change</option>
-                                        <option value="5">Very low &mdash; triggers on 5&times; size change</option>
-                                    </select>
-                                    <div class="text-muted small mt-1">
-                                        Higher sensitivity catches more ID switches but may split
-                                        objects that naturally change in size. Start with Medium.
+                                <div class="col-md-4" id="cutoff-area-controls" style="display:none;">
+                                    <button type="button" class="btn btn-outline-danger btn-sm w-100 mb-2" id="btn-cutoff-area">Draw Cut-off Boundary</button>
+                                    <button type="button" class="btn btn-success btn-sm w-100" id="btn-save-cutoff-area">Save Boundary</button>
+                                    <div class="text-muted small mt-2">
+                                        Objects whose center moves outside the red boundary will be finalized.
                                     </div>
                                 </div>
                             </div>
@@ -255,11 +247,10 @@ $(document).ready(function() {
             // Load tracker predictions
             $('#tracker-predictions-switch').prop('checked', !app.settings.scene.tracker_confidence);
 
-            // Load perspective guard
-            $('#scene-perspectiveGuard').val(app.settings.scene.perspectiveGuard || 3);
-            var pgEnabled = (app.settings.scene.perspectiveGuard || 0) > 0;
-            $('#perspectiveGuard-switch').prop('checked', pgEnabled);
-            if (pgEnabled) $('#perspectiveGuard-settings').show();
+            // Load cut-off area
+            const cutoffSettings = app.settings.scene.cutoff || {};
+            $('#cutoff-enable-switch').prop('checked', cutoffSettings.active || false);
+            if (cutoffSettings.active) $('#cutoff-area-controls').show();
 
             // Load stitch settings
             const stitchSettings = app.settings.stitch || {};
@@ -269,7 +260,7 @@ $(document).ready(function() {
             $('#stitch-allow-class-switch').prop('checked', stitchSettings.allow_class_switch || false);
 
             // Show/hide stitch settings based on enable switch
-            if (stitchSettings.active) {
+            if (stitchSettings.active || cutoffSettings.active) {
                 $('#stitch-settings').removeClass('hidden');
             }
 
@@ -288,7 +279,8 @@ $(document).ready(function() {
 
             // Setup area selector
             const areaModes = [
-                { key: 'stitch',  button: '#btn-stitch-area', color: 'rgba(0,0,0,0.5)' }  // Black bounding box
+                { key: 'stitch',  button: '#btn-stitch-area',  color: 'rgba(0,0,0,0.5)' },
+                { key: 'cutoff',  button: '#btn-cutoff-area',  color: 'rgba(255,0,0,0.35)' }
             ];
 
             areaSelector = new AreaSelector('stitch-canvas', {
@@ -305,7 +297,14 @@ $(document).ready(function() {
                 y2: stitchSettings.y2 || 750
             };
 
-            areaSelector.setAreas({ stitch: stitchArea });
+            const cutoffArea = {
+                x1: cutoffSettings.x1 || 50,
+                y1: cutoffSettings.y1 || 50,
+                x2: cutoffSettings.x2 || 950,
+                y2: cutoffSettings.y2 || 950
+            };
+
+            areaSelector.setAreas({ stitch: stitchArea, cutoff: cutoffArea });
             areaSelector.setMode('stitch');
             areaSelector.hideAreas();
 
@@ -331,24 +330,36 @@ $(document).ready(function() {
         });
     });
 
-    // Perspective Guard switch
-    $('#perspectiveGuard-switch').on('change', function() {
+    // Cut-off area enable switch
+    $('#cutoff-enable-switch').on('change', function() {
         if (!appData) return;
         var enabled = $(this).is(':checked');
+        if (!appData.settings.scene.cutoff) appData.settings.scene.cutoff = {};
+        appData.settings.scene.cutoff.active = enabled;
         if (enabled) {
-            $('#perspectiveGuard-settings').show();
-            appData.settings.scene.perspectiveGuard = parseInt($('#scene-perspectiveGuard').val()) || 3;
+            $('#cutoff-area-controls').show();
+            // Also show the stitch settings panel since they share the video
+            $('#stitch-settings').removeClass('hidden');
         } else {
-            $('#perspectiveGuard-settings').hide();
-            appData.settings.scene.perspectiveGuard = 0;
+            $('#cutoff-area-controls').hide();
         }
         saveSceneSettings();
     });
 
-    $('#scene-perspectiveGuard').on('change', function() {
+    // Cut-off area draw/save buttons
+    $('#btn-cutoff-area').on('click', () => areaSelector.setMode('cutoff'));
+    $('#btn-save-cutoff-area').on('click', function() {
         if (!appData) return;
-        appData.settings.scene.perspectiveGuard = parseInt($(this).val());
-        saveSceneSettings();
+        const areas = areaSelector.getAreas();
+        if (areas.cutoff) {
+            if (!appData.settings.scene.cutoff) appData.settings.scene.cutoff = {};
+            appData.settings.scene.cutoff.x1 = areas.cutoff.x1;
+            appData.settings.scene.cutoff.y1 = areas.cutoff.y1;
+            appData.settings.scene.cutoff.x2 = areas.cutoff.x2;
+            appData.settings.scene.cutoff.y2 = areas.cutoff.y2;
+            saveSceneSettings();
+            areaSelector.hideAreas();
+        }
     });
 
     // Stitch enable switch
@@ -360,7 +371,11 @@ $(document).ready(function() {
         if (isEnabled) {
             $('#stitch-settings').removeClass('hidden');
         } else {
-            $('#stitch-settings').addClass('hidden');
+            // Only hide if cut-off is also disabled
+            var cutoffActive = appData.settings.scene.cutoff && appData.settings.scene.cutoff.active;
+            if (!cutoffActive) {
+                $('#stitch-settings').addClass('hidden');
+            }
         }
 
         saveStitchSettings();

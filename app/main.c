@@ -1061,8 +1061,15 @@ void HandleVersionUpdateConfigurations(cJSON* settings) {
     }
     if (!cJSON_GetObjectItem(scene, "ignoreClass"))
         cJSON_AddArrayToObject(scene, "ignoreClass");
-    if (!cJSON_GetObjectItem(scene, "perspectiveGuard"))
-        cJSON_AddNumberToObject(scene, "perspectiveGuard", 0);
+    if (!cJSON_GetObjectItem(scene, "cutoff")) {
+        cJSON* cutoff = cJSON_CreateObject();
+        cJSON_AddFalseToObject(cutoff, "active");
+        cJSON_AddNumberToObject(cutoff, "x1", 50);
+        cJSON_AddNumberToObject(cutoff, "y1", 50);
+        cJSON_AddNumberToObject(cutoff, "x2", 950);
+        cJSON_AddNumberToObject(cutoff, "y2", 950);
+        cJSON_AddItemToObject(scene, "cutoff", cutoff);
+    }
 
     cJSON* publish = cJSON_GetObjectItem(settings, "publish");
     if (!publish) {
