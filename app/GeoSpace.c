@@ -68,7 +68,7 @@ GeoSpace_transform(int x, int y, double *lat, double *lon) {
     
     // Create point vector [x, y, 1]
     lm_mat_t p;
-    lm_mat_elem_t p_data[3] = {(lm_mat_elem_t)x, (lm_mat_elem_t)y, 1.0f};
+    lm_mat_elem_t p_data[3] = {(lm_mat_elem_t)x, (lm_mat_elem_t)y, 1.0};
     if (lm_mat_set(&p, 3, 1, p_data, 3) != LM_SUCCESS) {
         return 0;
     }
@@ -81,13 +81,13 @@ GeoSpace_transform(int x, int y, double *lat, double *lon) {
     }
     
     // Compute transformation using stored matrix
-    if (lm_oper_gemm(false, false, 1.0f, &gMatrix.H, &p, 0.0f, &result) != LM_SUCCESS) {
+    if (lm_oper_gemm(false, false, 1.0, &gMatrix.H, &p, 0.0, &result) != LM_SUCCESS) {
         return 0;
     }
     
     // Convert to homogeneous coordinates
     lm_mat_elem_t w = result_data[2];
-    if (fabsf(w) > 1e-10f) {
+    if (fabs(w) > 1e-10) {
         *lon = (double)(result_data[0] / w);
         *lat = (double)(result_data[1] / w);
     }
@@ -115,6 +115,12 @@ GeoSpace_HTTP_transform(const ACAP_HTTP_Response response, const ACAP_HTTP_Reque
     
     double x = atof(xParam);
     double y = atof(yParam);
+
+    if (x < 0 || x > 1000 || y < 0 || y > 1000) {
+        ACAP_HTTP_Respond_Error(response, 400, "Coordinates out of range (0-1000)");
+        return;
+    }
+
     double lat, lon;
 
     GeoSpace_transform(x, y, &lat, &lon);
@@ -137,8 +143,9 @@ GeoSpace_Init() {
 	if( settings ) {
 		cJSON* markers = cJSON_GetObjectItem(settings,"markers");
 		cJSON* matrix = cJSON_GetObjectItem(settings,"matrix");
-		if( markers && matrix && cJSON_GetArraySize(markers) && cJSON_GetArraySize(matrix) )
-			ACAP_STATUS_SetBool("geospace", "active", 1);
+		if( markers && matrix && cJSON_GetArraySize(markers) && cJSON_GetArraySize(matrix) ) {
+			GeoSpace_Matrix(matrix);
+		}
 	}
     ACAP_HTTP_Node("geospace", GeoSpace_HTTP_transform);
 	

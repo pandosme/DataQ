@@ -54,10 +54,41 @@
 					</div>
 					<div id="locationContent" class="location-content">	
 						<div class="card-body" id="settings-form">
-							<div class="btn-group mb-3" role="group" aria-label="Mode Selector">
-								<button type="button" id="defaultModeBtn" class="btn mode-button">Monitor</button>
-								<button type="button" id="editMarkersModeBtn" class="btn mode-button">Edit Markers</button>
-								<button type="button" id="validateCalibrationModeBtn" class="btn mode-button">Validate</button>
+							<!-- Mode selector with descriptions -->
+							<div class="geospace-toolbar mb-3">
+								<div class="btn-group" role="group" aria-label="Mode Selector">
+									<button type="button" id="defaultModeBtn" class="btn mode-button" title="View live tracker positions on the map">
+										<span class="mode-icon">&#9673;</span> Monitor
+									</button>
+									<button type="button" id="editMarkersModeBtn" class="btn mode-button" title="Place reference markers to calibrate the camera-to-map transformation">
+										<span class="mode-icon">&#9998;</span> Calibrate
+									</button>
+									<button type="button" id="validateCalibrationModeBtn" class="btn mode-button" title="Click on the video to verify the calibration maps correctly to the map">
+										<span class="mode-icon">&#10003;</span> Validate
+									</button>
+								</div>
+								<div class="toolbar-actions">
+									<button type="button" id="saveBtn" class="btn btn-success btn-sm d-none">
+										<span>&#10003;</span> Save &amp; Calibrate
+									</button>
+									<button type="button" id="saveMapBtn" class="btn btn-outline-primary btn-sm d-none">
+										Save Camera Location
+									</button>
+									<button type="button" id="clearAllBtn" class="btn btn-outline-danger btn-sm d-none">
+										Clear All
+									</button>
+								</div>
+							</div>
+
+							<!-- Mode-specific help text -->
+							<div id="modeHelp" class="mode-help mb-3">
+								<small id="modeHelpText" class="text-muted"></small>
+							</div>
+
+							<!-- Marker count / calibration status -->
+							<div id="calibrationStatus" class="calibration-status mb-3 d-none">
+								<span id="markerCountBadge" class="badge bg-secondary">0 markers</span>
+								<small id="calibrationHint" class="text-muted ms-2"></small>
 							</div>
 
 							<!-- Alert message -->
@@ -69,21 +100,18 @@
 							<!-- Video and Map Section -->
 							<div class="row">
 								<div class="col-md-6">
+									<div class="panel-label"><small class="text-muted">Camera View</small></div>
 									<div id="video-view" aria-label="Camera feed" style="width: 800px;">
 										<div id="video"></div>
 										<div id="marker-canvas"></div>
 										<canvas id="detection-canvas" width="1000" height="1000" style="width:100%; height:100%; position:absolute; top:0px; left:0px;"></canvas>
-									</div>
-									<div class="mt-3">
-										<button type="button" id="saveBtn" class="btn btn-success btn-sm d-none">Save & Calibrate</button>
+										<div id="videoCrosshair" class="video-crosshair d-none"></div>
 									</div>
 								</div>
 
 								<div class="col-md-6">
+									<div class="panel-label"><small class="text-muted">Map View</small></div>
 									<div id="map"></div>
-									<div class="mt-3">
-										<button type="button" id="saveMapBtn" class="btn btn-success btn-sm d-none">Save Map</button>
-									</div>
 								</div>
 							</div>
 						</div>
@@ -132,6 +160,7 @@ async function initializeApplication() {
         initializeVideo();
         setupEventHandlers();
 		$('#defaultModeBtn').addClass('active');
+        updateModeHelp('default');
 		AppState.markers.forEach(marker => {
 			marker.videoMarker.style.display = 'none';
 			marker.mapMarker.remove();
@@ -285,11 +314,12 @@ function initializeSavedMarkers() {
     
     AppState.savedMarkers.forEach(markerData => {
         const [normalizedX, normalizedY, lat, lng] = markerData;
+        const label = AppState.nextMarkerId;
         
         // Create video marker element
         const videoMarker = document.createElement('div');
         videoMarker.className = 'marker';
-        videoMarker.innerHTML = '<span class="marker-label">' + AppState.nextMarkerId + '</span>';
+        videoMarker.innerHTML = '<span class="marker-label">' + label + '</span>';
         videoMarker.style.display = 'none';  // Initially hidden
         
         // Convert normalized coordinates to view coordinates
@@ -298,10 +328,16 @@ function initializeSavedMarkers() {
         videoMarker.style.left = viewCoords.x + 'px';
         videoMarker.style.top = viewCoords.y + 'px';
         
-        // Create map marker
+        // Create map marker with numbered tooltip
         const mapMarker = L.marker([lat, lng], {
             draggable: true
         }).addTo(AppState.map);
+        mapMarker.bindTooltip(String(label), {
+            permanent: true,
+            direction: 'top',
+            className: 'marker-tooltip',
+            offset: [0, -10]
+        });
         
         // Store both markers
         const id = 'marker-' + AppState.nextMarkerId++;
@@ -338,6 +374,10 @@ function initializeVideo() {
 
 	$("#video-view").css("width", width + "px");
 	$("#video-view").css("height", height + "px");
+	$("#map").css("height", height + "px");
+	if (AppState.map) {
+		setTimeout(function() { AppState.map.invalidateSize(); }, 200);
+	}
 
     const secureConnection = location.protocol === 'https:' ? ' secure=true' : '';
     const player = '<media-stream-player hostname="' + window.location.hostname + '" ' + 
@@ -356,21 +396,28 @@ function createMarker(viewX, viewY) {
     const videoElement = document.getElementById('video-view');
     const normalized = viewToNormalizedCoords(viewX, viewY, videoElement);
     const id = 'marker-' + AppState.nextMarkerId++;
+    const label = AppState.nextMarkerId;
     
     // Create video marker element
     const videoMarker = document.createElement('div');
     videoMarker.className = 'marker';
-    videoMarker.innerHTML = '<span class="marker-label">' + AppState.nextMarkerId + '</span>';
+    videoMarker.innerHTML = '<span class="marker-label">' + label + '</span>';
     
     // Convert normalized coordinates back to view coordinates for display
     const viewCoords = normalizedToViewCoords(normalized.x, normalized.y, videoElement);
     videoMarker.style.left = viewCoords.x + 'px';
     videoMarker.style.top = viewCoords.y + 'px';
     
-    // Create map marker
+    // Create map marker with numbered popup
     const mapMarker = L.marker(AppState.map.getCenter(), {
         draggable: true
     }).addTo(AppState.map);
+    mapMarker.bindTooltip(String(label), {
+        permanent: true,
+        direction: 'top',
+        className: 'marker-tooltip',
+        offset: [0, -10]
+    });
     
     // Store normalized coordinates
     AppState.markers.set(id, {
@@ -382,6 +429,7 @@ function createMarker(viewX, viewY) {
     });
 
     document.getElementById('video-view').appendChild(videoMarker);
+    updateCalibrationStatus();
 }
 
 function selectMarker(id) {
@@ -404,6 +452,7 @@ function deleteMarker(id) {
     marker.videoMarker.remove();
     AppState.map.removeLayer(marker.mapMarker);
     AppState.markers.delete(id);
+    updateCalibrationStatus();
 }
 
 function calculateHomography(points) {
@@ -427,19 +476,47 @@ function calculateHomography(points) {
 
         // Convert to array and normalize
         const result = H.valueOf().flat();
-        return [
+        const matrix = [
             result[0], result[1], result[2],
             result[3], result[4], result[5],
             result[6], result[7], 1
         ];
+
+        // Validate calibration quality via re-projection error
+        const error = computeReprojectionError(points, matrix);
+        console.log('Homography re-projection error: ' + error.toFixed(6));
+        if (error > 0.001) {
+            showToast('Warning: Calibration re-projection error is high (' + error.toFixed(6) + '). Consider adjusting markers.', 'warning');
+        }
+
+        return matrix;
     } catch (error) {
         console.error('Homography calculation failed:', error);
         throw new Error('Failed to calculate homography matrix');
     }
 }
 
+function computeReprojectionError(points, matrix) {
+    let totalError = 0;
+    points.forEach(({ video: { x, y }, map: { lat, lng } }) => {
+        const d = matrix[6] * x + matrix[7] * y + 1;
+        if (Math.abs(d) < 1e-10) { totalError += 1e6; return; }
+        const projLng = (matrix[0] * x + matrix[1] * y + matrix[2]) / d;
+        const projLat = (matrix[3] * x + matrix[4] * y + matrix[5]) / d;
+        totalError += Math.sqrt(Math.pow(projLng - lng, 2) + Math.pow(projLat - lat, 2));
+    });
+    return totalError / points.length;
+}
+
 function saveMarkers() {
     if (AppState.currentMode !== 'editMarkers') return;
+    if (AppState.markers.size < 4) {
+        showToast('Need at least 4 markers to calibrate (currently ' + AppState.markers.size + ')', 'warning');
+        return;
+    }
+    
+    // Disable save button during operation
+    $('#saveBtn').prop('disabled', true).text('Saving...');
     
     // First save markers as before
     const markerArray = [];
@@ -448,8 +525,8 @@ function saveMarkers() {
     AppState.markers.forEach(marker => {
         const latlng = marker.mapMarker.getLatLng();
         markerArray.push([
-            parseInt(marker.normalizedX),
-            parseInt(marker.normalizedY),
+            Math.round(marker.normalizedX),
+            Math.round(marker.normalizedY),
             latlng.lat,
             latlng.lng
         ]);
@@ -492,51 +569,27 @@ function saveMarkers() {
 					data: JSON.stringify(matrixPayload),
                     success: function(response) {
                         showToast("Calibration complete", 'success');
+                        resetSaveButton();
                     },
                     error: function(xhr, status, error) {
                         showToast("Calibration failed", 'danger');
+                        resetSaveButton();
                     }
                 });
             } catch (error) {
                 showToast(error.message, 'danger');
+                resetSaveButton();
             }
         },
         error: function(xhr, status, error) {
             showToast("Failed to save markers", 'danger');
+            resetSaveButton();
         }
     });
 }
 
-function calculateAndSaveMatrix(markers) {
-    if (markers.length < 4) {
-        showToast("At least 4 markers needed for calibration", 'warning');
-        return;
-    }
-
-    // Create source and destination point arrays
-    const srcPoints = markers.map(m => ({ x: m[0], y: m[1] }));
-    const dstPoints = markers.map(m => ({ x: m[2], y: m[3] }));
-    
-    // Calculate homography matrix
-    const matrix = computeHomography(srcPoints, dstPoints);
-    
-    // Save the calculated matrix
-    const matrixPayload = {
-        "matrix": matrix
-    };
-    
-    $.ajax({
-        type: "POST",
-        url: 'settings',
-		contentType: 'application/json',
-		data: JSON.stringify(matrixPayload),
-        success: function(response) {
-            showToast("Calibration complete", 'success');
-        },
-        error: function(xhr, status, error) {
-            showToast("Calibration failed", 'danger');
-        }
-    });
+function resetSaveButton() {
+    $('#saveBtn').prop('disabled', false).html('<span>&#10003;</span> Save &amp; Calibrate');
 }
 
 function createVideoMarkerElement(id, x, y) {
@@ -562,12 +615,56 @@ function setupEventHandlers() {
     $('#validateCalibrationModeBtn').click(() => setMode('validate'));
 	$('#saveBtn').click(saveMarkers);
 	$('#saveMapBtn').click(saveMapLocation);
+	$('#clearAllBtn').click(clearAllMarkers);
+}
+
+function clearAllMarkers() {
+    if (AppState.markers.size === 0) return;
+    AppState.markers.forEach(marker => {
+        marker.videoMarker.remove();
+        AppState.map.removeLayer(marker.mapMarker);
+    });
+    AppState.markers.clear();
+    AppState.nextMarkerId = 0;
+    updateCalibrationStatus();
+    showToast('All markers removed', 'info');
+}
+
+function updateCalibrationStatus() {
+    const count = AppState.markers.size;
+    const badge = document.getElementById('markerCountBadge');
+    const hint = document.getElementById('calibrationHint');
+    
+    badge.textContent = count + (count === 1 ? ' marker' : ' markers');
+    
+    if (count === 0) {
+        badge.className = 'badge bg-secondary';
+        hint.textContent = 'Click on the video to place reference markers.';
+    } else if (count < 4) {
+        badge.className = 'badge bg-warning text-dark';
+        hint.textContent = 'Need at least ' + (4 - count) + ' more — minimum 4 required for calibration.';
+    } else {
+        badge.className = 'badge bg-success';
+        hint.textContent = 'Ready to calibrate. More markers improve accuracy.';
+    }
+}
+
+var modeHelpTexts = {
+    'default': 'Live tracker positions are shown on the map in real-time.',
+    'editMarkers': 'Click on the video to place a numbered marker, then drag its corresponding marker on the map to the real-world location. Right-click a marker to delete it. You need at least 4 markers to calibrate.',
+    'validate': 'Click anywhere on the video to see where it maps on the world map. A red dot will appear at the calculated GPS position.'
+};
+
+function updateModeHelp(mode) {
+    var text = modeHelpTexts[mode] || '';
+    document.getElementById('modeHelpText').textContent = text;
+    document.getElementById('modeHelp').style.display = text ? 'block' : 'none';
 }
 
 function setMode(mode) {
     AppState.currentMode = mode;
 
-    $('.mode-button').removeClass('active').css('background-color', '#f8f9fa');
+    $('.mode-button').removeClass('active').css('background-color', '');
     
     // Hide all markers first
     AppState.markers.forEach(marker => {
@@ -575,9 +672,25 @@ function setMode(mode) {
         marker.mapMarker.remove();
     });
 
-    // Show/hide save button based on mode
+    // Show/hide action buttons based on mode
     $('#saveBtn').toggleClass('d-none', mode !== 'editMarkers');
-	$('#saveMapBtn').toggleClass('d-none', mode !== 'editMarkers');	
+	$('#saveMapBtn').toggleClass('d-none', mode !== 'editMarkers');
+	$('#clearAllBtn').toggleClass('d-none', mode !== 'editMarkers');
+	$('#calibrationStatus').toggleClass('d-none', mode !== 'editMarkers');
+
+    // Update help text
+    updateModeHelp(mode);
+
+    // Update cursor for video view
+    var videoView = document.getElementById('video-view');
+    videoView.classList.remove('cursor-crosshair', 'cursor-pointer');
+
+    // Remove validation crosshair and marker
+    $('#videoCrosshair').addClass('d-none');
+    if (AppState.validationMarker) {
+        AppState.map.removeLayer(AppState.validationMarker);
+        AppState.validationMarker = null;
+    }
 
     switch(mode) {
         case 'default':
@@ -590,6 +703,7 @@ function setMode(mode) {
             
         case 'editMarkers':
             $('#editMarkersModeBtn').addClass('active');
+            videoView.classList.add('cursor-crosshair');
             // Show all markers
             AppState.markers.forEach(marker => {
                 marker.videoMarker.style.display = 'block';
@@ -597,10 +711,12 @@ function setMode(mode) {
             });
             setupVideoMarkerHandlers();
             setupMapMarkerHandlers();
+            updateCalibrationStatus();
             break;
             
 		case 'validate':
-			 $('#validateCalibrationModeBtn').addClass('active');
+			$('#validateCalibrationModeBtn').addClass('active');
+            videoView.classList.add('cursor-crosshair');
 			// Hide all markers
 			AppState.markers.forEach(marker => {
 				marker.videoMarker.style.display = 'none';
@@ -714,6 +830,12 @@ function setupValidationHandlers() {
         const rect = this.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
+
+        // Show crosshair at click position
+        var crosshair = document.getElementById('videoCrosshair');
+        crosshair.classList.remove('d-none');
+        crosshair.style.left = x + 'px';
+        crosshair.style.top = y + 'px';
         
         // Get normalized coordinates
         const normalized = viewToNormalizedCoords(x, y, this);
@@ -730,13 +852,14 @@ function setupValidationHandlers() {
                     AppState.map.removeLayer(AppState.validationMarker);
                 }
                 
-                // Create new validation marker
+                // Create new validation marker and pan to it
                 AppState.validationMarker = L.marker([response.lat, response.lon], {
                     icon: L.divIcon({className: 'validation-marker'})
                 }).addTo(AppState.map);
+                AppState.map.panTo([response.lat, response.lon]);
             },
             error: function(xhr, status, error) {
-                showToast("Transformation failed", 'warning');
+                showToast("Transformation failed. Have you calibrated?", 'warning');
             }
         });
     });

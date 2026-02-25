@@ -624,10 +624,14 @@ void Tracker_Data(cJSON *tracker, int timer) {
             cJSON* geoIdle = cJSON_GetObjectItem(tracker, "idle");
             cJSON* geoId = cJSON_GetObjectItem(tracker, "id");
             cJSON* geoActive = cJSON_GetObjectItem(tracker, "active");
+            cJSON* geoConfidence = cJSON_GetObjectItem(tracker, "confidence");
+            cJSON* geoDistance = cJSON_GetObjectItem(tracker, "distance");
             if (geoAge) cJSON_AddNumberToObject(geospaceObject, "age", geoAge->valuedouble);
             if (geoIdle) cJSON_AddNumberToObject(geospaceObject, "idle", geoIdle->valuedouble);
             if (geoId && geoId->valuestring) cJSON_AddStringToObject(geospaceObject, "id", geoId->valuestring);
             if (geoActive) cJSON_AddItemToObject(geospaceObject, "active", cJSON_Duplicate(geoActive, 1));
+            if (geoConfidence) cJSON_AddNumberToObject(geospaceObject, "confidence", geoConfidence->valuedouble);
+            if (geoDistance) cJSON_AddNumberToObject(geospaceObject, "distance", geoDistance->valuedouble);
             snprintf(topic, sizeof(topic), "geospace/%s", ACAP_DEVICE_Prop("serial"));
             MQTT_Publish_JSON(topic, geospaceObject, 0, 0);
             cJSON_Delete(geospaceObject);

@@ -278,6 +278,11 @@ input:checked + .slider::before {
   border-radius: var(--radius-sm);
 }
 
+#map {
+  height: 450px;
+  min-height: 300px;
+}
+
 #video {
   position: absolute;
   top: 0;
@@ -435,6 +440,19 @@ input:checked + .slider::before {
 }
 
 /* ── Mode Buttons (Geospace) ──────────────────────────────── */
+.geospace-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .mode-button {
   background: var(--card-bg);
   border: 1px solid var(--card-border);
@@ -442,11 +460,86 @@ input:checked + .slider::before {
   font-weight: 500;
 }
 
+.mode-button .mode-icon {
+  margin-right: 2px;
+}
+
 .mode-button.active {
   background: var(--accent) !important;
   color: white !important;
   border-color: var(--accent) !important;
   box-shadow: 0 0 0 3px rgba(59,130,246,.2);
+}
+
+.mode-help {
+  padding: 8px 12px;
+  background: #f0f6ff;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: .85rem;
+}
+
+.calibration-status {
+  display: flex;
+  align-items: center;
+}
+
+.panel-label {
+  margin-bottom: 4px;
+}
+
+/* Cursor styles for video view modes */
+#video-view.cursor-crosshair {
+  cursor: crosshair;
+}
+
+#video-view.cursor-pointer {
+  cursor: pointer;
+}
+
+/* Video crosshair for validation mode */
+.video-crosshair {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 1010;
+}
+
+.video-crosshair::before,
+.video-crosshair::after {
+  content: '';
+  position: absolute;
+  background: #ff3333;
+}
+
+.video-crosshair::before {
+  top: 0;
+  left: 50%;
+  width: 2px;
+  height: 100%;
+  transform: translateX(-50%);
+}
+
+.video-crosshair::after {
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  transform: translateY(-50%);
+}
+
+/* Marker tooltip on map */
+.marker-tooltip {
+  background: var(--accent);
+  color: white;
+  border: none;
+  font-weight: 700;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.3);
 }
 
 /* ── Markers ──────────────────────────────────────────────── */
@@ -497,11 +590,19 @@ input:checked + .slider::before {
 }
 
 .validation-marker {
-  width: 10px;
-  height: 10px;
+  width: 14px;
+  height: 14px;
   background-color: #ff0000;
   border-radius: 50%;
   border: 2px solid white;
+  box-shadow: 0 0 0 0 rgba(255, 0, 0, .4);
+  animation: validation-pulse 1.5s ease-out infinite;
+}
+
+@keyframes validation-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(255, 0, 0, .5); }
+  70%  { box-shadow: 0 0 0 12px rgba(255, 0, 0, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); }
 }
 
 .tracker-marker {

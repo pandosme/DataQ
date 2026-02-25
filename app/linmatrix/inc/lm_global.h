@@ -42,7 +42,7 @@
  */
 
 /* Data type selection */
-#define LM_GLOBAL_MAT_ELEM_TYPE_SINGLE
+#define LM_GLOBAL_MAT_ELEM_TYPE_DOUBLE
 
 /* Element data type: Single */
 #if defined(LM_GLOBAL_MAT_ELEM_TYPE_SINGLE)

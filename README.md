@@ -279,6 +279,23 @@ For VMS (Video Mananagement Systems"), a stateful event "anomaly" will be fired 
 
 ## History
 
+### 3.0.1 Feb 25, 2026
+- Fixed OpenStreetMap not displaying on the Geospace page
+- Fixed critical bug where homography matrix was not loaded at startup, causing all geospace transforms to fail until re-calibration
+- Switched matrix library from single (float) to double precision for accurate GPS coordinate transformations
+- Improved Geospace UI
+  - Context-sensitive help text for each mode (Monitor, Calibrate, Validate)
+  - Live marker count with calibration readiness feedback
+  - Numbered tooltips on map markers matching video marker labels
+  - Clear All button for resetting markers
+  - Crosshair cursor and click indicator in Calibrate and Validate modes
+  - Map auto-pans to validation result
+  - Pre-save validation requiring minimum 4 markers
+- Added re-projection error validation when calibrating homography
+- Added input range validation for geospace HTTP endpoint
+- Added confidence and distance fields to geospace MQTT messages
+- Removed dead code and minor fixes
+
 ### 3.0.0 Feb 21, 2026
 - New Advanced settings page for scene optimization
   - **Perspective Guard** — Cut-off boundary to prevent false path reversals in perspective scenes

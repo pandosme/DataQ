@@ -1,11 +1,9 @@
 ARG ARCH=armv7hf
-ARG VERSION=12.2.0
-ARG UBUNTU_VERSION=20.04
+ARG VERSION=12.8.0
 ARG REPO=axisecp
 ARG SDK=acap-native-sdk
 
-#FROM ${REPO}/${SDK}:${VERSION}-${ARCH}-ubuntu${UBUNTU_VERSION}
-FROM ${REPO}/${SDK}:${VERSION}-${ARCH}
+FROM ${REPO}/${SDK}:${VERSION}-${ARCH}-ubuntu24.04
 # Building the ACAP application
 COPY ./app /opt/app/
 WORKDIR /opt/app
