@@ -10,24 +10,16 @@
 		"occupancy": false,
 		"status": true,
 		"geospace": false,
-		"anomaly": false
+		"image": false
 	},
 	"scene": {
 		"confidence": 30,
-		"rotation": 0,
-		"cog": 1,
-		"maxIdle": 0,
-		"tracker_confidence": true,
-		"hanging_objects": 5,
-		"minWidth": 10,
-		"minHeight": 10,
-		"maxWidth": 800,
-		"maxHeight": 800,
+		"units": 1,
 		"aoi": {
-			"x1": 50,
-			"y1": 50,
-			"x2": 950,
-			"y2": 950
+			"x1": 0,
+			"y1": 0,
+			"x2": 1000,
+			"y2": 1000
 		},
 		"ignoreArea": {
 			"x1": 475,
@@ -121,11 +113,16 @@
 	"userTopics": [],
 	"markers": [],
 	"matrix": [],
+	"radar": {
+		"heading": 0
+	},
+	"location": {
+		"lat": 0,
+		"lon": 0,
+		"heading": 0
+	},
 	"occupancy": {
-		"stationary": true,
-		"moving": true,		
 		"ageThreshold": 2.0,
-		"idleThreshold": 3.0,
 		"integrationTime": 2.0
 	},
 	"anomaly": {},

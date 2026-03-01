@@ -1,0 +1,208 @@
+syntax = "proto3";
+
+package Radar;
+
+/**
+* This API describes analytic primitives and object messages.
+* It does not describe the use of the data, like value representation,
+* limits, resolution, orientation etc. The subscriber of the data should
+* be able to use the oneof parameter to determine when a parameter
+* is provided by the service.
+*/
+
+/**
+ * Bounding box describes an object's surrounding
+ * rectangle with the upper left and lower right corners.
+ */
+message BoundingBox {
+    float left = 1;
+    float top = 2;
+    float right = 3;
+    float bottom = 4;
+}
+
+/**
+ * A point or coordinate, could be represented in 2D or 3D
+ * depending of the producer. Check has_z's status.
+ */
+message Point {
+    float x = 1;
+    float y = 2;
+    oneof has_z { float z = 3; }
+}
+
+/**
+ * A polygon describes the surrounding shape of an object with points.
+ */
+message Polygon {
+    repeated Point points = 1;
+}
+
+/**
+ * Velocity coordinates, could be represented in 2D or 3D
+ * depending of the producer. Check has_vz's status.
+ */
+message Velocity {
+    float vx = 1;
+    float vy = 2;
+    oneof has_vz { float vz = 3; }
+}
+
+/**
+ * Covariance matrix, describing the covariance between state variables of
+ * interest.
+ *
+ * As a covariance matrix, it is assumed to be square: the number of variables
+ * can be taken to be the square root of the total number of elements in the
+ * matrix.
+ *
+ * Elements shall be packed in row-major order, i.e. given a matrix of size N,
+ * the first N elements in this message describe the first row of the matrix.
+ */
+message Covariance {
+    repeated float elements = 1;
+}
+
+/**
+ * Label is classification parameters.
+ * A class is identified with an id.
+ * The confidence value is a level describing how confident the
+ * classification is.
+ * The name is a nice name description of the class label.
+ */
+message Label {
+    oneof has_class_id   { uint32 id = 1; }
+    oneof has_confidence { float confidence = 2; }
+    oneof has_name       { string name = 3; }
+}
+
+/**
+ * Labels is an array of labels.
+ */
+message Labels {
+    repeated Label labels = 1;
+}
+
+/**
+ * GeoPosition is a geographic position
+ */
+message GeoPosition {
+    float elevation = 1;
+    float lat = 2;
+    float lon = 3;
+    oneof has_dlat { double dlat = 4; }
+    oneof has_dlon { double dlon = 5; }
+}
+
+/**
+ * Orientation of the device
+ */
+message Orientation {
+    double tilt = 1;
+    double roll = 2;
+}
+
+/**
+ * Object represents an analytic detection.
+ * It contains identifier, class label information and
+ * geometric representations.
+ *
+ * The producer sets the status of each property when it is
+ * is produced, this is the reason for the oneof declaration.
+ */
+message Object {
+    oneof has_object_id        { uint32 id = 1; }
+    oneof has_confidence       { float confidence = 2; }
+    oneof has_labels           { Labels labels = 3; }
+    oneof has_boundingbox      { BoundingBox bounding_box = 4; }
+    oneof has_polygon          { Polygon polygon = 5; }
+    oneof has_velocity         { Velocity velocity = 6; }
+    oneof has_position         { Point position = 7; }
+    oneof has_area             { float area = 8; }
+    oneof has_covariance       { Covariance covariance = 9; }
+
+    /*
+     * For the sake of backward compatibility, this field is ONLY used if the
+     * producer needs to represent different 2D and 3D velocities for the same
+     * object (e.g. both image and world coordinates). In that case, the 2D
+     * velocity will be stored in 'velocity', and the 3D velocity will be
+     * stored here, in 'velocity3d'.
+     *
+     * If only one velocity is stored, whether it is 2D or 3D, it will be
+     * stored in 'velocity' (and velocity.has_vz will have the appropriate
+     * status).
+     */
+    oneof has_velocity3d       { Velocity velocity3d = 10; }
+
+    oneof has_geoposition      { GeoPosition geoposition = 11; }
+}
+
+/**
+ * Event action used by an event. See further info below.
+ */
+enum EventAction {
+    EVENT_DELETE = 0;
+    EVENT_SPLIT = 1;
+    EVENT_MERGE = 2;
+}
+
+/**
+ * Event is an object that holds information about an event. The type
+ * of event is specified with an action and refers to one or multiple
+ * object ids.
+ * For example a delete event only has one id, so the object_id refers
+ * to the object that has been deleted (and object_ids is empty).
+ * For a split event the object_id is the source id and the object_ids
+ * are the target ids, i.e. one id is split into multiple ids.
+ * For a merge event the object_ids are the source id and the object_id
+ * is the target id, i.e. multiple ids are merged into one id.
+ */
+message Event {
+    EventAction    action = 1;       /* Event identifier */
+    int32          object_id = 2;    /* Object's id this event refer to */
+    repeated int32 object_ids = 3;   /* Multiple object ids if needed */
+}
+
+/**
+ * Failure describes a single failure and its state.
+ */
+message Failure {
+    string name = 1;
+    int32 id = 2;
+    bool state = 3;
+}
+
+/**
+ * Status describes the radar status.
+ */
+message Status {
+    bool enabled = 1;
+    bool prerecorded = 2;
+    repeated Failure failures = 3;
+}
+
+/**
+ * Scene object is a time-frame representation of analytic objects.
+ * The objects limits, normalisation, orientation should be given by
+ * documentation from the current provider.
+ * Examples:
+ * The orientation may be a cartesian coordinate system or
+ * coordinates are accessed as pixels from an image or spherical
+ * coordinates system describing depth and angles.
+ */
+message Scene {
+    oneof has_time       { uint64 time = 1; }      /* Custom time in nanoseconds */
+    oneof has_real_time  { uint64 real_time = 2; } /* System time in nanoseconds */
+    repeated Object      objects = 3;              /* Objects */
+    repeated Event       events = 4;               /* Events */
+    oneof has_status     { Status status = 5; }
+    oneof has_orientation { Orientation orientation = 6; }
+    oneof has_param_changed { bool param_changed = 7; }
+}
+
+/**
+ * Scenes object hold a number of scene objects.
+ */
+message Scenes {
+    repeated Scene scenes = 1;
+}

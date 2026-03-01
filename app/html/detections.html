@@ -18,16 +18,17 @@
     <div class="bg-light border-right" id="sidebar-wrapper">
         <div class="sidebar-heading">&nbsp;</div>
         <div class="list-group list-group-flush">
-			<a href="index.html" class="list-group-item list-group-item-action">Overview</a>
-			<a href="events.html" class="list-group-item list-group-item-action">Events</a>
-			<a href="detections.html" class="list-group-item list-group-item-action active">Detections</a>
-			<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
-			<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
-			<a href="anomaly.html" class="list-group-item list-group-item-action">Anomaly</a>
-			<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
-			<a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
-			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
-			<a href="about.html" class="list-group-item list-group-item-action">About</a>
+            <a href="index.html" class="list-group-item list-group-item-action">Overview</a>
+            <a href="events.html" class="list-group-item list-group-item-action">Events</a>
+            <a href="detections.html" class="list-group-item list-group-item-action active">Detections</a>
+            <a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
+            <a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
+            <a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
+            <a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
+            <hr class="sidebar-divider">
+            <a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
+            <a href="advanced.html" class="list-group-item list-group-item-action">Advanced</a>
+            <a href="about.html" class="list-group-item list-group-item-action">About</a>
         </div>
     </div>
     
@@ -68,8 +69,6 @@
 								  <div class="card-body">
 									<div class="btn-group btn-group-mode btn-group-sm w-100 mb-2" role="group">
 									  <button type="button" class="btn btn-outline-secondary" id="btn-area">Set Area of Interest</button>
-									  <button type="button" class="btn btn-outline-warning" id="btn-min-size">Set minimum size</button>
-									  <button type="button" class="btn btn-outline-primary" id="btn-max-size">Set maximum size</button>
 									</div>
 									<button type="button" class="btn btn-success mt-2" id="btn-save-area">Save Area</button>
 								  </div>
@@ -100,47 +99,6 @@
 											<option value="97">95</option>
 										</select>
 									</div>
-									<div class="form-group mb-3">
-										<label for="scene-maxIdle" class="form-label">Max idle</label>
-										<select class="form-select" id="scene-maxIdle">
-											<option value="0">Forever</option>
-											<option value="5">5s</option>
-											<option value="10">10s</option>
-											<option value="15">15s</option>
-											<option value="20">20s</option>
-											<option value="30">30s</option>												
-											<option value="45">45s</option>
-											<option value="60">1m</option>
-											<option value="120">2m</option>
-											<option value="180">3m</option>
-											<option value="240">4m</option>
-											<option value="300">5m</option>
-											<option value="600">10m</option>
-											<option value="900">15m</option>
-											<option value="1200">20m</option>
-											<option value="1500">25m</option>
-											<option value="1800">30m</option>
-											<option value="2700">45m</option>
-											<option value="3600">1h</option>
-											<option value="7200">2h</option>
-										</select>
-									</div>
-									<div class="form-group mb-3">
-										<label for="scene-cog" class="form-label">COG</label>
-										<select class="form-select" id="scene-cog">
-											<option value="0">Center of the object</option>
-											<option value="1">Bottom-center (feet/wheels)</option>
-										</select>
-									</div>
-									<div class="form-group mb-3">
-										<label for="scene-rotation" class="form-label">Rotation</label>
-										<select class="form-select" id="scene-rotation">
-											<option value="0">0</option>
-											<option value="90">90</option>
-											<option value="180">180</option>
-											<option value="270">270</option>
-										</select>
-									</div>
 									<div class="d-grid mt-3">
 										<button type="button" class="btn btn-success" id="btn-save">Save</button>
 									</div>
@@ -156,7 +114,6 @@
 							</div>
 						  </div>
 						</div>
-
 					</div>
                 </div>
             </div>
@@ -220,9 +177,6 @@ $(document).ready(function() {
 			});
 
 			$("#scene-confidence").val(app.settings.scene.confidence);
-			$("#scene-rotation").val(app.settings.scene.rotation);
-			$("#scene-cog").val(app.settings.scene.cog);
-			$("#scene-maxIdle").val(app.settings.scene.maxIdle);
 
 			const labelSelector = new LabelSelector('labelSelector', app.status.detections.labels, app.settings.scene.ignoreClass, function(selection) {
 				app.settings.scene.ignoreClass = selection;
@@ -498,9 +452,6 @@ function saveFilter() {
 
 $('#btn-save').click(function() {
 	app.settings.scene.confidence = parseInt($("#scene-confidence").val());
-	app.settings.scene.rotation = parseInt($("#scene-rotation").val());
-	app.settings.scene.cog = parseInt($("#scene-cog").val());
-	app.settings.scene.maxIdle = parseInt($("#scene-maxIdle").val());
 	saveFilter();
 });
 

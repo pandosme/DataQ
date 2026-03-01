@@ -1,0 +1,17 @@
+{
+    "configurations": [
+        {
+            "name": "ACAP",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/app/**",
+                "/usr/include",
+                "/usr/local/include"
+            ],
+            "defines": [],
+            "cStandard": "c11",
+            "intelliSenseMode": "linux-gcc-x64"
+        }
+    ],
+    "version": 4
+}

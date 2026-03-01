@@ -13,86 +13,60 @@
 <body>
     <div class="d-flex" id="wrapper">
         <!-- Sidebar -->
-        <div class="bg-light border-right" id="sidebar-wrapper">
-            <div class="sidebar-heading">&nbsp;</div>
-            <div class="list-group list-group-flush">
-				<a href="index.html" class="list-group-item list-group-item-action">Publish</a>
-				<a href="events.html" class="list-group-item list-group-item-action">Events</a>
-				<a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
-				<a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
-				<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
-				<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
-				<a href="anomaly.html" class="list-group-item list-group-item-action">Anomaly</a>
-				<a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
-				<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
-				<a href="about.html" class="list-group-item list-group-item-action  active">About</a>
-            </div>
+                <div class="bg-light border-right" id="sidebar-wrapper">
+        <div class="sidebar-heading">&nbsp;</div>
+        <div class="list-group list-group-flush">
+            <a href="index.html" class="list-group-item list-group-item-action">Overview</a>
+            <a href="events.html" class="list-group-item list-group-item-action">Events</a>
+            <a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
+            <a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
+            <a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
+            <a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
+            <a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
+            <hr class="sidebar-divider">
+            <a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
+            <a href="advanced.html" class="list-group-item list-group-item-action">Advanced</a>
+            <a href="about.html" class="list-group-item list-group-item-action active">About</a>
         </div>
-		<div id="page-content-wrapper" class="p-5">
-			<div class="container">
-				<div class="row">
-					<div class="col-12">
-						<br>
-						<h2>Application</h2>
-						<div class="info-grid">
-							<div class="info-row">
-								<div class="info-label">Name:</div>
-								<div class="info-value"><span id="name"></span></div>
+    </div>
+		<div id="page-content-wrapper" class="p-0">
+			<div class="container-fluid">
+				<div class="row g-3">
+					<div class="col-lg-6">
+						<div class="card">
+							<div class="card-header">
+								<h5 class="card-title mb-0">Application</h5>
 							</div>
-							<div class="info-row">
-								<div class="info-label">Package:</div>
-								<div class="info-value"><span id="package"></span></div>
+							<div class="card-body p-0">
+								<table class="table mb-0">
+									<tbody>
+										<tr><td class="ps-3 text-muted" style="width:140px">Name</td><td id="name"></td></tr>
+										<tr><td class="ps-3 text-muted">Package</td><td id="package"></td></tr>
+										<tr><td class="ps-3 text-muted">Version</td><td id="version"></td></tr>
+										<tr><td class="ps-3 text-muted">Vendor</td><td id="vendor"></td></tr>
+										<tr><td class="ps-3 text-muted">URL</td><td><a id="vendorLink" href="" target="_blank"><span id="url"></span></a></td></tr>
+									</tbody>
+								</table>
 							</div>
-							<div class="info-row">
-								<div class="info-label">Version:</div>
-								<div class="info-value"><span id="version"></span></div>
-							</div>
-							<div class="info-row">
-								<div class="info-label">Vendor:</div>
-								<div class="info-value"><span id="vendor"></span></div>
-							</div>
-							<div class="info-row">
-								<div class="info-label">URL:</div>
-								<div class="info-value">
-									<a id="vendorLink" href="" target="_blank"><span id="url"></span></a>
-								</div>
-							</div>
-							<div class="info-row">
-								<div class="info-label">Device:</div>
-								<div class="info-value"><span id="model"></span></div>
-							</div>
-							<div class="info-row">
-								<div class="info-label">Firmware:</div>
-								<div class="info-value"><span id="firmware"></span></div>
-							</div>
-							<div class="info-row">
-								<div class="info-label">Serial:</div>
-								<div class="info-value"><span id="serial"></span></div>
-							</div>
-							<div class="info-row">
-								<div class="info-label">Chip:</div>
-								<div class="info-value"><span id="chip"></span></div>
-							</div>
-							<div class="info-row">
-								<div class="info-label">Architecture:</div>
-								<div class="info-value"><span id="arch"></span></div>
-							</div>
-						</div>
-					<br>
-					<h2>Support</h2>
-					<div class="card" style="max-width:420px;">
-						<div class="card-body">
-							<p class="text-muted mb-3">If you find this application useful, please consider supporting its development.</p>
-							<a href="https://buymeacoffee.com/fredjuhlinl" target="_blank" class="d-inline-flex align-items-center gap-2 text-decoration-none" style="background:#FFDD00;color:#000;padding:8px 16px;border-radius:8px;font-weight:600;font-size:.9rem;transition:opacity .2s" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
-								<img src="https://cdn.buymeacoffee.com/buttons/bmc-new-btn-logo.svg" alt="" width="20" height="28" style="vertical-align:middle">
-								Buy me a coffee
-							</a>
 						</div>
 					</div>
+					<div class="col-lg-6">
+						<div class="card">
+							<div class="card-header">
+								<h5 class="card-title mb-0">Support</h5>
+							</div>
+							<div class="card-body">
+								<p class="text-muted mb-3">If you find this application useful, please consider supporting its development.</p>
+								<a href="https://buymeacoffee.com/fredjuhlinl" target="_blank" class="d-inline-flex align-items-center gap-2 text-decoration-none" style="background:#FFDD00;color:#000;padding:8px 16px;border-radius:8px;font-weight:600;font-size:.9rem;transition:opacity .2s" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+									<img src="https://cdn.buymeacoffee.com/buttons/bmc-new-btn-logo.svg" alt="" width="20" height="28" style="vertical-align:middle">
+									Buy me a coffee
+								</a>
+							</div>
+						</div>
 					</div>
 				</div>
 			</div>
-        </div>
+		</div>
     </div>
 
 <script>
@@ -106,31 +80,18 @@ $(document).ready(function() {
 		cache: false,
 		success: function(app) {
 			document.title = app.manifest.acapPackageConf.setup.friendlyName;
-			$('.sidebar-heading').text(app.manifest.acapPackageConf.setup.friendlyName);			$("#model_status").text("Status: " + app.status.mqtt.status);
+			$('.sidebar-heading').text(app.manifest.acapPackageConf.setup.friendlyName);
 			$('#name').text(app.manifest.acapPackageConf.setup.friendlyName);
 			$('#package').text(app.manifest.acapPackageConf.setup.appName);
 			$('#version').text(app.manifest.acapPackageConf.setup.version);
 			$('#vendor').text(app.manifest.acapPackageConf.setup.vendor);
 			$('#url').text(app.manifest.acapPackageConf.setup.vendorUrl);
 			$("#vendorLink").attr("href",app.manifest.acapPackageConf.setup.vendorUrl);
-			$('#model').text(app.device.model);
-			$('#firmware').text(app.device.firmware	);
-			$('#serial').text(app.device.serial);
-			$('#chip').text(app.device.chip);
-			$('#arch').text(app.device.platform);
 		},
 		error: function(response) {
 			alert(response.statusText);
 		}
 	});
-
-	// Menu toggle handler
-	$("#menu-toggle").click(function(e) {
-		e.preventDefault();
-		$("#wrapper").toggleClass("toggled");
-	});
-
-
 });	
 </script>
 </body>

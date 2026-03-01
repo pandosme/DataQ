@@ -29,15 +29,16 @@
     <div class="bg-light border-right" id="sidebar-wrapper">
         <div class="sidebar-heading">&nbsp;</div>
         <div class="list-group list-group-flush">
-            <a href="index.html" class="list-group-item list-group-item-action">Publish</a>
+            <a href="index.html" class="list-group-item list-group-item-action">Overview</a>
             <a href="events.html" class="list-group-item list-group-item-action">Events</a>
             <a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
             <a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
             <a href="paths.html" class="list-group-item list-group-item-action active">Paths</a>
             <a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
-            <a href="anomaly.html" class="list-group-item list-group-item-action">Anomaly</a>
             <a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
+            <hr class="sidebar-divider">
             <a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
+            <a href="advanced.html" class="list-group-item list-group-item-action">Advanced</a>
             <a href="about.html" class="list-group-item list-group-item-action">About</a>
         </div>
     </div>
@@ -80,8 +81,7 @@
                                                     <th style="width: 20%">Confidence</th>
                                                     <th style="width: 20%">Age</th>
                                                     <th style="width: 20%">Distance</th>
-                                                    <th style="width: 20%">Color</th>
-                                                    <th style="width: 20%">Color2</th>                                               
+                                                    <th style="width: 20%">MaxSpeed</th>                                               
                                                 </tr>
 											</thead>
 											<tbody id="detections-table">
@@ -331,9 +331,8 @@ function DrawPaths() {
         row.innerHTML += '<td>' + (item.class || '-') + '</td>';
         row.innerHTML += '<td>' + (item.confidence || '-') + '</td>';
         row.innerHTML += '<td>' + (age || '-') + '</td>';
-        row.innerHTML += '<td>' + (item.distance || '-') + '</td>';
-        row.innerHTML += '<td>' + (item.color || '-') + '</td>';
-        row.innerHTML += '<td>' + (item.color2 || '-') + '</td>';
+        row.innerHTML += '<td>' + (item.distance ? item.distance.toFixed(0) : '-') + '</td>';
+        row.innerHTML += '<td>' + (item.radar ? item.radar.maxSpeed.toFixed(1) : '-') + '</td>';
         tableBody.appendChild(row);
     });
 }

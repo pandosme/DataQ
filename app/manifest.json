@@ -2,13 +2,13 @@
     "schemaVersion": "1.7.3",
     "acapPackageConf": {
         "setup": {
-            "friendlyName": "DataQ",
+            "friendlyName": "DataQ Radar",
             "appName": "DataQ",
             "vendor": "Fred Juhlin",
             "embeddedSdkVersion": "3.0",
             "vendorUrl": "https://pandosme.github.io",
-            "runMode": "once",
-            "version": "2.1.7"
+            "runMode": "respawn",
+            "version": "3.1.0"
         },
         "configuration": {
 			"settingPage": "index.html",
@@ -18,8 +18,7 @@
 				{"name": "status","access": "admin","type": "fastCgi"},
 				{"name": "mqtt","access": "admin","type": "fastCgi"},
 				{"name": "certs","access": "admin","type": "fastCgi"},
-				{"name": "objectdetections","access": "admin","type": "fastCgi"},
-				{"name": "geospace","access": "admin","type": "fastCgi"}
+				{"name": "objectdetections","access": "admin","type": "fastCgi"}
 			]
 		}
     },
@@ -27,9 +26,10 @@
 		"dbus": {
 			"requiredMethods": [
 				"com.axis.HTTPConf1.VAPIXServiceAccounts1.GetCredentials",
-				"com.axis.VideoObjectDetection1.Scene.SubscribeSocket",
-				"com.axis.VideoObjectDetection1.Scene.UnsubscribeSocket",
-				"com.axis.VideoObjectDetection1.Scene.GetAll"
+	            "com.axis.RadarSceneProvider1.Scene.SubscribeSocket",
+    	        "com.axis.RadarSceneProvider1.Scene.UnsubscribeSocket",
+				"com.axis.RadarSceneProvider1.Scene.GetObjectClassifications",
+				"com.axis.RadarSceneProvider1.Scene.GetObjectClassification"
 			]
 		}
 	}

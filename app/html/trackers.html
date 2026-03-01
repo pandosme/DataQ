@@ -16,16 +16,17 @@
     <div class="bg-light border-right" id="sidebar-wrapper">
         <div class="sidebar-heading">&nbsp;</div>
         <div class="list-group list-group-flush">
-			<a href="index.html" class="list-group-item list-group-item-action">Publish</a>
-			<a href="events.html" class="list-group-item list-group-item-action">Events</a>
-			<a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
-			<a href="trackers.html" class="list-group-item list-group-item-action active">Trackers</a>
-			<a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
-			<a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
-			<a href="anomaly.html" class="list-group-item list-group-item-action">Anomaly</a>
-			<a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
-			<a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
-			<a href="about.html" class="list-group-item list-group-item-action">About</a>
+            <a href="index.html" class="list-group-item list-group-item-action">Overview</a>
+            <a href="events.html" class="list-group-item list-group-item-action">Events</a>
+            <a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
+            <a href="trackers.html" class="list-group-item list-group-item-action active">Trackers</a>
+            <a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
+            <a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
+            <a href="geospace.html" class="list-group-item list-group-item-action">Geospace</a>
+            <hr class="sidebar-divider">
+            <a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
+            <a href="advanced.html" class="list-group-item list-group-item-action">Advanced</a>
+            <a href="about.html" class="list-group-item list-group-item-action">About</a>
         </div>
     </div>
     
@@ -273,6 +274,8 @@ function onMessageArrived(message) {
 		var text = detection.class || "Undefined";
 		if (detection.hasOwnProperty("confidence"))
 			text += " " + detection.confidence;
+		if (detection.radar && detection.radar.speed > 0)
+			text += " " + detection.radar.speed.toFixed(1);
 			
 		var age = "";
 		if (detection.hasOwnProperty("age")) {
@@ -291,9 +294,9 @@ function onMessageArrived(message) {
 		row.innerHTML += '<td>' + (detection.class || '-') + '</td>';
 		row.innerHTML += '<td>' + (detection.confidence || '-') + '</td>';
 		row.innerHTML += '<td>' + (age || '-') + '</td>';
-		row.innerHTML += '<td>' + (detection.distance || '-') + '</td>';
-		row.innerHTML += '<td>' + (detection.color || '-') + '</td>';
-		row.innerHTML += '<td>' + (detection.color2 || '-') + '</td>';
+		row.innerHTML += '<td>' + (detection.radar ? detection.radar.speed.toFixed(1) : '-') + '</td>';
+		row.innerHTML += '<td>' + (detection.radar ? detection.radar.angle.toFixed(1) : '-') + '</td>';
+		row.innerHTML += '<td>' + (detection.radar ? detection.radar.distance.toFixed(1) : '-') + '</td>';
 		tableBody.appendChild(row);
 	}
 	ctx.stroke();

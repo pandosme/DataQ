@@ -3,16 +3,33 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Geo Location</title>
+  <title>Geospace</title>
   <link rel="stylesheet" href="css/bootstrap.min.css">
   <link rel="stylesheet" href="css/app.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="js/jquery-3.7.1.min.js"></script>
   <script src="js/bootstrap.bundle.min.js"></script>
-  <script src="js/media-stream-player.min.js"></script>
   <script src="js/paho-mqtt-min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/9.4.4/math.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
+  <style>
+    #map { height: 600px; width: 100%; border-radius: 4px; cursor: crosshair; }
+    .map-hint {
+      position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.65); color: #fff;
+      padding: 6px 14px; border-radius: 20px; font-size: 13px;
+      pointer-events: none; z-index: 1000; white-space: nowrap;
+    }
+    .radar-config-panel { background: #f8f9fa; border-radius: 6px; padding: 14px 18px; margin-bottom: 14px; }
+    .compass-wrap { display: flex; align-items: center; gap: 12px; }
+    .compass-svg { flex-shrink: 0; }
+    .tracker-label {
+      background: rgba(0,0,0,0.65); color: #fff;
+      border-radius: 4px; padding: 2px 6px;
+      font-size: 12px; white-space: nowrap;
+      border: 1px solid rgba(255,255,255,0.4);
+    }
+  </style>
 </head>
 <body>
 <div class="d-flex" id="wrapper">
@@ -20,1092 +37,531 @@
   <div class="bg-light border-right" id="sidebar-wrapper">
     <div class="sidebar-heading">&nbsp;</div>
     <div class="list-group list-group-flush">
-      <a href="index.html" class="list-group-item list-group-item-action">Overview</a>
-      <a href="events.html" class="list-group-item list-group-item-action">Events</a>
-      <a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
-      <a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
-      <a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
-	  <a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
-	  <a href="anomaly.html" class="list-group-item list-group-item-action">Anomaly</a>
-      <a href="geospace.html" class="list-group-item list-group-item-action active">Geospace</a>
-      <a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
-      <a href="about.html" class="list-group-item list-group-item-action">About</a>
+            <a href="index.html" class="list-group-item list-group-item-action">Overview</a>
+            <a href="events.html" class="list-group-item list-group-item-action">Events</a>
+            <a href="detections.html" class="list-group-item list-group-item-action">Detections</a>
+            <a href="trackers.html" class="list-group-item list-group-item-action">Trackers</a>
+            <a href="paths.html" class="list-group-item list-group-item-action">Paths</a>
+            <a href="occupancy.html" class="list-group-item list-group-item-action">Occupancy</a>
+            <a href="geospace.html" class="list-group-item list-group-item-action active">Geospace</a>
+            <hr class="sidebar-divider">
+            <a href="mqtt.html" class="list-group-item list-group-item-action">MQTT Settings</a>
+            <a href="advanced.html" class="list-group-item list-group-item-action">Advanced</a>
+            <a href="about.html" class="list-group-item list-group-item-action">About</a>
+        </div>
+    </div>
+
+  <!-- Page Content -->
+  <div id="page-content-wrapper" class="p-0">
+    <div class="container-fluid">
+      <div class="col-12">
+        <div class="card">
+
+          <!-- Card header: publish toggle + connection status -->
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <div class="publish-control">
+              <label class="switch">
+                <input type="checkbox" id="pageToggle">
+                <span class="slider round"></span>
+              </label>
+              <span class="switch-label">Publish Geospace</span>
+            </div>
+            <div id="connectionStatus" class="connection-status">
+              <span id="statusMessage">Connecting</span>
+            </div>
+          </div>
+
+          <div id="locationContent" class="location-content">
+            <div class="card-body">
+
+              <!-- Radar configuration panel -->
+              <div class="radar-config-panel">
+                <div class="row align-items-center g-3">
+
+                  <!-- Position inputs -->
+                  <div class="col-auto">
+                    <label class="form-label mb-1 fw-semibold">Radar position</label>
+                    <div class="d-flex gap-2">
+                      <div>
+                        <small class="text-muted d-block">Latitude</small>
+                        <input type="number" id="radar-lat" class="form-control form-control-sm"
+                               step="0.000001" style="width:130px" placeholder="59.123456">
+                      </div>
+                      <div>
+                        <small class="text-muted d-block">Longitude</small>
+                        <input type="number" id="radar-lon" class="form-control form-control-sm"
+                               step="0.000001" style="width:130px" placeholder="18.123456">
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Divider -->
+                  <div class="col-auto"><div style="height:48px;border-left:1px solid #dee2e6"></div></div>
+
+                  <!-- Heading input + compass -->
+                  <div class="col-auto">
+                    <label for="radar-heading" class="form-label mb-1 fw-semibold">
+                      Heading <small class="text-muted fw-normal">(compass °, 0 = North)</small>
+                    </label>
+                    <div class="compass-wrap">
+                      <!-- Compass SVG: 60px circle, arrow rotates to heading -->
+                      <svg id="compass-svg" class="compass-svg" width="60" height="60" viewBox="0 0 60 60">
+                        <circle cx="30" cy="30" r="28" fill="#e9ecef" stroke="#adb5bd" stroke-width="1.5"/>
+                        <text x="30" y="10"  text-anchor="middle" font-size="9" fill="#495057">N</text>
+                        <text x="30" y="55"  text-anchor="middle" font-size="9" fill="#495057">S</text>
+                        <text x="7"  y="33"  text-anchor="middle" font-size="9" fill="#495057">W</text>
+                        <text x="53" y="33"  text-anchor="middle" font-size="9" fill="#495057">E</text>
+                        <!-- Arrow group rotated around centre -->
+                        <g id="compass-arrow" transform="rotate(0,30,30)">
+                          <polygon points="30,8 33,30 30,26 27,30" fill="#dc3545"/>
+                          <polygon points="30,52 33,30 30,34 27,30" fill="#6c757d"/>
+                        </g>
+                      </svg>
+                      <input type="number" id="radar-heading" class="form-control"
+                             min="0" max="360" step="1" value="0"
+                             style="width:90px">
+                    </div>
+                  </div>
+
+                  <!-- Divider -->
+                  <div class="col-auto"><div style="height:48px;border-left:1px solid #dee2e6"></div></div>
+
+                  <!-- Units -->
+                  <div class="col-auto">
+                    <label for="geo-units" class="form-label mb-1 fw-semibold">Units</label>
+                    <select class="form-select form-select-sm" id="geo-units" style="width:auto">
+                      <option value="1">Metric (m, km/h)</option>
+                      <option value="2">US customary (ft, mph)</option>
+                    </select>
+                  </div>
+
+                  <!-- Save -->
+                  <div class="col-auto ms-auto">
+                    <button type="button" class="btn btn-success" id="btn-save-radar">Save</button>
+                  </div>
+
+                </div><!-- /.row -->
+              </div><!-- /.radar-config-panel -->
+
+              <!-- Map -->
+              <div style="position:relative">
+                <div id="map"></div>
+                <div id="map-hint" class="map-hint">Click on the map to place the radar position</div>
+              </div>
+
+            </div><!-- /.card-body -->
+          </div><!-- /#locationContent -->
+        </div><!-- /.card -->
+      </div>
     </div>
   </div>
 
-  <!-- Page Content -->
-    <div id="page-content-wrapper" class="p-0">
-        <div class="container-fluid">
-			<div class="col-12">
-				<div class="card">
-					<div class="card-header d-flex justify-content-between align-items-center">
-						<div class="publish-control">
-							<label class="switch">
-								<input type="checkbox" id="pageToggle">
-								<span class="slider round"></span>
-							</label>
-							<span class="switch-label">Publish Geospace</span>
-						</div>
-						<div id="connectionStatus" class="connection-status">
-							<span id="statusMessage">Connected</span>
-						</div>
-					</div>
-					<div id="locationContent" class="location-content">	
-						<div class="card-body" id="settings-form">
-							<div class="btn-group mb-3" role="group" aria-label="Mode Selector">
-								<button type="button" id="defaultModeBtn" class="btn mode-button">Monitor</button>
-								<button type="button" id="editMarkersModeBtn" class="btn mode-button">Edit Markers</button>
-								<button type="button" id="validateCalibrationModeBtn" class="btn mode-button">Validate</button>
-							</div>
-
-							<!-- Alert message -->
-							<div class="alert alert-warning alert-dismissible fade d-none" id="liveDataAlert" role="alert">
-							<small id="liveDataMessage"></small>
-							<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-							</div>
-
-							<!-- Video and Map Section -->
-							<div class="row">
-								<div class="col-md-6">
-									<div id="video-view" aria-label="Camera feed" style="width: 800px;">
-										<div id="video"></div>
-										<div id="marker-canvas"></div>
-										<canvas id="detection-canvas" width="1000" height="1000" style="width:100%; height:100%; position:absolute; top:0px; left:0px;"></canvas>
-									</div>
-									<div class="mt-3">
-										<button type="button" id="saveBtn" class="btn btn-success btn-sm d-none">Save & Calibrate</button>
-									</div>
-								</div>
-
-								<div class="col-md-6">
-									<div id="map"></div>
-									<div class="mt-3">
-										<button type="button" id="saveMapBtn" class="btn btn-success btn-sm d-none">Save Map</button>
-									</div>
-								</div>
-							</div>
-						</div>
-					</div>
-				</div>
-			</div>
-		</div>
-  </div>
-
-  <!-- Toast container -->
   <div class="toast-container position-fixed top-0 end-0 p-3"></div>
 </div>
 
 <script>
-// Global State
+/* ============================================================
+   State
+   ============================================================ */
 const AppState = {
-    currentMode: 'default',
-    markers: new Map(),
-    nextMarkerId: 0,
-    map: null,
-    geoData: { lat: 0, lng: 0 },
-    videoAspect: '16:9',
-    validationMarker: null,
-    trackers: new Map()
+    map:          null,
+    geoData:      { lat: 0, lng: 0 },
+    heading:      0,
+    radarMarker:  null,
+    headingLine:  null,
+    headingArrow: null,   // filled triangle at beam tip
+    fovPolygon:   null,   // 180° radar coverage sector
+    trackers:     new Map()   // id → Leaflet marker
 };
 
-var App = 0;
-var width = 800;
-var height = 450;
-var forcePublish = false;
+var App = null;
+var MQTT_Client = null;
 
-let MQTT_Client = null;
-const mqttReconnectInterval = 5000;
-
-// Initialization
+/* ============================================================
+   Boot
+   ============================================================ */
 $(document).ready(() => {
-    initializeApplication();
+    initApp().catch(err => {
+        showToast('Initialisation failed: ' + err.message, 'danger');
+    });
 });
 
+async function initApp() {
+    App = await $.ajax({ url: 'app', dataType: 'json' });
 
-async function initializeApplication() {
-    try {
-        await loadAppConfig();
-        await loadGeolocation();
-        initializeMap();
-        initializeVideo();
-        setupEventHandlers();
-		$('#defaultModeBtn').addClass('active');
-		AppState.markers.forEach(marker => {
-			marker.videoMarker.style.display = 'none';
-			marker.mapMarker.remove();
-		});
-    } catch (error) {
-        handleInitError(error);
-    }
-}
+    document.title = App.manifest.acapPackageConf.setup.friendlyName;
+    $('.sidebar-heading').text(document.title);
 
-async function loadAppConfig() {
-    const toggle = document.getElementById('geolocationToggle');
+    /* Publish toggle */
+    const toggle  = document.getElementById('pageToggle');
     const content = document.getElementById('locationContent');
-    
-    try {
-        App = await $.ajax({ url: 'app', dataType: 'json' });
-        AppState.videoAspect = App.device.aspect || '16:9';
-        document.title = App.manifest.acapPackageConf.setup.friendlyName;
-        $('.sidebar-heading').text(document.title);
-        
-        // Store marker data for later initialization
-        AppState.savedMarkers = App.settings.markers || [];
-
-		// Initialize switch state from settings
-		const toggle = document.getElementById('pageToggle');
-		const content = document.getElementById('locationContent');
-		
-		toggle.checked = App.settings.publish.geospace;
-		content.classList.toggle('hidden', !App.settings.publish.geospace);
-		
-		toggle.addEventListener('change', async function() {
-			try {
-				// Update the settings
-				App.settings.publish.geospace = this.checked;
-				var payload = {
-					publish: App.settings.publish
-				}
-                $.ajax({
-                    type: "POST",
-                    url: 'settings',
-					contentType: 'application/json',
-					data: JSON.stringify(payload),
-                    error: function(xhr, status, error) {
-                        showToast("Calibration failed", 'danger');
-                    }
-                });
-				
-				// Show/hide content
-				content.classList.toggle('hidden', !this.checked);
-			} catch (error) {
-				console.error('Failed to update geolocation setting:', error);
-				// Revert the toggle if saving failed
-				this.checked = !this.checked;
-				alert('Failed to update location settings');
-			}
-		});
-        initializeVideo();
-		if( App.status.mqtt.connected ) {
-			ConnectWebSocketClient();
-		} else {
-			setTimeout(() => {
-				updateConnectionStatus('disconnected');
-				showToast("DataQ is not connected to a broker.  Please go to MQTT Settings","warning");
-			}, 100);
-		}
-		setupResizeHandler();
-    } catch (error) {
-        showToast("Application config load failed", "danger");
-		updateConnectionStatus("Disconnected");
-    }
-}
-
-async function loadGeolocation() {
-    try {
-        const data = await $.ajax({ 
-            url: '/axis-cgi/geolocation/get.cgi',
-            dataType: 'xml'
-        });
-        AppState.geoData.lat = parseFloat($(data).find('Lat').text());
-        AppState.geoData.lng = parseFloat($(data).find('Lng').text());
-        validateCoordinates();
-    } catch (error) {
-        showToast("Geolocation service unavailable", "warning");
-    }
-}
-
-function formatLongitude(lng) {
-    // Ensure 3 digits before decimal point
-    const absLng = Math.abs(lng);
-    const formatted = absLng < 100 ? 
-        (absLng < 10 ? "00" + absLng : "0" + absLng) : 
-        absLng.toString();
-    
-    return (lng < 0 ? "-" : "") + formatted;
-}
-
-function saveMapLocation() {
-    if (AppState.currentMode !== 'editMarkers') return;
-    
-    const center = AppState.map.getCenter();
-    // Format as DD (Decimal Degrees) with proper padding
-    const lat = center.lat.toFixed(8);
-    const lng = formatLongitude(center.lng.toFixed(8));
-    
-    $.ajax({
-        type: "GET",
-        url: '/axis-cgi/geolocation/set.cgi',
-        data: {
-            lat: lat,
-            lng: lng
-        },
-        success: function(response) {
-            // Parse XML response to check for success
-            if ($(response).find('Success').length > 0) {
-                showToast("Camera location updated", 'success');
-                AppState.geoData.lat = parseFloat(lat);
-                AppState.geoData.lng = parseFloat(lng);
-            } else {
-                const errorDesc = $(response).find('ErrorDescription').first().text();
-                showToast("Failed to update location: " + errorDesc, 'danger');
-            }
-        },
-        error: function(xhr, status, error) {
-            showToast("Failed to update camera location", 'danger');
-        }
+    toggle.checked = !!App.settings.publish.geospace;
+    content.classList.toggle('hidden', !App.settings.publish.geospace);
+    toggle.addEventListener('change', function() {
+        App.settings.publish.geospace = this.checked;
+        content.classList.toggle('hidden', !this.checked);
+        saveSetting({ publish: App.settings.publish });
     });
+
+    /* Position and heading from settings.location (saved by this page) */
+    const loc = App.settings.location || {};
+    AppState.geoData.lat = loc.lat || 0;
+    AppState.geoData.lng = loc.lon || 0;
+
+    /* Populate position inputs */
+    if (AppState.geoData.lat) $('#radar-lat').val(AppState.geoData.lat.toFixed(7));
+    if (AppState.geoData.lng) $('#radar-lon').val(AppState.geoData.lng.toFixed(7));
+
+    /* Heading from settings.location */
+    AppState.heading = (loc.heading != null) ? loc.heading : 0;
+    $('#radar-heading').val(AppState.heading);
+    updateCompass(AppState.heading);
+
+    /* Units */
+    $('#geo-units').val(App.settings.scene && App.settings.scene.units ? App.settings.scene.units : 1);
+
+    /* Save button */
+    $('#btn-save-radar').on('click', saveRadarConfig);
+
+    /* Live heading preview — update compass AND beam AND map rotation */
+    $('#radar-heading').on('input', function() {
+        const h = parseFloat(this.value) || 0;
+        updateCompass(h);
+        AppState.heading = h;
+        updateHeadingLine(h);
+        rotateMap(h);
+    });
+
+    /* Map */
+    initMap();
+
+    /* MQTT */
+    if (App.status.mqtt.connected) {
+        connectMQTT();
+    } else {
+        updateConnectionStatus('disconnected');
+        setTimeout(() => showToast('Not connected to broker. Go to MQTT Settings.', 'warning'), 200);
+    }
 }
 
-function initializeMap() {
-    if (!document.getElementById('map')) return;
-    
-    // Set initial zoom level based on coordinates
-    const zoomLevel = (AppState.geoData.lat === 0 && AppState.geoData.lng === 0) ? 3 : 18;
-    
+/* ============================================================
+   Map
+   ============================================================ */
+function initMap() {
+    const lat = AppState.geoData.lat;
+    const lng = AppState.geoData.lng;
+    const hasPos = (lat !== 0 || lng !== 0);
+    const zoom = hasPos ? 18 : 4;
+    const center = hasPos ? [lat, lng] : [20, 0];
+
     AppState.map = L.map('map', {
+        rotate:        true,
+        rotateControl: { closeOnZeroBearing: false },
         maxZoom: 22,
         zoomControl: true
-    }).setView([AppState.geoData.lat, AppState.geoData.lng], zoomLevel);
+    }).setView(center, zoom);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap',
         maxZoom: 22,
         maxNativeZoom: 19
     }).addTo(AppState.map);
-    
-    // Initialize saved markers after map is created
-    initializeSavedMarkers();
-}
 
-function initializeSavedMarkers() {
-    if (!AppState.savedMarkers) return;
-    
-    AppState.savedMarkers.forEach(markerData => {
-        const [normalizedX, normalizedY, lat, lng] = markerData;
-        
-        // Create video marker element
-        const videoMarker = document.createElement('div');
-        videoMarker.className = 'marker';
-        videoMarker.innerHTML = '<span class="marker-label">' + AppState.nextMarkerId + '</span>';
-        videoMarker.style.display = 'none';  // Initially hidden
-        
-        // Convert normalized coordinates to view coordinates
-        const videoElement = document.getElementById('video-view');
-        const viewCoords = normalizedToViewCoords(normalizedX, normalizedY, videoElement);
-        videoMarker.style.left = viewCoords.x + 'px';
-        videoMarker.style.top = viewCoords.y + 'px';
-        
-        // Create map marker
-        const mapMarker = L.marker([lat, lng], {
-            draggable: true
-        }).addTo(AppState.map);
-        
-        // Store both markers
-        const id = 'marker-' + AppState.nextMarkerId++;
-        AppState.markers.set(id, {
-            id: id,
-            normalizedX: normalizedX,
-            normalizedY: normalizedY,
-            videoMarker: videoMarker,
-            mapMarker: mapMarker
+    /* Try browser geolocation to center map when device has no coords yet */
+    if (!hasPos && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(function(pos) {
+            AppState.map.setView([pos.coords.latitude, pos.coords.longitude], 16);
         });
+    }
 
-        document.getElementById('video-view').appendChild(videoMarker);
+    if (hasPos) {
+        placeRadarMarker(lat, lng);
+        updateHeadingLine(AppState.heading);
+        rotateMap(AppState.heading);
+    }
+
+    /* Click map to place / move radar marker */
+    AppState.map.on('click', function(e) {
+        placeRadarMarker(e.latlng.lat, e.latlng.lng);
+        updateHeadingLine(AppState.heading);
     });
 }
 
-function initializeVideo() {
-	width = 800;
-	height = 450;
-	var videoWidth = 1280;
-	var videoHeight = 720;
+/**
+ * Place or move the radar crosshair marker to [lat, lng].
+ * Updates the input fields and hides the map hint.
+ */
+function placeRadarMarker(lat, lng) {
+    AppState.geoData.lat = lat;
+    AppState.geoData.lng = lng;
 
-	switch (App.device.aspect) {
-		case '4:3': width = 800; height = 600; videoWidth = 800; videoHeight = 600;break;
-		case '1:1': width = 800; height = 800; videoWidth = 640; videoHeight = 640;break;
-		case '16:10': width = 800; height = 500; videoWidth = 800; videoHeight = 500;break;
-		default: width = 800; height = 450; videoWidth = 1280; videoHeight = 720;break;
-	}
+    $('#radar-lat').val(lat.toFixed(7));
+    $('#radar-lon').val(lng.toFixed(7));
+    $('#map-hint').hide();
 
-	if( App.device.rotation === 90 || App.device.rotation === 270 ) {
-		var temp = width;
-		width = height;
-		height = temp;
-	}
-
-	$("#video-view").css("width", width + "px");
-	$("#video-view").css("height", height + "px");
-
-    const secureConnection = location.protocol === 'https:' ? ' secure=true' : '';
-    const player = '<media-stream-player hostname="' + window.location.hostname + '" ' + 
-        secureConnection + ' format="RTP_H264" compression="40" audio="0" resolution="' + 
-        videoWidth + 'x' + videoHeight + '" variant="basic" autoplay></media-stream-player>';
-
-    // Update only the video div instead of video-view
-    const videoDiv = document.getElementById('video');
-    videoDiv.innerHTML = player;
-}
-
-// Marker Management
-function createMarker(viewX, viewY) {
-    if (AppState.currentMode !== 'editMarkers') return;
-
-    const videoElement = document.getElementById('video-view');
-    const normalized = viewToNormalizedCoords(viewX, viewY, videoElement);
-    const id = 'marker-' + AppState.nextMarkerId++;
-    
-    // Create video marker element
-    const videoMarker = document.createElement('div');
-    videoMarker.className = 'marker';
-    videoMarker.innerHTML = '<span class="marker-label">' + AppState.nextMarkerId + '</span>';
-    
-    // Convert normalized coordinates back to view coordinates for display
-    const viewCoords = normalizedToViewCoords(normalized.x, normalized.y, videoElement);
-    videoMarker.style.left = viewCoords.x + 'px';
-    videoMarker.style.top = viewCoords.y + 'px';
-    
-    // Create map marker
-    const mapMarker = L.marker(AppState.map.getCenter(), {
-        draggable: true
-    }).addTo(AppState.map);
-    
-    // Store normalized coordinates
-    AppState.markers.set(id, {
-        id: id,
-        normalizedX: normalized.x,
-        normalizedY: normalized.y,
-        videoMarker: videoMarker,
-        mapMarker: mapMarker
-    });
-
-    document.getElementById('video-view').appendChild(videoMarker);
-}
-
-function selectMarker(id) {
-    // Reset all video markers to default state
-    AppState.markers.forEach(marker => {
-        marker.videoMarker.classList.remove('selected');
-    });
-
-    // Highlight selected video marker only
-    const selectedMarker = AppState.markers.get(id);
-    if (selectedMarker) {
-        selectedMarker.videoMarker.classList.add('selected');
-    }
-}
-
-function deleteMarker(id) {
-    if (!AppState.markers.has(id)) return;
-    
-    const marker = AppState.markers.get(id);
-    marker.videoMarker.remove();
-    AppState.map.removeLayer(marker.mapMarker);
-    AppState.markers.delete(id);
-}
-
-function calculateHomography(points) {
-    if (points.length < 4) {
-        throw new Error('At least 4 points required');
-    }
-
-    try {
-        // Build the A matrix for least squares
-        const A = math.matrix(points.flatMap(({ video: { x, y }, map: { lat, lng } }) => [
-            [x, y, 1, 0, 0, 0, -x * lng, -y * lng],
-            [0, 0, 0, x, y, 1, -x * lat, -y * lat]
-        ]));
-
-        // Build the B vector as a matrix
-        const B = math.matrix(points.flatMap(p => [p.map.lng, p.map.lat]));
-
-        // Solve H using LU decomposition
-        const H = math.lusolve(math.multiply(math.transpose(A), A), 
-                             math.multiply(math.transpose(A), B));
-
-        // Convert to array and normalize
-        const result = H.valueOf().flat();
-        return [
-            result[0], result[1], result[2],
-            result[3], result[4], result[5],
-            result[6], result[7], 1
-        ];
-    } catch (error) {
-        console.error('Homography calculation failed:', error);
-        throw new Error('Failed to calculate homography matrix');
-    }
-}
-
-function saveMarkers() {
-    if (AppState.currentMode !== 'editMarkers') return;
-    
-    // First save markers as before
-    const markerArray = [];
-    const points = [];
-    
-    AppState.markers.forEach(marker => {
-        const latlng = marker.mapMarker.getLatLng();
-        markerArray.push([
-            parseInt(marker.normalizedX),
-            parseInt(marker.normalizedY),
-            latlng.lat,
-            latlng.lng
-        ]);
-        
-        // Create points array for homography
-        points.push({
-            video: {
-                x: marker.normalizedX,
-                y: marker.normalizedY
-            },
-            map: {
-                lat: latlng.lat,
-                lng: latlng.lng
-            }
-        });
-    });
-    
-    // First save markers
-    const markersPayload = {
-        "markers": markerArray
-    };
-    
-    $.ajax({
-        type: "POST",
-        url: 'settings',
-		contentType: 'application/json',
-		data: JSON.stringify(markersPayload),
-        success: function(response) {
-            // After markers are saved, calculate and save homography
-            try {
-                const matrix = calculateHomography(points);
-                const matrixPayload = {
-                    "matrix": matrix
-                };
-                
-                $.ajax({
-                    type: "POST",
-                    url: 'settings',
-					contentType: 'application/json',
-					data: JSON.stringify(matrixPayload),
-                    success: function(response) {
-                        showToast("Calibration complete", 'success');
-                    },
-                    error: function(xhr, status, error) {
-                        showToast("Calibration failed", 'danger');
-                    }
-                });
-            } catch (error) {
-                showToast(error.message, 'danger');
-            }
-        },
-        error: function(xhr, status, error) {
-            showToast("Failed to save markers", 'danger');
-        }
-    });
-}
-
-function calculateAndSaveMatrix(markers) {
-    if (markers.length < 4) {
-        showToast("At least 4 markers needed for calibration", 'warning');
-        return;
-    }
-
-    // Create source and destination point arrays
-    const srcPoints = markers.map(m => ({ x: m[0], y: m[1] }));
-    const dstPoints = markers.map(m => ({ x: m[2], y: m[3] }));
-    
-    // Calculate homography matrix
-    const matrix = computeHomography(srcPoints, dstPoints);
-    
-    // Save the calculated matrix
-    const matrixPayload = {
-        "matrix": matrix
-    };
-    
-    $.ajax({
-        type: "POST",
-        url: 'settings',
-		contentType: 'application/json',
-		data: JSON.stringify(matrixPayload),
-        success: function(response) {
-            showToast("Calibration complete", 'success');
-        },
-        error: function(xhr, status, error) {
-            showToast("Calibration failed", 'danger');
-        }
-    });
-}
-
-function createVideoMarkerElement(id, x, y) {
-    const marker = document.createElement('div');
-    marker.className = 'marker';
-    marker.style.left = x + 'px';
-    marker.style.top = y + 'px';
-    marker.innerHTML = '<span class="marker-label">' + AppState.nextMarkerId + '</span>';
-    document.getElementById('video-view').appendChild(marker);
-    return marker;
-}
-
-function createMapMarker(geo) {
-    return L.marker([geo.lat, geo.lng], {
-        draggable: true
-    }).addTo(AppState.map);
-}
-
-// Event Handling
-function setupEventHandlers() {
-    $('#defaultModeBtn').click(() => setMode('default'));
-    $('#editMarkersModeBtn').click(() => setMode('editMarkers'));
-    $('#validateCalibrationModeBtn').click(() => setMode('validate'));
-	$('#saveBtn').click(saveMarkers);
-	$('#saveMapBtn').click(saveMapLocation);
-}
-
-function setMode(mode) {
-    AppState.currentMode = mode;
-
-    $('.mode-button').removeClass('active').css('background-color', '#f8f9fa');
-    
-    // Hide all markers first
-    AppState.markers.forEach(marker => {
-        marker.videoMarker.style.display = 'none';
-        marker.mapMarker.remove();
-    });
-
-    // Show/hide save button based on mode
-    $('#saveBtn').toggleClass('d-none', mode !== 'editMarkers');
-	$('#saveMapBtn').toggleClass('d-none', mode !== 'editMarkers');	
-
-    switch(mode) {
-        case 'default':
-            $('#defaultModeBtn').addClass('active');
-			AppState.markers.forEach(marker => {
-				marker.videoMarker.style.display = 'none';
-				marker.mapMarker.remove();
-			});
-            break;
-            
-        case 'editMarkers':
-            $('#editMarkersModeBtn').addClass('active');
-            // Show all markers
-            AppState.markers.forEach(marker => {
-                marker.videoMarker.style.display = 'block';
-                marker.mapMarker.addTo(AppState.map);
-            });
-            setupVideoMarkerHandlers();
-            setupMapMarkerHandlers();
-            break;
-            
-		case 'validate':
-			 $('#validateCalibrationModeBtn').addClass('active');
-			// Hide all markers
-			AppState.markers.forEach(marker => {
-				marker.videoMarker.style.display = 'none';
-				marker.mapMarker.remove();
-			});
-			setupValidationHandlers();
-			break;
-    }
-}
-
-function updateInteractionHandlers() {
-    // Clear existing handlers
-    $('#video-view').off('mousedown contextmenu');
-    if (AppState.map) AppState.map.off('mousedown');
-
-    // Set up mode-specific handlers
-    switch(AppState.currentMode) {
-        case 'editMarkers':
-            setupVideoMarkerHandlers();
-            setupMapMarkerHandlers();
-            break;
-        case 'validate':
-            setupValidationHandlers();
-            break;
-        default:
-            // No special handlers for default mode
-            break;
-    }
-}
-
-function setupVideoMarkerHandlers() {
-    $('#video-view').off('mousedown contextmenu').on({
-        'mousedown': function(e) {
-            if (AppState.currentMode !== 'editMarkers') return;
-            
-            const rect = this.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            
-            const existingMarker = findMarkerAtPosition(x, y);
-            if (existingMarker) {
-                if (e.button === 2) {  // Right click
-                    e.preventDefault();
-                    deleteMarker(existingMarker.id);
-                } else {
-                    e.preventDefault();
-                    startDragging(existingMarker, e);
-                    selectMarker(existingMarker.id);
-                }
-            } else if (e.button === 0) {  // Left click
-                createMarker(x, y);
-            }
-        },
-        'contextmenu': function(e) {
-            // Prevent context menu from showing
-            e.preventDefault();
-        }
-    });
-}
-
-
-function startDragging(marker, startEvent) {
-    let isDragging = true;
-    
-    function onMouseMove(e) {
-        if (!isDragging) return;
-        
-        const videoElement = document.getElementById('video-view');
-        const rect = videoElement.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        
-        // Update normalized coordinates
-        const normalized = viewToNormalizedCoords(x, y, videoElement);
-        marker.normalizedX = normalized.x;
-        marker.normalizedY = normalized.y;
-        
-        // Update display position
-        marker.videoMarker.style.left = x + 'px';
-        marker.videoMarker.style.top = y + 'px';
-    }
-    
-    function onMouseUp() {
-        isDragging = false;
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
-    }
-    
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
-}
-
-function setupMapMarkerHandlers() {
-    if (!AppState.map) return;
-
-    AppState.markers.forEach(marker => {
-        marker.mapMarker.on('dragend', function(e) {
-            const latlng = e.target.getLatLng();
-            console.log('Map marker moved:', latlng);
-            
-            // Store the new position
-            marker.mapMarker.setLatLng(latlng);
-        });
-    });
-}
-
-function setupValidationHandlers() {
-    $('#video-view').off('click').on('click', function(e) {
-        if (AppState.currentMode !== 'validate') return;
-        
-        const rect = this.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        
-        // Get normalized coordinates
-        const normalized = viewToNormalizedCoords(x, y, this);
-        
-        // Send coordinates for validation
-        var url = 'geospace?x=' + normalized.x + '&y=' + normalized.y;
-        $.ajax({
-            type: "GET",
-            dataType: 'json',
-            url: url,
-            success: function(response) {
-                // Remove previous validation marker if exists
-                if(AppState.validationMarker) {
-                    AppState.map.removeLayer(AppState.validationMarker);
-                }
-                
-                // Create new validation marker
-                AppState.validationMarker = L.marker([response.lat, response.lon], {
-                    icon: L.divIcon({className: 'validation-marker'})
-                }).addTo(AppState.map);
-            },
-            error: function(xhr, status, error) {
-                showToast("Transformation failed", 'warning');
-            }
-        });
-    });
-}
-
-// Helper Functions
-function getVideoAspectRatio() {
-    const videoElement = document.getElementById('video');
-    
-    // If video metadata is loaded, use actual video dimensions
-    if (videoElement.videoWidth && videoElement.videoHeight) {
-        return videoElement.videoWidth / videoElement.videoHeight;
-    }
-    
-    // Fallback to configured aspect ratio from AppState
-    if (AppState.videoAspect) {
-        const [width, height] = AppState.videoAspect.split(':').map(Number);
-        return width / height;
-    }
-    
-    // Default to 16:9 if no other information is available
-    return 16/9;
-}
-
-function viewToNormalizedCoords(viewX, viewY, videoElement) {
-    const rect = videoElement.getBoundingClientRect();
-    const videoAspect = getVideoAspectRatio();
-    const containerAspect = rect.width / rect.height;
-    
-    let effectiveWidth = rect.width;
-    let effectiveHeight = rect.height;
-    
-    if (containerAspect > videoAspect) {
-        effectiveWidth = effectiveHeight * videoAspect;
+    if (AppState.radarMarker) {
+        AppState.radarMarker.setLatLng([lat, lng]);
     } else {
-        effectiveHeight = effectiveWidth / videoAspect;
+        AppState.radarMarker = L.marker([lat, lng], {
+            icon:      radarCrosshairIcon(),
+            draggable: true,
+            title:     'Drag to adjust radar position'
+        }).addTo(AppState.map).bindPopup('Radar \u2014 drag to reposition');
+
+        /* Dragging updates inputs + heading beam live */
+        AppState.radarMarker.on('drag', function(e) {
+            const p = e.latlng;
+            AppState.geoData.lat = p.lat;
+            AppState.geoData.lng = p.lng;
+            $('#radar-lat').val(p.lat.toFixed(7));
+            $('#radar-lon').val(p.lng.toFixed(7));
+            updateHeadingLine(AppState.heading);
+        });
     }
-    
-    return {
-        x: Math.round((viewX / effectiveWidth) * 1000),
-        y: Math.round((viewY / effectiveHeight) * 1000)
-    };
 }
 
-function normalizedToViewCoords(normalizedX, normalizedY, videoElement) {
-    // Get the actual video element, not the container
-    const video = document.getElementById('video');
-    const rect = video.getBoundingClientRect();
-    
-    // Calculate scaling factors for both dimensions
-    const scaleX = rect.width / 1000;
-    const scaleY = rect.height / 1000;
-    
-    // Apply scaling uniformly
-    return {
-        x: normalizedX * scaleX,
-        y: normalizedY * scaleY
-    };
+/* ============================================================
+   Map rotation — bearing-up so heading arrow points to screen top
+   ============================================================ */
+function rotateMap(heading) {
+    if (AppState.map && AppState.map.setBearing) {
+        AppState.map.setBearing(-heading);
+    }
 }
 
-function setupResizeHandler() {
-    const resizeObserver = new ResizeObserver(entries => {
-        for (let entry of entries) {
-            updateAllMarkerPositions();
+/**
+ * Offset a lat/lng point by dist metres in bearing direction (radians).
+ */
+function geoOffset(lat, lng, bearRad, distM) {
+    const scale = 111320;
+    return [
+        lat + distM * Math.cos(bearRad) / scale,
+        lng + distM * Math.sin(bearRad) / (scale * Math.cos(lat * Math.PI / 180))
+    ];
+}
+
+/**
+ * Draw/update the heading beam from radar position.
+ * Extends beamLen metres in the heading direction.
+ * Needle-point: filled arrowhead polygon at the beam tip.
+ */
+function updateHeadingLine(heading) {
+    const lat = AppState.geoData.lat;
+    const lng = AppState.geoData.lng;
+    if (lat === 0 && lng === 0) return;
+
+    const beamLen  = 100; // metres
+    const bearRad  = heading * Math.PI / 180;
+    const [endLat, endLng] = geoOffset(lat, lng, bearRad, beamLen);
+
+    /* Beam line (stop short of arrowhead base, ~8 m) */
+    const [baseLat, baseLng] = geoOffset(lat, lng, bearRad, beamLen - 8);
+    if (AppState.headingLine) {
+        AppState.headingLine.setLatLngs([[lat, lng], [baseLat, baseLng]]);
+    } else {
+        AppState.headingLine = L.polyline([[lat, lng], [baseLat, baseLng]], {
+            color: '#0dcaf0', weight: 3, dashArray: '8 6'
+        }).addTo(AppState.map);
+    }
+
+    /* Arrowhead: tip + two wing points 8 m back, ±30° off bearing */
+    const wing  = 8;
+    const spread = Math.PI / 6;
+    const leftPt  = geoOffset(endLat, endLng, bearRad + Math.PI - spread, wing);
+    const rightPt = geoOffset(endLat, endLng, bearRad + Math.PI + spread, wing);
+    const arrowPts = [[endLat, endLng], leftPt, rightPt];
+    if (AppState.headingArrow) {
+        AppState.headingArrow.setLatLngs(arrowPts);
+    } else {
+        AppState.headingArrow = L.polygon(arrowPts, {
+            color: '#0dcaf0', fillColor: '#0dcaf0', fillOpacity: 1, weight: 1
+        }).addTo(AppState.map);
+    }
+
+    /* 180° FOV sector — radar at bottom-centre, arc from -90° to +90° of heading */
+    const fovPts = [[lat, lng]];  // start at radar origin
+    const steps  = 36;            // one point per 5° → smooth arc
+    for (let i = 0; i <= steps; i++) {
+        const angleDeg = (heading - 90) + i * (180 / steps);
+        const angleRad = angleDeg * Math.PI / 180;
+        fovPts.push(geoOffset(lat, lng, angleRad, beamLen));
+    }
+    fovPts.push([lat, lng]);      // close back to origin
+    if (AppState.fovPolygon) {
+        AppState.fovPolygon.setLatLngs(fovPts);
+    } else {
+        AppState.fovPolygon = L.polygon(fovPts, {
+            color:       '#ffc107',
+            weight:      2,
+            dashArray:   '6 5',
+            fillColor:   '#ffc107',
+            fillOpacity: 0.07
+        }).addTo(AppState.map);
+        AppState.fovPolygon.bringToBack();
+    }
+}
+
+/* ============================================================
+   Compass SVG
+   ============================================================ */
+function updateCompass(deg) {
+    document.getElementById('compass-arrow').setAttribute('transform', 'rotate(' + deg + ',30,30)');
+}
+
+/* Returns a fresh Leaflet divIcon crosshair for the radar position marker */
+function radarCrosshairIcon() {
+    return L.divIcon({
+        className: '',
+        html: '<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">'
+            + '<circle cx="14" cy="14" r="6" fill="#0d6efd" fill-opacity="0.95" stroke="#fff" stroke-width="2"/>'
+            + '<line x1="14" y1="0"  x2="14" y2="9"  stroke="#0d6efd" stroke-width="2"/>'
+            + '<line x1="14" y1="19" x2="14" y2="28" stroke="#0d6efd" stroke-width="2"/>'
+            + '<line x1="0"  y1="14" x2="9"  y2="14" stroke="#0d6efd" stroke-width="2"/>'
+            + '<line x1="19" y1="14" x2="28" y2="14" stroke="#0d6efd" stroke-width="2"/>'
+            + '</svg>',
+        iconSize:   [28, 28],
+        iconAnchor: [14, 14]
+    });
+}
+
+/* ============================================================
+   Save
+   ============================================================ */
+function saveRadarConfig() {
+    const lat     = parseFloat($('#radar-lat').val())     || 0;
+    const lon     = parseFloat($('#radar-lon').val())     || 0;
+    const heading = parseInt($('#radar-heading').val())   || 0;
+
+    AppState.heading = heading;
+    updateCompass(heading);
+
+    if (lat !== 0 || lon !== 0) {
+        placeRadarMarker(lat, lon);
+        /* Pan to position if map is nowhere near it */
+        AppState.map.setView([lat, lon], Math.max(AppState.map.getZoom(), 17));
+    }
+    updateHeadingLine(heading);
+    rotateMap(heading);
+
+    /* POST location + units to the standard settings endpoint.
+     * ACAP.c persists the data and calls Settings_Updated_Callback,
+     * which defers the VAPIX geolocation/sphere push to the main loop. */
+    const units = parseInt($('#geo-units').val()) || 1;
+    App.settings.scene = App.settings.scene || {};
+    App.settings.scene.units = units;
+    App.settings.location = { lat: lat, lon: lon, heading: heading };
+    $.ajax({
+        type: 'POST', url: 'settings',
+        contentType: 'application/json',
+        data: JSON.stringify({ location: App.settings.location, scene: App.settings.scene }),
+        success: function() { showToast('Saved', 'success'); },
+        error: function() { showToast('Save failed', 'danger'); }
+    });
+}
+
+function saveSetting(payload) {
+    $.ajax({
+        type: 'POST', url: 'settings',
+        contentType: 'application/json',
+        data: JSON.stringify(payload)
+    });
+}
+
+/* ============================================================
+   MQTT
+   ============================================================ */
+function connectMQTT() {
+    updateConnectionStatus('connecting');
+    const clientID = 'WS-Geo-' + App.device.serial + '-' + Math.floor(Math.random() * 10000);
+    if (MQTT_Client) delete MQTT_Client;
+
+    const tls  = App.settings.tls || location.protocol === 'https:';
+    const port = tls ? App.settings.WSS_Port : App.settings.WS_Port;
+
+    MQTT_Client = new Paho.MQTT.Client(App.mqtt.address, port, clientID);
+    MQTT_Client.onConnectionLost = function(r) {
+        if (r.errorCode !== 0) {
+            updateConnectionStatus('disconnected');
+            showToast('Connection lost. Reconnecting…', 'warning');
+            setTimeout(connectMQTT, 5000);
         }
-    });
-    
-    // Handle window zoom changes
-    window.addEventListener('resize', () => {
-        updateAllMarkerPositions();
-    });
-    
-    // Handle browser zoom level changes
-    window.visualViewport.addEventListener('resize', () => {
-        updateAllMarkerPositions();
-    });
-    
-    // Observe video container for size changes
-    resizeObserver.observe(document.getElementById('video-view'));
-    
-    // Initial position update
-    updateAllMarkerPositions();
-}
-
-function updateAllMarkerPositions() {
-    const video = document.getElementById('video');
-    const markerCanvas = document.getElementById('marker-canvas');
-    
-    // Ensure marker canvas matches video dimensions exactly
-    markerCanvas.style.width = video.offsetWidth + 'px';
-    markerCanvas.style.height = video.offsetHeight + 'px';
-    
-    AppState.markers.forEach(marker => {
-        const viewCoords = normalizedToViewCoords(
-            marker.normalizedX,
-            marker.normalizedY,
-            video
-        );
-        marker.videoMarker.style.left = viewCoords.x + 'px';
-        marker.videoMarker.style.top = viewCoords.y + 'px';
-    });
-}
-
-function getVideoDimensions(aspect) {
-    switch(aspect) {
-        case '4:3': return [800, 600];
-        case '1:1': return [640, 640];
-        default: return [1280, 720];
-    }
-}
-
-function transformVideoToGeo(x, y) {
-    if (!app?.calibration?.matrix) return null;
-    const m = App.calibration.matrix;
-    const d = m[6] * x + m[7] * y + 1;
-    return {
-        lat: (m[3] * x + m[4] * y + m[5]) / d,
-        lng: (m[0] * x + m[1] * y + m[2]) / d
     };
+    MQTT_Client.onMessageArrived = onMessageArrived;
+
+    const opts = {
+        useSSL:   tls,
+        timeout:  3,
+        onSuccess: function() {
+            updateConnectionStatus('connected');
+            MQTT_Client.subscribe(App.mqtt.preTopic + '/geospace/' + App.device.serial);
+        },
+        onFailure: function(m) {
+            updateConnectionStatus('disconnected');
+            showToast(m.errorMessage + ' — check MQTT Settings', 'warning');
+        }
+    };
+    if (App.mqtt.user     && App.mqtt.user.length)     opts.userName = App.mqtt.user;
+    if (App.mqtt.password && App.mqtt.password.length) opts.password = App.mqtt.password;
+    MQTT_Client.connect(opts);
 }
-
-function findMarkerAtPosition(x, y) {
-    return Array.from(AppState.markers.values()).find(marker => {
-        const rect = marker.videoMarker.getBoundingClientRect();
-        const markerX = rect.left + rect.width/2;
-        const markerY = rect.top + rect.height/2;
-        const viewRect = document.getElementById('video-view').getBoundingClientRect();
-        
-        // Convert to video-view relative coordinates
-        const relativeMarkerX = markerX - viewRect.left;
-        const relativeMarkerY = markerY - viewRect.top;
-        
-        return Math.abs(relativeMarkerX - x) < 10 && 
-               Math.abs(relativeMarkerY - y) < 10;
-    });
-}
-
-function findMapMarker(latlng) {
-    return Array.from(AppState.markers.values()).find(marker => 
-        marker.mapMarker.getLatLng().distanceTo(latlng) < 10
-    );
-}
-
-function updateMarkerPosition(id, viewX, viewY) {
-    const marker = AppState.markers.get(id);
-    if (!marker) return;
-    
-    const videoElement = document.getElementById('video-view');
-    const normalized = viewToNormalizedCoords(viewX, viewY, videoElement);
-    
-    // Update stored normalized coordinates
-    marker.normalizedX = normalized.x;
-    marker.normalizedY = normalized.y;
-    
-    // Update display position
-    const viewCoords = normalizedToViewCoords(normalized.x, normalized.y, videoElement);
-    marker.videoMarker.style.left = viewCoords.x + 'px';
-    marker.videoMarker.style.top = viewCoords.y + 'px';
-}
-
-function updateModeUI() {
-    $('.btn-group .btn').removeClass('active btn-primary').addClass('btn-secondary');
-    $('#' + AppState.currentMode + 'ModeBtn').addClass('active btn-primary');
-}
-
-// MQTT Functions
-function ConnectWebSocketClient() {
-	const clientID = "WS-" + App.manifest.acapPackageConf.setup.appName + "-" + App.device.serial + "-" + Math.floor(Math.random() * 10000);
-	if(MQTT_Client)
-		delete MQTT_Client;
-	
-	// Use WSS if page is loaded over HTTPS
-	
-	var tls = App.settings.tls;
-	if( location.protocol === 'https:')
-		tls = true;
-	var port = tls?App.settings.WSS_Port:App.settings.WS_Port;
-
-	MQTT_Client = new Paho.MQTT.Client(App.mqtt.address, port, clientID);
-	
-	MQTT_Client.onConnectionLost = onConnectionLost;
-	MQTT_Client.onMessageArrived = onMessageArrived;
-	var connectionOptions = {
-		useSSL: tls,
-		timeout: 3,
-		onSuccess: onConnect,
-		onFailure: onFailure
-	};
-	
-	if(App.mqtt.user && App.mqtt.user.length)
-		connectionOptions.userName = App.mqtt.user;
-	if(App.mqtt.password && App.mqtt.password.length)
-		connectionOptions.password = App.mqtt.password;
-		
-	MQTT_Client.connect(connectionOptions);
-}
-
-function updateConnectionStatus(status) {
-    const statusElement = document.getElementById('connectionStatus');
-    const messageElement = document.getElementById('statusMessage');
-    
-    switch (status) {
-        case 'connected':
-            statusElement.style.backgroundColor = '#00ff00'; // Green
-            messageElement.textContent = 'Connected';
-            break;
-        case 'disconnected':
-            statusElement.style.backgroundColor = '#ff0000'; // Red
-            messageElement.textContent = 'Disconnected';
-            break;
-        case 'connecting':
-        case 'reconnecting':
-            statusElement.style.backgroundColor = '#ffff00'; // Yellow
-            messageElement.textContent = status.charAt(0).toUpperCase() + status.slice(1);
-            break;
-        default:
-            console.log('Unknown status:', status);
-    }
-}
-
-function onConnect() {
-	updateConnectionStatus('connected');
-	MQTT_Client.subscribe(App.mqtt.preTopic + "/tracker/" + App.device.serial);
-	MQTT_Client.subscribe(App.mqtt.preTopic + "/geospace/" + App.device.serial);
-}
-
-function onFailure(message) {
-	updateConnectionStatus('disconnected');	
-	showToast( message.errorMessage + "Check WebSocket connection in MQTT Settings","warning");
-}
-
-function onConnectionLost(responseObject) {
-	if (responseObject.errorCode !== 0) {
-		showToast(responseObject.errorMessage, "warning");
-		updateConnectionStatus('disconnected');
-		// Attempt to reconnect after 5 seconds
-		setTimeout(() => {
-			console.log("Attempting to reconnect...");
-			ConnectWebSocketClient();
-		}, 5000);
-	}
-}
-
-var detections = {};
 
 function onMessageArrived(message) {
-    if (AppState.currentMode !== "default" || App.settings.publish.geospace === false) {
-        return;
+    const d = JSON.parse(message.payloadString);
+    if (!d || !d.id) return;
+
+    /* Format age label */
+    let age = '';
+    if (d.age != null) {
+        if      (d.age > 3600) age = parseInt(d.age / 3600) + 'h';
+        else if (d.age > 60)   age = parseInt(d.age / 60)   + 'm';
+        else                   age = d.age.toFixed(1)        + 's';
     }
-	var topics = message.destinationName.split("/");
-	var topic = topics[topics.length-2];
-	var detection = JSON.parse(message.payloadString);
-	if (!detection )
-		return;
 
-	var age = "";
-	if (detection.hasOwnProperty("age")) {
-		age = detection.age.toFixed(1) + "s";
-		if (detection.age > 60)
-			age = parseInt(detection.age/60) + "m";
-		if (detection.age > 3600)
-			age = parseInt(detection.age/3600) + "h";
-	}
-	
-	if( topic === "geospace" ) {
-		if (detection.active ) {
-			if (AppState.trackers.has(detection.id)) {
-				const marker = AppState.trackers.get(detection.id);
-				marker.setLatLng([detection.lat, detection.lon]);
-				marker.setIcon(L.divIcon({
-					className: 'tracker-marker',
-					html: '<div class="tracker-id">' + detection.class + " " + age + '</div>'
-				}));
-			} else {
-				// Create new tracker marker
-				const marker = L.marker([detection.lat, detection.lon], {
-					icon: L.divIcon({
-						className: 'tracker-marker',
-						html: '<div class="tracker-id">' + detection.class + " " + age + '</div>'
-					})
-				}).addTo(AppState.map);
-				
-				AppState.trackers.set(detection.id, marker);
-			}
-		} else {
-			// Remove inactive tracker
-			if (AppState.trackers.has(detection.id)) {
-				const marker = AppState.trackers.get(detection.id);
-				AppState.map.removeLayer(marker);
-				AppState.trackers.delete(detection.id);
-			}
-		}
-	}
+    const labelHtml = '<div class="tracker-label">' +
+        (d.class || '?') + ' ' + age +
+        (d.radar ? ' · ' + d.radar.speed.toFixed(1) : '') +
+        '</div>';
 
-	if( topic === "tracker") {
-		if (detection.active )
-			detections[detection.id] = detection;
-		else
-			delete detections[detection.id];
-		
-		var ctx = document.getElementById('detection-canvas').getContext("2d");
-		if (!ctx)
-			return;
-			
-		ctx.beginPath();
-		ctx.clearRect(0, 0, 1000, 1000);
-		ctx.stroke();
-
-		ctx.lineWidth = 3;
-		ctx.strokeStyle = '#FFFF00';
-		ctx.font = "30px Arial";
-		ctx.fillStyle = '#FFFF00';
-
-		// Clear existing table rows
-		
-		ctx.beginPath();
-		for( var id in detections) {
-			detection = detections[id];
-			// Skip invalid detections
-			if (typeof detection !== 'object' || detection === null) return;
-			
-			// Draw on canvas
-			ctx.moveTo(detection.bx,detection.by);
-			ctx.lineTo(detection.cx,detection.cy);
-			ctx.rect(detection.x, detection.y, detection.w, detection.h);
-			var text = detection.class || "Undefined";
-			if (detection.hasOwnProperty("confidence"))
-				text += " " + detection.confidence;
-				
-			var age = "";
-			if (detection.hasOwnProperty("age")) {
-				age = detection.age.toFixed(1) + "s";
-				if (detection.age > 60)
-					age = parseInt(detection.age/60) + "m";
-				if (detection.age > 3600)
-					age = parseInt(detection.age/3600) + "h";
-				text += " " + age;
-			}
-			ctx.fillText(text, detection.x, detection.y-10);
-		}
-		ctx.stroke();
-	}
+    if (d.active) {
+        const icon = L.divIcon({ className: '', html: labelHtml, iconAnchor: [0, 8] });
+        if (AppState.trackers.has(d.id)) {
+            const m = AppState.trackers.get(d.id);
+            m.setLatLng([d.lat, d.lon]);
+            m.setIcon(icon);
+        } else {
+            const m = L.marker([d.lat, d.lon], { icon }).addTo(AppState.map);
+            AppState.trackers.set(d.id, m);
+        }
+    } else {
+        if (AppState.trackers.has(d.id)) {
+            AppState.map.removeLayer(AppState.trackers.get(d.id));
+            AppState.trackers.delete(d.id);
+        }
+    }
 }
 
-// UI Functions
+/* ============================================================
+   UI Helpers
+   ============================================================ */
+function updateConnectionStatus(status) {
+    const el  = document.getElementById('connectionStatus');
+    const msg = document.getElementById('statusMessage');
+    const colours = { connected: '#00ff00', disconnected: '#ff0000', connecting: '#ffff00', reconnecting: '#ffff00' };
+    el.style.backgroundColor = colours[status] || '#ffff00';
+    msg.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+}
+
 function showToast(message, type) {
     type = type || 'info';
-    
-    var toastHtml = '<div class="toast align-items-center text-white bg-' + type + ' border-0" role="alert">' +
+    const tc = type === 'warning' ? 'text-dark' : 'text-white';
+    const html =
+        '<div class="toast align-items-center ' + tc + ' bg-' + type + ' border-0" role="alert">' +
         '<div class="d-flex"><div class="toast-body">' + message + '</div>' +
-        '<button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>' +
-        '</div></div>';
-    
-    var $container = $('.toast-container');
-    var $toast = $(toastHtml);
-    
-    $container.append($toast);
-    $toast.toast({ delay: 3000 }).toast('show');
-    $toast.on('hidden.bs.toast', function() { $(this).remove(); });
-}
-
-function validateCoordinates() {
-    const { lat, lng } = AppState.geoData;
-    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-        showToast("Invalid geolocation data", "danger");
-    }
-}
-
-function handleInitError(error) {
-    console.error("Initialization error:", error);
-    showToast("Application initialization failed", "danger");
+        '<button type="button" class="btn-close' + (type === 'warning' ? '' : ' btn-close-white') +
+        ' me-2 m-auto" data-bs-dismiss="toast"></button></div></div>';
+    const $t = $(html).appendTo('.toast-container');
+    new bootstrap.Toast($t[0], { delay: 4000 }).show();
+    $t[0].addEventListener('hidden.bs.toast', () => $t.remove());
 }
 </script>
 </body>

@@ -119,7 +119,8 @@ int 		ACAP_FILE_Exists(const char* filepath);
  *-----------------------------------------------------*/
 double		ACAP_DEVICE_Longitude();
 double		ACAP_DEVICE_Latitude();
-int			ACAP_DEVICE_Set_Location( double lat, double lon);
+double		ACAP_DEVICE_Heading();
+int			ACAP_DEVICE_Set_Location( double lat, double lon, double heading);
 //Properties: serial, model, platform, chip, firmware, aspect, 
 const char* ACAP_DEVICE_Prop(const char* name);
 int 		ACAP_DEVICE_Prop_Int(const char* name);

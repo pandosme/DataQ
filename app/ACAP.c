@@ -1356,9 +1356,19 @@ ACAP_DEVICE_Latitude() {
 	return cJSON_GetObjectItem(location,"lat")?cJSON_GetObjectItem(location,"lat")->valuedouble:0;
 }
 
+double
+ACAP_DEVICE_Heading() {
+	if( !ACAP_DEVICE_Container )
+		return 0;
+	cJSON* location = cJSON_GetObjectItem(ACAP_DEVICE_Container,"location");
+	if(!location)
+		return 0;
+	return cJSON_GetObjectItem(location,"heading")?cJSON_GetObjectItem(location,"heading")->valuedouble:0;
+}
+
 int
-ACAP_DEVICE_Set_Location( double lat, double lon) {
-	LOG_TRACE("%s: %f %f\n",__func__,lat,lon);
+ACAP_DEVICE_Set_Location( double lat, double lon, double heading) {
+	LOG_TRACE("%s: %f %f %f\n",__func__,lat,lon,heading);
 	if( !ACAP_DEVICE_Container )
 		return 0;
 	cJSON* location = cJSON_GetObjectItem(ACAP_DEVICE_Container,"location");
@@ -1366,8 +1376,12 @@ ACAP_DEVICE_Set_Location( double lat, double lon) {
 		LOG_WARN("%s: Missing location data\n",__func__);
 		return 0;
 	}
-	cJSON_ReplaceItemInObject(location,"lat",cJSON_CreateNumber(lat));
-	cJSON_ReplaceItemInObject(location,"lon",cJSON_CreateNumber(lon));
+	if (cJSON_GetObjectItem(location,"lat")) cJSON_ReplaceItemInObject(location,"lat",cJSON_CreateNumber(lat));
+	else cJSON_AddNumberToObject(location,"lat",lat);
+	if (cJSON_GetObjectItem(location,"lon")) cJSON_ReplaceItemInObject(location,"lon",cJSON_CreateNumber(lon));
+	else cJSON_AddNumberToObject(location,"lon",lon);
+	if (cJSON_GetObjectItem(location,"heading")) cJSON_ReplaceItemInObject(location,"heading",cJSON_CreateNumber(heading));
+	else cJSON_AddNumberToObject(location,"heading",heading);
 	return SetLocationData(location);
 }
 
