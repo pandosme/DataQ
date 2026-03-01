@@ -49,7 +49,7 @@ Just like Axis Metadata, detections are based on DataQ makes integration and sol
 
 ### Pre-compiled download
 
-If you are only after a pre-compiled version, [Download Latest ZIP](https://www.dropbox.com/scl/fi/3z5ruobn27nvt2rwebqym/DataQ.zip?rlkey=etnpo7yvp2u6vqxi9d50hqpik&st=ian3s4md&dl=1)<br>
+If you are only after a pre-compiled version, [Download Latest ZIP](https://www.dropbox.com/scl/fi/03gzooytc2cakmrl7kh5r/DataQ.zip?rlkey=3zx1mhin5obw6aaqz0sv5a142&dl=1)<br>
 The ZIP file contains:
 - **DataQ** — pre-compiled for armv7hf and aarch64 (Axis cameras)
 - **DataQ_Radar** — pre-compiled for aarch64 (Axis Radar D2110 and D2210)
