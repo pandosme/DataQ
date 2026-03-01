@@ -279,6 +279,14 @@ For VMS (Video Mananagement Systems"), a stateful event "anomaly" will be fired 
 
 ## History
 
+### 3.1.0 Mar 1, 2026
+- New MQTT topic `image/{serial}`: publishes a JPEG snapshot (640×360 for 16:9 cameras) encoded as Base64
+  - Published immediately when enabled and then daily at 12:00 local time
+- `connect/{serial}` announcement now includes a `labels` array listing all detectable object classes with `id`, `name`, and `enabled` fields
+- Added **Image** toggle to the MQTT streams table in the UI
+- Renamed `path-structure.md` to `MQTT_topics.md` with full topic and payload documentation
+- Added `publish.image` setting (default: disabled)
+
 ### 3.0.1 Feb 25, 2026
 - Fixed OpenStreetMap not displaying on the Geospace page
 - Fixed critical bug where homography matrix was not loaded at startup, causing all geospace transforms to fail until re-calibration
