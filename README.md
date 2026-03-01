@@ -235,6 +235,30 @@ For VMS (Video Mananagement Systems"), a stateful event "anomaly" will be fired 
 
 ## History
 
+### 3.1.0 Mar 1, 2026
+Radar branch — targeting Axis D2110 (armv7hf) and D2210 (aarch64) radar sensors.
+- New MQTT topic `image/{serial}`: publishes a JPEG snapshot encoded as Base64
+  - Published immediately when enabled and then daily at 12:00 local time
+- `connect/{serial}` announcement now includes a `labels` array listing all detectable object classes
+- Added **Image** toggle to the MQTT streams table in the UI
+- Added `publish.image` setting (default: disabled)
+- `ACAP_DEVICE_Set_Location()` now accepts a third `heading` parameter (degrees) stored in device location
+- Geospace enhancements
+  - Map rotates to align with device heading
+  - 180° FOV sector overlay centred on device position
+  - Location save now persists heading alongside lat/lon
+  - Path sample points include `lat` and `lon` when geospace is calibrated
+- Occupancy simplified for radar: counts moving objects only (no video stream)
+- Removed Anomaly page and all anomaly publish functionality
+- UI refreshed to match main branch: dark sidebar, card-based layout, CSS custom properties
+
+### 3.0.0 Mar 1, 2026
+Initial Radar branch — forked from main branch and adapted for Axis radar sensors.
+- Integrated Axis radar scene subscriber (`libradar_scene_subscriber`)
+- Radar-specific detection data: distance, angle, speed, direction
+- Geospace page with Leaflet map, heading input, and click-to-set location
+- Removed camera-specific features (perspective guard, stitching, video overlays)
+
 ### 2.1.7 Oct 3
 - Settings are now correctly stored in Detections.
 
