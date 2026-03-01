@@ -1,7 +1,9 @@
-# DataQ
+# DataQ Radar
 
-DataQ is an MQTT Client for Axis cameras that enables custom data-driven solutions when standard camera data and formats are insufficient. It processes, filters, and transforms data before MQTT publishing to optimize resource usage.
-Just like Axis Metadata, detections are based on DataQ makes integration and solution development very easy.  DataQ provides different data stractures based on use-case, optimizing bandwidth and alos adding pre-calculated properties like age, distance, direction and idle time so consumers does not need to.
+> **This is the Radar branch** — targeting Axis radar sensors **D2110** (armv7hf) and **D2210** (aarch64).
+> For camera-based deployments see the [DataQ main branch](https://github.com/pandosme/DataQ).
+
+DataQ Radar is an MQTT Client for Axis radar sensors that enables custom data-driven solutions. It processes, filters, and transforms radar detection data before MQTT publishing to optimize resource usage. DataQ Radar provides structured data based on use-case, optimizing bandwidth and adding pre-calculated properties like distance, angle, speed, direction, and idle time so consumers do not need to.
 
 ***
 ## Key Features
