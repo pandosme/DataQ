@@ -10,7 +10,8 @@
 		"occupancy": false,
 		"status": true,
 		"geospace": false,
-		"anomaly": false
+		"anomaly": false,
+		"image": false
 	},
 	"scene": {
 		"confidence": 30,

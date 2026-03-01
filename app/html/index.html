@@ -106,8 +106,11 @@
 										<td class="ps-3"><input type="checkbox" class="form-check-input publish-check" data-type="status"></td>
 										<td>Status</td>
 										<td><code id="StatusTopic" style="font-size:.8rem"></code></td>
-									</tr>
-								</tbody>
+									</tr>								<tr>
+									<td class="ps-3"><input type="checkbox" class="form-check-input publish-check" data-type="image"></td>
+									<td>Image</td>
+									<td><code id="ImageTopic" style="font-size:.8rem"></code></td>
+								</tr>								</tbody>
 							</table>
 						</div>
 					</div>
@@ -192,6 +195,7 @@ $(document).ready(function() {
 			$('#AnomalyTopic').text(pretopic + '/anomaly/' + serial);
 			$('#GeoSpaceTopic').text(pretopic + '/geospace/' + serial);
 			$('#StatusTopic').text(pretopic + '/status/' + serial);
+			$('#ImageTopic').text(pretopic + '/image/' + serial);
 
 			$('.publish-check[data-type="events"]').prop('checked', app.settings.publish.events);
 			$('.publish-check[data-type="occupancy"]').prop('checked', app.settings.publish.occupancy || false);
@@ -201,6 +205,7 @@ $(document).ready(function() {
 			$('.publish-check[data-type="path"]').prop('checked', app.settings.publish.path);
 			$('.publish-check[data-type="geospace"]').prop('checked', app.settings.publish.geospace);
 			$('.publish-check[data-type="status"]').prop('checked', app.settings.publish.status);
+			$('.publish-check[data-type="image"]').prop('checked', app.settings.publish.image || false);
 
 			updateSelectAllCheckbox();
 		},

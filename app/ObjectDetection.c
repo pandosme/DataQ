@@ -70,7 +70,9 @@ static const NameMapEntry name_map[] = {
     { "beige", "Beige" },
     { "yellow", "Yellow" },
     { "gray", "Gray" },
-    { "unknown", "" },
+    { "trailer_experimental", "Trailer" },
+    { "trailer", "Trailer" },
+    { "unknown", "Unknown" }
 };
 
 #define NAME_MAP_SIZE (sizeof(name_map) / sizeof(name_map[0]))

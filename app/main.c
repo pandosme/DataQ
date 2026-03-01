@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <syslog.h>
 #include <glib.h>
 #include <time.h>
@@ -18,12 +19,20 @@
 #include <signal.h>
 #include <math.h>
 
+#include <vdo/vdo-stream.h>
+#include <vdo/vdo-buffer.h>
+#include <vdo/vdo-map.h>
+#include <vdo/vdo-channel.h>
+#include <vdo/vdo-frame.h>
+#include <vdo/vdo-error.h>
+
 #include "cJSON.h"
 #include "ACAP.h"
 #include "MQTT.h"
 #include "ObjectDetection.h"
 #include "GeoSpace.h"
 #include "Stitch.h"
+#include "VOD.h"
 
 #define APP_PACKAGE "DataQ"
 
@@ -47,6 +56,9 @@ int publishPath = 1;
 int publishOccupancy = 0;
 int publishStatus = 1;
 int publishGeospace = 0;
+int publishImage = 0;
+int mqttConnected = 0;
+static guint image_noon_timer_id = 0;
 int shouldReset = 0;
 
 #define MAX_OCCUPANCY_HISTORY 64  // Adjust if your max burst rate is super high
@@ -937,6 +949,165 @@ void Event_Callback(cJSON *event, void* userdata) {
     MQTT_Publish_JSON(topic, event, 0, 0);
 }
 
+/* ------------------------------------------------------------------
+ * Image capture and MQTT publish
+ * Uses VDO to create a temporary JPEG stream, grab one frame,
+ * base64-encode it and publish to image/{serial}.
+ * Resolution: 640x360 for 16:9, otherwise closest width>=640 from
+ * VDO channel resolutions.
+ * ------------------------------------------------------------------ */
+static void Capture_And_Publish_Image(void) {
+    if (!publishImage) return;
+
+    const char *aspect  = ACAP_DEVICE_Prop("aspect");
+    const char *serial  = ACAP_DEVICE_Prop("serial");  /* used in MQTT topic */
+    if (!serial) serial = "000000000000";
+    if (!aspect)  aspect = "16:9";
+
+    /* Determine target resolution and fetch rotation from scene settings */
+    unsigned int target_w = 640, target_h = 360;
+    int rotation = 0;
+    {
+        cJSON *s = ACAP_Get_Config("settings");
+        cJSON *scene = s ? cJSON_GetObjectItem(s, "scene") : NULL;
+        cJSON *rot = scene ? cJSON_GetObjectItem(scene, "rotation") : NULL;
+        if (rot) rotation = rot->valueint;
+    }
+
+    {
+        GError *chErr = NULL;
+        VdoChannel *ch = vdo_channel_get(1, &chErr);
+        if (ch) {
+            if (strcmp(aspect, "16:9") != 0) {
+                /* Find smallest supported resolution with width >= 640 */
+                VdoResolutionSet *rset = vdo_channel_get_resolutions(ch, NULL, &chErr);
+                if (rset) {
+                    unsigned int best_area = UINT_MAX;
+                    for (size_t i = 0; i < rset->count; i++) {
+                        unsigned int w = rset->resolutions[i].width;
+                        unsigned int h = rset->resolutions[i].height;
+                        if (w >= 640) {
+                            unsigned int area = w * h;
+                            if (area < best_area) {
+                                best_area = area;
+                                target_w  = w;
+                                target_h  = h;
+                            }
+                        }
+                    }
+                    g_free(rset);
+                }
+            }
+            if (chErr) g_clear_error(&chErr);
+            g_object_unref(ch);
+        } else {
+            if (chErr) g_clear_error(&chErr);
+        }
+    }
+
+    LOG("Capturing image %ux%u (aspect %s, rotation %u)\n", target_w, target_h, aspect, rotation);
+
+    /* Create a one-shot JPEG stream */
+    GError *error = NULL;
+    VdoMap *settings = vdo_map_new();
+    if (!settings) { LOG_WARN("Image capture: vdo_map_new failed\n"); return; }
+
+    vdo_map_set_uint32(settings, "channel", 1);
+    vdo_map_set_uint32(settings, "format",  VDO_FORMAT_JPEG);
+    VdoPair32u res = { .w = target_w, .h = target_h };
+    vdo_map_set_pair32u(settings, "resolution", res);
+    vdo_map_set_uint32(settings, "buffer.count", 2);
+    vdo_map_set_string(settings, "image.fit", "scale");
+
+    VdoStream *stream = vdo_stream_new(settings, NULL, &error);
+    g_object_unref(settings);
+    if (!stream) {
+        LOG_WARN("Image capture: failed to create VDO stream: %s\n",
+                 error ? error->message : "unknown");
+        if (error) g_clear_error(&error);
+        return;
+    }
+
+    if (!vdo_stream_start(stream, &error)) {
+        LOG_WARN("Image capture: failed to start stream: %s\n",
+                 error ? error->message : "unknown");
+        if (error) g_clear_error(&error);
+        g_object_unref(stream);
+        return;
+    }
+
+    VdoBuffer *buffer = vdo_stream_get_buffer(stream, &error);
+    if (!buffer) {
+        LOG_WARN("Image capture: failed to get buffer: %s\n",
+                 error ? error->message : "unknown");
+        if (error) g_clear_error(&error);
+        vdo_stream_stop(stream);
+        g_object_unref(stream);
+        return;
+    }
+
+    /* Encode JPEG bytes as base64.
+     * VdoBuffer is a typedef for VdoFrame, so frame functions work directly. */
+    const guchar *data = (const guchar *)vdo_buffer_get_data(buffer);
+    gsize         size = vdo_frame_get_size(buffer);
+    gchar        *b64  = g_base64_encode(data, size);
+
+    /* Build payload — serial/name/location are added automatically by MQTT_Publish_JSON */
+    cJSON *payload = cJSON_CreateObject();
+    cJSON_AddNumberToObject(payload, "rotation",  (double)rotation);
+    cJSON_AddStringToObject(payload, "aspect",    aspect);
+    cJSON_AddNumberToObject(payload, "timestamp", ACAP_DEVICE_Timestamp());
+    cJSON_AddStringToObject(payload, "image",     b64 ? b64 : "");
+
+    char topic[80];
+    snprintf(topic, sizeof(topic), "image/%s", serial);
+    MQTT_Publish_JSON(topic, payload, 0, 0);
+
+    cJSON_Delete(payload);
+    if (b64) g_free(b64);
+    g_object_unref(buffer);
+
+    vdo_stream_stop(stream);
+    g_object_unref(stream);
+
+    LOG("Image published to %s\n", topic);
+}
+
+/* GLib idle callback — safe to call vdo_stream_get_buffer here */
+static gboolean Image_Idle_Capture(gpointer user_data) {
+    (void)user_data;
+    Capture_And_Publish_Image();
+    return G_SOURCE_REMOVE;
+}
+
+/* Noon timer: fires once per day at 12:00 local time.
+ * Rescheduled after each shot for exactly 24 h.          */
+static gboolean Noon_Image_Timer(gpointer user_data);
+
+static void Schedule_Noon_Image(void) {
+    /* Cancel any existing timer */
+    if (image_noon_timer_id) {
+        g_source_remove(image_noon_timer_id);
+        image_noon_timer_id = 0;
+    }
+    /* Seconds from now until next 12:00 */
+    int sec_since_midnight = ACAP_DEVICE_Seconds_Since_Midnight();
+    int noon = 12 * 3600;
+    int delay = noon - sec_since_midnight;
+    if (delay <= 0) delay += 24 * 3600;   /* already past noon today */
+    image_noon_timer_id = g_timeout_add_seconds((guint)delay, Noon_Image_Timer, NULL);
+    LOG("Next image scheduled in %d min\n", delay / 60);
+}
+
+static gboolean Noon_Image_Timer(gpointer user_data) {
+    (void)user_data;
+    image_noon_timer_id = 0;
+    if (publishImage)
+        g_idle_add(Image_Idle_Capture, NULL);
+    Schedule_Noon_Image();          /* reschedule for tomorrow */
+    return G_SOURCE_REMOVE;
+}
+
 static gboolean MQTT_Publish_Device_Status(gpointer user_data) {
     if (!publishStatus)
         return G_SOURCE_CONTINUE;
@@ -968,16 +1139,27 @@ void Main_MQTT_Status(int state) {
             break;
         case MQTT_CONNECTED:
             LOG("%s: Connected\n", __func__);
+            mqttConnected = 1;
             snprintf(topic, sizeof(topic), "connect/%s", ACAP_DEVICE_Prop("serial"));
             message = cJSON_CreateObject();
             cJSON_AddTrueToObject(message, "connected");
             cJSON_AddStringToObject(message, "model", ACAP_DEVICE_Prop("model"));
             cJSON_AddStringToObject(message, "address", ACAP_DEVICE_Prop("IPv4"));
+            {
+                cJSON *labels = VOD_Label_List();
+                if (labels)
+                    cJSON_AddItemToObject(message, "labels", labels);
+            }
             MQTT_Publish_JSON(topic, message, 0, 1);
             cJSON_Delete(message);
-			MQTT_Publish_Device_Status(0);
+            MQTT_Publish_Device_Status(0);
+            if (publishImage) {
+                g_idle_add(Image_Idle_Capture, NULL);
+                Schedule_Noon_Image();
+            }
             break;
         case MQTT_DISCONNECTING:
+            mqttConnected = 0;
             snprintf(topic, sizeof(topic), "connect/%s", ACAP_DEVICE_Prop("serial"));
             message = cJSON_CreateObject();
             cJSON_AddFalseToObject(message, "connected");
@@ -987,9 +1169,11 @@ void Main_MQTT_Status(int state) {
             break;
         case MQTT_RECONNECTED:
             LOG("%s: Reconnected\n", __func__);
+            mqttConnected = 1;
             break;
         case MQTT_DISCONNECTED:
             LOG("%s: Disconnect\n", __func__);
+            mqttConnected = 0;
             break;
     }
 }
@@ -1027,6 +1211,19 @@ void Settings_Updated_Callback(const char* service, cJSON* data) {
         publishStatus = cJSON_IsTrue(cJSON_GetObjectItem(data, "status"));
         publishGeospace = cJSON_IsTrue(cJSON_GetObjectItem(data, "geospace"));
         publishAnomaly = cJSON_IsTrue(cJSON_GetObjectItem(data, "anomaly"));
+        int newImage = cJSON_IsTrue(cJSON_GetObjectItem(data, "image"));
+        if (newImage && !publishImage && mqttConnected) {
+            /* User just enabled image publishing — send one immediately */
+            g_idle_add(Image_Idle_Capture, NULL);
+            Schedule_Noon_Image();
+        } else if (!newImage && publishImage) {
+            /* Disabled — cancel noon timer */
+            if (image_noon_timer_id) {
+                g_source_remove(image_noon_timer_id);
+                image_noon_timer_id = 0;
+            }
+        }
+        publishImage = newImage;
     }
 
     if (strcmp(service, "scene") == 0)
@@ -1088,6 +1285,8 @@ void HandleVersionUpdateConfigurations(cJSON* settings) {
     }
     if (!cJSON_GetObjectItem(publish, "geospace"))
         cJSON_AddFalseToObject(publish, "geospace");
+    if (!cJSON_GetObjectItem(publish, "image"))
+        cJSON_AddFalseToObject(publish, "image");
 }
 
 int main(void) {

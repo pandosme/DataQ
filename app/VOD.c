@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <stdbool.h>
 #include <glib.h>
 #include <pthread.h>
@@ -521,49 +522,55 @@ cJSON* VOD_Label_List(void) {
     cJSON *det_info = VOD_Detector_Information();
     if (!det_info) return NULL;
 
-
-    cJSON *labels = cJSON_GetObjectItem(det_info, "labels");
+    cJSON *labels     = cJSON_GetObjectItem(det_info, "labels");
     cJSON *attributes = cJSON_GetObjectItem(det_info, "attributes");
-    cJSON *result = cJSON_CreateArray();
+    cJSON *result     = cJSON_CreateArray();
 
-
-    // Helper: add string to array if not already present
-    #define ADD_UNIQUE_STR(arr, str) do { \
-        int found = 0; \
-        for (int idx = 0; idx < cJSON_GetArraySize(arr); ++idx) { \
-            cJSON *item = cJSON_GetArrayItem(arr, idx); \
-            if (strcmp(item->valuestring, (str)) == 0) { found = 1; break; } \
+    // Helper: add label object {id, name, enabled} if id not already present
+    #define ADD_UNIQUE_LABEL(arr, namestr) do { \
+        /* build lower-case id */ \
+        char _id[64] = {0}; \
+        strncpy(_id, (namestr), sizeof(_id) - 1); \
+        for (int _i = 0; _id[_i]; _i++) _id[_i] = (char)tolower((unsigned char)_id[_i]); \
+        /* check for duplicate */ \
+        int _found = 0; \
+        for (int _j = 0; _j < cJSON_GetArraySize(arr); _j++) { \
+            cJSON *_item = cJSON_GetArrayItem(arr, _j); \
+            cJSON *_idItem = cJSON_GetObjectItem(_item, "id"); \
+            if (_idItem && strcmp(_idItem->valuestring, _id) == 0) { _found = 1; break; } \
         } \
-        if (!found) cJSON_AddItemToArray(arr, cJSON_CreateString(str)); \
+        if (!_found) { \
+            cJSON *_obj = cJSON_CreateObject(); \
+            cJSON_AddStringToObject(_obj, "id", _id); \
+            cJSON_AddStringToObject(_obj, "name", (namestr)); \
+            cJSON_AddTrueToObject(_obj, "enabled"); \
+            cJSON_AddItemToArray(arr, _obj); \
+        } \
     } while (0)
 
-
-    // Add all label names
+    // Add all primary label names
     if (labels) {
         for (int i = 0; i < cJSON_GetArraySize(labels); ++i) {
-            cJSON *lbl = cJSON_GetArrayItem(labels, i);
+            cJSON *lbl  = cJSON_GetArrayItem(labels, i);
             cJSON *name = cJSON_GetObjectItem(lbl, "name");
-            if (name && name->valuestring && strlen(name->valuestring) > 0) {
-                ADD_UNIQUE_STR(result, name->valuestring);
-            }
+            if (name && name->valuestring && strlen(name->valuestring) > 0)
+                ADD_UNIQUE_LABEL(result, name->valuestring);
         }
     }
 
-
-    // Find vehicle_type attribute and add its class names
+    // Add vehicle_type sub-classes from attributes
     if (attributes) {
         for (int i = 0; i < cJSON_GetArraySize(attributes); ++i) {
-            cJSON *attr = cJSON_GetArrayItem(attributes, i);
+            cJSON *attr      = cJSON_GetArrayItem(attributes, i);
             cJSON *attr_name = cJSON_GetObjectItem(attr, "name");
             if (attr_name && strcmp(attr_name->valuestring, "vehicle_type") == 0) {
                 cJSON *labels_arr = cJSON_GetObjectItem(attr, "labels");
                 if (labels_arr) {
                     for (int j = 0; j < cJSON_GetArraySize(labels_arr); ++j) {
-                        cJSON *vehicle_class = cJSON_GetArrayItem(labels_arr, j);
-                        cJSON *vname = cJSON_GetObjectItem(vehicle_class, "name");
-                        if (vname && vname->valuestring && strlen(vname->valuestring) > 0) {
-                            ADD_UNIQUE_STR(result, vname->valuestring);
-                        }
+                        cJSON *vc    = cJSON_GetArrayItem(labels_arr, j);
+                        cJSON *vname = cJSON_GetObjectItem(vc, "name");
+                        if (vname && vname->valuestring && strlen(vname->valuestring) > 0)
+                            ADD_UNIQUE_LABEL(result, vname->valuestring);
                     }
                 }
                 break;
@@ -571,12 +578,10 @@ cJSON* VOD_Label_List(void) {
         }
     }
 
-
     cJSON_Delete(det_info);
-    #undef ADD_UNIQUE_STR
+    #undef ADD_UNIQUE_LABEL
     return result;
 }
-
 
 cJSON* VOD_Detector_Information() {
     uint8_t *buffer = NULL;
