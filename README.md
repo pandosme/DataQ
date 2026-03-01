@@ -280,21 +280,13 @@ For VMS (Video Mananagement Systems"), a stateful event "anomaly" will be fired 
 ## History
 
 ### 3.1.0 Mar 1, 2026
-Radar branch — targeting Axis D2110 (armv7hf) and D2210 (aarch64) radar sensors.
-- New MQTT topic `image/{serial}`: publishes a JPEG snapshot encoded as Base64
+- New MQTT topic `image/{serial}`: publishes a JPEG snapshot (640×360 for 16:9 cameras) encoded as Base64
   - Published immediately when enabled and then daily at 12:00 local time
-- `connect/{serial}` announcement now includes a `labels` array listing all detectable object classes
+- `connect/{serial}` announcement now includes a `labels` array listing all detectable object classes with `id`, `name`, and `enabled` fields
 - Added **Image** toggle to the MQTT streams table in the UI
+- Renamed `path-structure.md` to `MQTT_topics.md` with full topic and payload documentation
 - Added `publish.image` setting (default: disabled)
-- `ACAP_DEVICE_Set_Location()` now accepts a third `heading` parameter (degrees) stored in device location
-- Geospace enhancements
-  - Map rotates to align with device heading
-  - 180° FOV sector overlay centred on device position
-  - Location save now persists heading alongside lat/lon
-  - Path sample points include `lat` and `lon` when geospace is calibrated
-- Occupancy simplified for radar: counts moving objects only (no video stream)
-- Removed Anomaly page and all anomaly publish functionality
-- UI refreshed to match main branch: dark sidebar, card-based layout, CSS custom properties
+- `ACAP_DEVICE_Set_Location()` now accepts a third `heading` parameter (degrees)
 
 ### 3.0.1 Feb 25, 2026
 - Fixed OpenStreetMap not displaying on the Geospace page
