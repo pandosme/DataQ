@@ -3,6 +3,9 @@
 DataQ is an MQTT Client for Axis cameras that enables custom data-driven solutions when standard camera data and formats are insufficient. It processes, filters, and transforms data before MQTT publishing to optimize resource usage.
 Just like Axis Metadata, detections are based on DataQ makes integration and solution development very easy.  DataQ provides different data stractures based on use-case, optimizing bandwidth and alos adding pre-calculated properties like age, distance, direction and idle time so consumers does not need to.
 
+> **DataQ** targets Axis cameras.
+> **DataQ_Radar** targets Axis Radar models **D2110** and **D2210**.
+
 ***
 ## Key Features
 
@@ -30,16 +33,27 @@ Just like Axis Metadata, detections are based on DataQ makes integration and sol
 - Data-driven application builders
 
 ## Prerequisites
-- Axis device (ARM7HF or AARCH64)
-- The later the firmware provides better data
+
+**DataQ (cameras)**
+- Axis camera (ARM7HF or AARCH64 architecture)
+- The later the firmware, the better the data
+
+**DataQ_Radar (radars)**
+- Axis Radar D2110 or D2210
+
+**Both**
 - MQTT Broker with WebSocket support
 - MQTT client for data consumption
 
 ***
 
 ### Pre-compiled download
+
 If you are only after a pre-compiled version, [Download Latest ZIP](https://www.dropbox.com/scl/fi/3z5ruobn27nvt2rwebqym/DataQ.zip?rlkey=etnpo7yvp2u6vqxi9d50hqpik&st=ian3s4md&dl=1)<br>
-The ZIP file contains pre-compiled version for amrv7hf, aarach64 and this readme.<br>
+The ZIP file contains:
+- **DataQ** — pre-compiled for armv7hf and aarch64 (Axis cameras)
+- **DataQ_Radar** — pre-compiled for aarch64 (Axis Radar D2110 and D2210)
+
 It is a good idea to regularly download the latest version as new features and bug fixes are published.<br>
 
 ***
