@@ -548,7 +548,7 @@ double ACAP_DEVICE_Latitude(void);
  * @param lon Longitude in decimal degrees
  * @return 1 on success, 0 on failure
  */
-int ACAP_DEVICE_Set_Location(double lat, double lon);
+int ACAP_DEVICE_Set_Location(double lat, double lon, double heading);
 
 /**
  * @brief Get a device property as a string.
