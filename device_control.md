@@ -1,9 +1,9 @@
 # Development Device
 THis file describes the devive being used to develop the ACAP.  Use this for testing, validation and troubleshooting.
 
-Address: front.internal
-User: nodered
-Password: rednode
+Address: 192.168.0.5
+User: root
+Password: pass
 Platform: aarch64
 
 Note the Axis device uses digest authentication
