@@ -24,13 +24,7 @@ Every payload published via `MQTT_Publish_JSON` automatically receives three ext
   "connected": true,
   "model": "P3245-V",
   "address": "192.168.1.100",
-  "labels": [
-    { "id": "human",   "name": "Human",   "enabled": true },
-    { "id": "car",     "name": "Car",     "enabled": true },
-    { "id": "bike",    "name": "Bike",    "enabled": true },
-    { "id": "bus",     "name": "Bus",     "enabled": true },
-    { "id": "truck",   "name": "Truck",   "enabled": true }
-  ],
+  "labels": ["Human", "Car", "Bike", "Bus", "Truck"],
   "serial": "B8A44F7ADD87",
   "name": "Front entrance",
   "location": "Sweden"
