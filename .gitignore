@@ -1,3 +1,7 @@
 *.eap
 install.py
 deploy.py
+device_control.md
+devices.txt
+install.sh
+
