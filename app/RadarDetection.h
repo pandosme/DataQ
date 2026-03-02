@@ -15,4 +15,5 @@ int		RadarDetection_Init( ObjectDetection_Callback detections, TrackerDetection_
 void	RadarDetection_Config( cJSON* data );
 void	RadarDetection_Reset();
 void	RadarDetection_Cleanup(void);
+cJSON*	RadarDetection_Labels(void);
 #endif

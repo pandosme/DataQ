@@ -762,32 +762,9 @@ void Main_MQTT_Status(int state) {
             cJSON_AddStringToObject(message, "model", ACAP_DEVICE_Prop("model"));
             cJSON_AddStringToObject(message, "address", ACAP_DEVICE_Prop("IPv4"));
             {
-                /* Build labels array from radar classification table */
-                cJSON* labels = cJSON_CreateArray();
-                const char* radar_classes[] = {"Human", "Vehicle", "Unknown"};
-                int nclasses = 3;
-                cJSON* settings_lbl = ACAP_Get_Config("settings");
-                cJSON* scene_lbl = settings_lbl ? cJSON_GetObjectItem(settings_lbl, "scene") : NULL;
-                cJSON* ignoreList = scene_lbl ? cJSON_GetObjectItem(scene_lbl, "ignoreClass") : NULL;
-                for (int li = 0; li < nclasses; li++) {
-                    cJSON* lbl = cJSON_CreateObject();
-                    cJSON_AddStringToObject(lbl, "id", radar_classes[li]);
-                    cJSON_AddStringToObject(lbl, "name", radar_classes[li]);
-                    int enabled = 1;
-                    if (ignoreList) {
-                        cJSON* ig = ignoreList->child;
-                        while (ig) {
-                            if (ig->valuestring && strcmp(ig->valuestring, radar_classes[li]) == 0) {
-                                enabled = 0;
-                                break;
-                            }
-                            ig = ig->next;
-                        }
-                    }
-                    cJSON_AddBoolToObject(lbl, "enabled", enabled);
-                    cJSON_AddItemToArray(labels, lbl);
-                }
-                cJSON_AddItemToObject(message, "labels", labels);
+                cJSON* labels = RadarDetection_Labels();
+                if (labels)
+                    cJSON_AddItemToObject(message, "labels", labels);
             }
             MQTT_Publish_JSON(topic, message, 0, 1);
             cJSON_Delete(message);
@@ -932,6 +909,11 @@ int main(void) {
     if (RadarDetection_Init(Detections_Data, Tracker_Data)) {
         ACAP_STATUS_SetBool("objectdetection", "connected", 1);
         ACAP_STATUS_SetString("objectdetection", "status", "OK");
+        cJSON* initLabels = RadarDetection_Labels();
+        if (initLabels) {
+            LOG("Radar labels ready: %d entries\n", cJSON_GetArraySize(initLabels));
+            cJSON_Delete(initLabels);
+        }
     } else {
         ACAP_STATUS_SetBool("objectdetection", "connected", 0);
         ACAP_STATUS_SetString("objectdetection", "status", "Object detection is not available");

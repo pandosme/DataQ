@@ -597,3 +597,12 @@ RadarDetection_Init( ObjectDetection_Callback detections, TrackerDetection_Callb
 	return 1;
 }
 
+cJSON*
+RadarDetection_Labels(void) {
+	cJSON* status = ACAP_STATUS_Group("detections");
+	if (!status) return NULL;
+	cJSON* labels = cJSON_GetObjectItem(status, "labels");
+	if (!labels) return NULL;
+	return cJSON_Duplicate(labels, 1);
+}
+
