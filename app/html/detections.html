@@ -36,7 +36,7 @@
     <div id="page-content-wrapper" class="p-0">
         <div class="container-fluid">
 			<div class="col-12">
-				<div class="card">
+				<div class="card mb-3">
 					<div class="card-header d-flex justify-content-between align-items-center">
 						<div class="publish-control">
 							<label class="switch">
@@ -53,7 +53,7 @@
 						<div class="card-body" id="settings-form">
 						  <div class="row">
 							<!-- Left: Video and Area Filter -->
-							<div class="col-lg-8 col-md-7">
+							<div class="col-12">
 							  <div id="video-view" style="display:block">
 								<div style="width:100%; height:100%; position:relative">
 								  <div id="video" style="width:100%; height:100%; position:absolute; top:0; left:0;"></div>
@@ -78,93 +78,96 @@
 								</div>
 							  </div>
 							</div>
-							<!-- Right: Settings and Label Filter -->
-							<div class="col-lg-4 col-md-5">
-							  <div class="card mb-3">
-								<div class="card-header">
-								  <h5 class="card-title mb-0">Settings</h5>
-								</div>
-								<div class="card-body">
-									<div class="form-group mb-3">
-										<label for="scene-confidence" class="form-label">Confidence</label>
-										<select class="form-select" id="scene-confidence">
-											<option value="0">0</option>
-											<option value="10">10</option>
-											<option value="20">20</option>
-											<option value="30">30</option>
-											<option value="40">40</option>
-											<option value="50">50</option>
-											<option value="60">60</option>
-											<option value="70">70</option>
-											<option value="80">80</option>
-											<option value="97">85</option>
-											<option value="97">90</option>
-											<option value="97">95</option>
-										</select>
-									</div>
-									<div class="form-group mb-3">
-										<label for="scene-maxIdle" class="form-label">Max idle</label>
-										<select class="form-select" id="scene-maxIdle">
-											<option value="0">Forever</option>
-											<option value="1">1s</option>
-											<option value="2">2s</option>
-											<option value="3">3s</option>
-											<option value="4">4s</option>
-											<option value="5">5s</option>
-											<option value="10">10s</option>
-											<option value="15">15s</option>
-											<option value="20">20s</option>
-											<option value="30">30s</option>
-											<option value="45">45s</option>
-											<option value="60">1m</option>
-											<option value="120">2m</option>
-											<option value="180">3m</option>
-											<option value="240">4m</option>
-											<option value="300">5m</option>
-											<option value="600">10m</option>
-											<option value="900">15m</option>
-											<option value="1200">20m</option>
-											<option value="1500">25m</option>
-											<option value="1800">30m</option>
-											<option value="2700">45m</option>
-											<option value="3600">1h</option>
-											<option value="7200">2h</option>
-										</select>
-									</div>
-									<div class="form-group mb-3">
-										<label for="scene-cog" class="form-label">COG</label>
-										<select class="form-select" id="scene-cog">
-											<option value="0">Center of the object</option>
-											<option value="1">Bottom-center (feet/wheels)</option>
-										</select>
-									</div>
-									<div class="form-group mb-3">
-										<label for="scene-rotation" class="form-label">Rotation</label>
-										<select class="form-select" id="scene-rotation">
-											<option value="0">0</option>
-											<option value="90">90</option>
-											<option value="180">180</option>
-											<option value="270">270</option>
-										</select>
-									</div>
-									<div class="d-grid mt-3">
-										<button type="button" class="btn btn-success" id="btn-save">Save</button>
-									</div>
-								</div>
-							  </div>
-							  <div class="card">
-								<div class="card-header">
-								  <h5 class="card-title mb-0">Label filter</h5>
-								</div>
-								<div id="labelSelector" class="card-body">
-								</div>
-							  </div>
-							</div>
 						  </div>
 						</div>
-
 					</div>
                 </div>
+				<!-- Settings and Label Filter - always visible -->
+				<div class="row">
+					<div class="col-lg-4 col-md-5 mb-3">
+					  <div class="card">
+						<div class="card-header">
+						  <h5 class="card-title mb-0">Settings</h5>
+						</div>
+						<div class="card-body">
+							<div class="form-group mb-3">
+								<label for="scene-confidence" class="form-label">Confidence</label>
+								<select class="form-select" id="scene-confidence">
+									<option value="0">0</option>
+									<option value="10">10</option>
+									<option value="20">20</option>
+									<option value="30">30</option>
+									<option value="40">40</option>
+									<option value="50">50</option>
+									<option value="60">60</option>
+									<option value="70">70</option>
+									<option value="80">80</option>
+									<option value="85">85</option>
+									<option value="90">90</option>
+									<option value="95">95</option>
+								</select>
+							</div>
+							<div class="form-group mb-3">
+								<label for="scene-maxIdle" class="form-label">Max idle</label>
+								<select class="form-select" id="scene-maxIdle">
+									<option value="0">Forever</option>
+									<option value="1">1s</option>
+									<option value="2">2s</option>
+									<option value="3">3s</option>
+									<option value="4">4s</option>
+									<option value="5">5s</option>
+									<option value="10">10s</option>
+									<option value="15">15s</option>
+									<option value="20">20s</option>
+									<option value="30">30s</option>
+									<option value="45">45s</option>
+									<option value="60">1m</option>
+									<option value="120">2m</option>
+									<option value="180">3m</option>
+									<option value="240">4m</option>
+									<option value="300">5m</option>
+									<option value="600">10m</option>
+									<option value="900">15m</option>
+									<option value="1200">20m</option>
+									<option value="1500">25m</option>
+									<option value="1800">30m</option>
+									<option value="2700">45m</option>
+									<option value="3600">1h</option>
+									<option value="7200">2h</option>
+								</select>
+							</div>
+							<div class="form-group mb-3">
+								<label for="scene-cog" class="form-label">COG</label>
+								<select class="form-select" id="scene-cog">
+									<option value="0">Center of the object</option>
+									<option value="1">Bottom-center (feet/wheels)</option>
+								</select>
+							</div>
+							<div class="form-group mb-3">
+								<label for="scene-rotation" class="form-label">Rotation</label>
+								<select class="form-select" id="scene-rotation">
+									<option value="0">0</option>
+									<option value="90">90</option>
+									<option value="180">180</option>
+									<option value="270">270</option>
+								</select>
+							</div>
+							<div class="d-grid mt-3">
+								<button type="button" class="btn btn-success" id="btn-save">Save</button>
+							</div>
+						</div>
+					  </div>
+					</div>
+					<div class="col-lg-8 col-md-7 mb-3">
+					  <div class="card h-100">
+						<div class="card-header">
+						  <h5 class="card-title mb-0">Label filter</h5>
+						</div>
+						<div id="labelSelector" class="card-body">
+						</div>
+					  </div>
+					</div>
+				</div>
             </div>
         </div>
     </div>
@@ -230,10 +233,9 @@ $(document).ready(function() {
 			$("#scene-cog").val(app.settings.scene.cog);
 			$("#scene-maxIdle").val(app.settings.scene.maxIdle);
 
-			const labelSelector = new LabelSelector('labelSelector', app.status.detections.labels, app.settings.scene.ignoreClass, function(selection) {
-				app.settings.scene.ignoreClass = selection;
-				saveFilter();
-			});
+			renderLabelSelector(
+				(app.status && app.status.detections && Array.isArray(app.status.detections.labels)) ? app.status.detections.labels : []
+			);
 
 			if( app.status.mqtt.connected ) {
 				ConnectWebSocketClient();
@@ -326,9 +328,48 @@ console.log(areaSelector)
 	});
 });
 
-function labelsUpdated(selection) {
-	app.settings.scene.ignoreClass = selection;
-	saveFilter();
+function buildLabelSelector(labels) {
+	new LabelSelector('labelSelector', labels, app.settings.scene.ignoreClass || [], function(selection) {
+		app.settings.scene.ignoreClass = selection;
+		saveFilter();
+	});
+}
+
+function renderLabelSelector(labels, retryCount) {
+	const el = document.getElementById('labelSelector');
+	retryCount = retryCount || 0;
+
+	if (labels && labels.length) {
+		buildLabelSelector(labels);
+		return;
+	}
+
+	// Labels not available yet - fetch /status directly and retry
+	el.innerHTML = '<p class="text-muted small">Waiting for Object Detection...</p>';
+	$.ajax({
+		type: "GET",
+		url: 'status',
+		dataType: 'json',
+		cache: false,
+		success: function(status) {
+			const fetched = (status && status.detections && Array.isArray(status.detections.labels))
+				? status.detections.labels : [];
+			if (fetched.length) {
+				buildLabelSelector(fetched);
+			} else if (retryCount < 10) {
+				setTimeout(function() { renderLabelSelector([], retryCount + 1); }, 3000);
+			} else {
+				el.innerHTML = '<p class="text-muted small">No labels available. Ensure Object Detection is running.</p>';
+			}
+		},
+		error: function() {
+			if (retryCount < 10) {
+				setTimeout(function() { renderLabelSelector([], retryCount + 1); }, 3000);
+			} else {
+				el.innerHTML = '<p class="text-muted small">Could not load labels.</p>';
+			}
+		}
+	});
 }
 
 function ConnectWebSocketClient() {
@@ -507,11 +548,6 @@ $('#btn-save').click(function() {
 	saveFilter();
 });
 
-
-function labelsUpdated(selection) {
-	app.settings.scene.ignoreClass = selection;
-	saveFilter();
-}
 
 function showToast(message, type = 'danger') {
     const toastContainer = document.querySelector('.toast-container');

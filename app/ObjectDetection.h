@@ -14,5 +14,6 @@ typedef void (*TrackerDetection_Callback)( cJSON *detections, int timer );
 int		ObjectDetection_Init( ObjectDetection_Callback detections, TrackerDetection_Callback tracker);
 void	ObjectDetection_Config( cJSON* data );
 void	ObjectDetection_Reset();
+cJSON*	ObjectDetection_Labels(void);
 
 #endif

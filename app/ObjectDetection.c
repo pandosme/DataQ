@@ -23,8 +23,6 @@
 #define LOG_WARN(fmt, args...) { syslog(LOG_WARNING, fmt, ## args); printf(fmt, ## args); }
 //#define LOG_TRACE(fmt, args...) { syslog(LOG_INFO, fmt, ## args); printf(fmt, ## args); }
 #define LOG_TRACE(fmt, args...) {}
-//#define LOG_DEEP(fmt, args...) { syslog(LOG_INFO, fmt, ## args); printf(fmt, ## args); }
-#define LOG_DEEP(fmt, args...) {}
 
 #define IDLE_THRESHOLD_PCT 50
 #define DIRECTION_CHANGE_THRESHOLD_RAD (M_PI / 4) // 45 degrees 
@@ -550,13 +548,11 @@ void distinct_direction_change(detection_cache_entry_t *entry, int cx, int cy) {
 
 static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user_data) {
     g_mutex_lock(&detection_mutex);
-	LOG_DEEP("<ObjectDection:%s",__func__);
     if (!detectionCache) {
         detectionCache = g_hash_table_new_full(g_str_hash, g_str_equal, free, free_detection_cache_entry);
         if (!detectionCache) {
             LOG_WARN("Failed to allocate detectionCache");
             g_mutex_unlock(&detection_mutex);
-			LOG_DEEP("Error %s:ObjectDetection>", __func__);
             return;
         }
     }
@@ -663,7 +659,7 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
                 int was_inside = (entry->cx >= config_cutoff_x1 && entry->cx <= config_cutoff_x2 &&
                                   entry->cy >= config_cutoff_y1 && entry->cy <= config_cutoff_y2);
                 if (was_inside && !inside_cutoff) {
-                    LOG("Cut-off area: ID %s left the area (was %d,%d now %d,%d) - treating as lost\n",
+                    LOG_TRACE("%s: Object %s exited cutoff area (%d,%d) -> (%d,%d)\n", __func__,
                         entry->id, entry->cx, entry->cy, cx, cy);
                     // Publish death of current identity
                     entry->active = false;
@@ -825,7 +821,6 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
     }
     g_list_free(remove_list);
 
-	LOG_DEEP("%s:ObjectDetection>",__func__);
     g_mutex_unlock(&detection_mutex);
 
     // Now call callbacks WITHOUT holding the mutex
@@ -845,7 +840,6 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
 
 void ObjectDetection_Reset() {
     g_mutex_lock(&detection_mutex);
-    LOG_DEEP("%s: Object cache reset",__func__);
 
     GList *pending_tracker_callbacks = NULL;
     cJSON *detections_payload = NULL;
@@ -985,20 +979,43 @@ int ObjectDetection_Init(ObjectDetection_Callback detections, TrackerDetection_C
 
     cJSON* list = VOD_Label_List();
     cJSON* labels = cJSON_CreateArray();
-    cJSON* item = list->child;
-    while(item) {
-        const char* label = NiceName(item->valuestring);
-        if( label )
-            cJSON_AddItemToArray(labels,cJSON_CreateString(label));
-        item = item->next;
+    if (list) {
+        LOG("%s: VOD label list has %d entries\n", __func__, cJSON_GetArraySize(list));
+        cJSON* item = list->child;
+        while(item) {
+            cJSON* idItem = cJSON_GetObjectItem(item, "id");
+            const char* raw = idItem ? idItem->valuestring : NULL;
+            const char* label = NiceName(raw);
+            LOG("%s: VOD label id='%s' -> NiceName='%s'\n", __func__, raw ? raw : "(null)", label ? label : "(null)");
+            if( label && label[0] )
+                cJSON_AddItemToArray(labels, cJSON_CreateString(label));
+            item = item->next;
+        }
+        cJSON_Delete(list);
+    } else {
+        LOG("%s: VOD_Label_List() returned NULL\n", __func__);
     }
-
-
-	cJSON_Delete(list);
+    LOG("%s: Storing %d labels in status\n", __func__, cJSON_GetArraySize(labels));
     ACAP_STATUS_SetObject("detections", "labels", labels);
+    cJSON_Delete(labels);
     g_timeout_add_seconds(1, update_trackers, NULL);	
     LOG_TRACE("%s: Exit\n",__func__);
     g_mutex_unlock(&detection_mutex);
 
     return 1;
+}
+
+cJSON* ObjectDetection_Labels(void) {
+    cJSON* status = ACAP_STATUS_Group("detections");
+    if (!status) {
+        LOG("%s: No 'detections' status group found\n", __func__);
+        return NULL;
+    }
+    cJSON* labels = cJSON_GetObjectItem(status, "labels");
+    if (!labels) {
+        LOG("%s: No 'labels' item in detections status group\n", __func__);
+        return NULL;
+    }
+    LOG("%s: Returning %d labels\n", __func__, cJSON_GetArraySize(labels));
+    return cJSON_Duplicate(labels, 1);
 }

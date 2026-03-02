@@ -293,6 +293,14 @@ For VMS (Video Mananagement Systems"), a stateful event "anomaly" will be fired 
 
 ## History
 
+### 3.1.1 Mar 2, 2026
+- Fixed label pipeline: `VOD_Label_List()` returns objects `{id, name, enabled}` rather than strings — now correctly extracts the `id` field and maps it through `NiceName()` before storing
+- Added `ObjectDetection_Labels()` / `RadarDetection_Labels()` functions that read mapped label names from the status group, replacing direct VOD access in the MQTT connect message
+- Labels are now stored in the status object at startup and reachable via the `/status` HTTP endpoint
+- Fixed `detections.html`: Settings and Label filter cards are now always visible (were hidden inside the Publish Detections toggle area)
+- Added `renderLabelSelector()` with retry logic — polls `/status` every 3 s (up to 10 attempts) until labels are available
+- Fixed confidence dropdown option values (85, 90, 95 were all submitting 97)
+
 ### 3.1.0 Mar 1, 2026
 - New MQTT topic `image/{serial}`: publishes a JPEG snapshot (640×360 for 16:9 cameras) encoded as Base64
   - Published immediately when enabled and then daily at 12:00 local time

@@ -32,12 +32,13 @@
 #include "ObjectDetection.h"
 #include "GeoSpace.h"
 #include "Stitch.h"
-#include "VOD.h"
+// VOD.h removed - label list sourced from ObjectDetection_Labels()
 
 #define APP_PACKAGE "DataQ"
 
 #define LOG(fmt, args...)      { syslog(LOG_INFO, fmt, ## args); printf(fmt, ## args); }
 #define LOG_WARN(fmt, args...) { syslog(LOG_WARNING, fmt, ## args); printf(fmt, ## args); }
+//#define LOG_TRACE(fmt, args...) { syslog(LOG_WARNING, fmt, ## args); printf(fmt, ## args); }
 #define LOG_TRACE(fmt, args...) {}
 
 cJSON* activeTrackers = 0;
@@ -1014,8 +1015,8 @@ static void Capture_And_Publish_Image(void) {
 
     vdo_map_set_uint32(settings, "channel", 1);
     vdo_map_set_uint32(settings, "format",  VDO_FORMAT_JPEG);
-    VdoPair32u res = { .w = target_w, .h = target_h };
-    vdo_map_set_pair32u(settings, "resolution", res);
+    vdo_map_set_uint32(settings, "width",   target_w);
+    vdo_map_set_uint32(settings, "height",  target_h);
     vdo_map_set_uint32(settings, "buffer.count", 2);
     vdo_map_set_string(settings, "image.fit", "scale");
 
@@ -1146,9 +1147,13 @@ void Main_MQTT_Status(int state) {
             cJSON_AddStringToObject(message, "model", ACAP_DEVICE_Prop("model"));
             cJSON_AddStringToObject(message, "address", ACAP_DEVICE_Prop("IPv4"));
             {
-                cJSON *labels = VOD_Label_List();
-                if (labels)
+                cJSON *labels = ObjectDetection_Labels();
+                if (labels) {
+                    LOG("MQTT connect: adding %d labels to connect message\n", cJSON_GetArraySize(labels));
                     cJSON_AddItemToObject(message, "labels", labels);
+                } else {
+                    LOG_WARN("MQTT connect: ObjectDetection_Labels() returned NULL\n");
+                }
             }
             MQTT_Publish_JSON(topic, message, 0, 1);
             cJSON_Delete(message);
@@ -1296,8 +1301,6 @@ int main(void) {
     cJSON* settings = ACAP(APP_PACKAGE, Settings_Updated_Callback);
     HandleVersionUpdateConfigurations(settings);
 
-    MQTT_Init(Main_MQTT_Status, Main_MQTT_Subscription_Message);
-    ACAP_Set_Config("mqtt", MQTT_Settings());
     ACAP_STATUS_SetObject("detections", "paths", cJSON_CreateArray());
 
     ACAP_EVENTS_SetCallback(Event_Callback);
@@ -1312,6 +1315,14 @@ int main(void) {
     if (ObjectDetection_Init(Detections_Data, Tracker_Data)) {
         ACAP_STATUS_SetBool("objectdetection", "connected", 1);
         ACAP_STATUS_SetString("objectdetection", "status", "OK");
+        cJSON* initLabels = ObjectDetection_Labels();
+        if (initLabels) {
+            LOG("Labels from ObjectDetection_Init: %d entries\n", cJSON_GetArraySize(initLabels));
+            ACAP_STATUS_SetObject("detections", "labels", initLabels);
+            cJSON_Delete(initLabels);
+        } else {
+            LOG_WARN("ObjectDetection_Labels() returned NULL after init\n");
+        }
     } else {
         ACAP_STATUS_SetBool("objectdetection", "connected", 0);
         ACAP_STATUS_SetString("objectdetection", "status", "Object detection is not available");
@@ -1336,6 +1347,9 @@ int main(void) {
     } else {
         LOG_WARN("Signal detection failed");
     }
+
+    MQTT_Init(Main_MQTT_Status, Main_MQTT_Subscription_Message);
+    ACAP_Set_Config("mqtt", MQTT_Settings());
 
     g_main_loop_run(main_loop);
 
