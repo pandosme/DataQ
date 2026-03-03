@@ -256,8 +256,8 @@ Geospace_Enrich_Tracker(cJSON *tracker) {
     /* Write back into tracker so ProcessPaths and Publish_Geospace can read them */
     cJSON_DeleteItemFromObject(tracker, "lat");
     cJSON_DeleteItemFromObject(tracker, "lon");
-    cJSON_AddNumberToObject(tracker, "lat", obj_lat);
-    cJSON_AddNumberToObject(tracker, "lon", obj_lon);
+    cJSON_AddNumberToObject(tracker, "lat", round(obj_lat * 1e6) / 1e6);
+    cJSON_AddNumberToObject(tracker, "lon", round(obj_lon * 1e6) / 1e6);
     return 1;
 }
 
@@ -318,6 +318,10 @@ void Publish_Geospace(cJSON *tracker) {
     cJSON_AddBoolToObject  (geo, "active",     active);
     cJSON_AddNumberToObject(geo, "confidence", cJSON_GetObjectItem(tracker, "confidence") ? cJSON_GetObjectItem(tracker, "confidence")->valueint    : 0);
     cJSON_AddNumberToObject(geo, "age",        cJSON_GetObjectItem(tracker, "age")        ? cJSON_GetObjectItem(tracker, "age")->valuedouble        : 0.0);
+    cJSON* geoIdle = cJSON_GetObjectItem(tracker, "idle");
+    if (geoIdle) cJSON_AddNumberToObject(geo, "idle", geoIdle->valuedouble);
+    cJSON* geoDist = cJSON_GetObjectItem(tracker, "distance");
+    if (geoDist) cJSON_AddNumberToObject(geo, "distance", geoDist->valuedouble);
     if (radarObj) cJSON_AddItemToObject(geo, "radar", cJSON_Duplicate(radarObj, 1));
 
     char topic[128];
