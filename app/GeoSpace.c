@@ -45,11 +45,11 @@ int GeoSpace_Matrix(cJSON* matrix) {
             return 0;
         }
         gMatrix.initialized = true;
-		ACAP_STATUS_SetBool("geospace", "active", 1);
     } else {
         // Update existing matrix data
         memcpy(gMatrix.H.elem.ptr, gMatrix.h_data, 9 * sizeof(lm_mat_elem_t));
     }
+    ACAP_STATUS_SetBool("geospace", "active", 1);
 	LOG_TRACE("%s: Exit\n",__func__);
     return 1;
 }

@@ -146,12 +146,8 @@ cJSON* ProcessPaths(cJSON* tracker) {
         cJSON* hat = cJSON_GetObjectItem(tracker, "hat");
         if (hat) cJSON_AddStringToObject(path, "hat", hat->valuestring);
 
-        double lat = cJSON_GetObjectItem(tracker, "lat") ? 
-                     cJSON_GetObjectItem(tracker, "lat")->valuedouble : 0;
-        double lon = cJSON_GetObjectItem(tracker, "lon") ? 
-                     cJSON_GetObjectItem(tracker, "lon")->valuedouble : 0;
         double blat = 0, blon = 0;
-        if (lat && lon && bxItem && byItem)
+        if (bxItem && byItem)
             GeoSpace_transform(bxItem->valueint, byItem->valueint, &blat, &blon);
 
         cJSON* pathArr = cJSON_CreateArray();
@@ -162,9 +158,9 @@ cJSON* ProcessPaths(cJSON* tracker) {
         cJSON_AddNumberToObject(pos1, "y", byItem ? byItem->valuedouble : 0);
         cJSON_AddNumberToObject(pos1, "d", 0);  // Will be updated on first tracker update
         cJSON_AddNumberToObject(pos1, "t", birthTime / 1000.0);  // Epoch seconds for stitch matching
-        if (blat && blon) {
-            cJSON_AddNumberToObject(pos1, "lat", blat);
-            cJSON_AddNumberToObject(pos1, "lon", blon);
+        if (blat || blon) {
+            cJSON_AddNumberToObject(pos1, "lat", round(blat * 1e6) / 1e6);
+            cJSON_AddNumberToObject(pos1, "lon", round(blon * 1e6) / 1e6);
         }
         cJSON_AddItemToArray(pathArr, pos1);
 
@@ -172,14 +168,16 @@ cJSON* ProcessPaths(cJSON* tracker) {
         cJSON* cxNew = cJSON_GetObjectItem(tracker, "cx");
         cJSON* cyNew = cJSON_GetObjectItem(tracker, "cy");
         if (!cxNew || !cyNew) return 0;
+        double clat = 0, clon = 0;
+        GeoSpace_transform(cxNew->valueint, cyNew->valueint, &clat, &clon);
         cJSON* pos2 = cJSON_CreateObject();
         cJSON_AddNumberToObject(pos2, "x", cxNew->valuedouble);
         cJSON_AddNumberToObject(pos2, "y", cyNew->valuedouble);
         cJSON_AddNumberToObject(pos2, "d", 0);  // Will be updated on next tracker update
         cJSON_AddNumberToObject(pos2, "t", currentTimestamp / 1000.0);  // Epoch seconds for stitch matching
-        if (lat && lon) {
-            cJSON_AddNumberToObject(pos2, "lat", lat);
-            cJSON_AddNumberToObject(pos2, "lon", lon);
+        if (clat || clon) {
+            cJSON_AddNumberToObject(pos2, "lat", round(clat * 1e6) / 1e6);
+            cJSON_AddNumberToObject(pos2, "lon", round(clon * 1e6) / 1e6);
         }
         cJSON_AddItemToArray(pathArr, pos2);
 
@@ -226,37 +224,32 @@ cJSON* ProcessPaths(cJSON* tracker) {
             cJSON_ReplaceItemInObject(lastPos, "d", cJSON_CreateNumber(duration));
         }
 
-        // Update dwell to be the maximum "d" value in the path array
+        // Update dwell = max time spent at any single sampled position
         double maxDwell = 0.0;
         for (int i = 0; i < pathLen; ++i) {
             cJSON* pos = cJSON_GetArrayItem(pathArr, i);
             cJSON* d_item = cJSON_GetObjectItem(pos, "d");
-            if (d_item && d_item->valuedouble > maxDwell) {
+            if (d_item && d_item->valuedouble > maxDwell)
                 maxDwell = d_item->valuedouble;
-            }
         }
         cJSON* dwell_item = cJSON_GetObjectItem(path, "dwell");
-        if (dwell_item) {
+        if (dwell_item)
             cJSON_SetNumberValue(dwell_item, maxDwell);
-        }
 
         // Add NEW position with d=0 (will be calculated on next update or exit)
         cJSON* cxUpd = cJSON_GetObjectItem(tracker, "cx");
         cJSON* cyUpd = cJSON_GetObjectItem(tracker, "cy");
         if (!cxUpd || !cyUpd) return 0;
+        double lat = 0, lon = 0;
+        GeoSpace_transform(cxUpd->valueint, cyUpd->valueint, &lat, &lon);
         cJSON* pos = cJSON_CreateObject();
         cJSON_AddNumberToObject(pos, "x", cxUpd->valuedouble);
         cJSON_AddNumberToObject(pos, "y", cyUpd->valuedouble);
         cJSON_AddNumberToObject(pos, "d", 0);  // Always 0 for newest position
         cJSON_AddNumberToObject(pos, "t", currentTimestamp / 1000.0);  // Epoch seconds for stitch matching
-        
-        double lat = cJSON_GetObjectItem(tracker, "lat") ? 
-                     cJSON_GetObjectItem(tracker, "lat")->valuedouble : 0;
-        double lon = cJSON_GetObjectItem(tracker, "lon") ? 
-                     cJSON_GetObjectItem(tracker, "lon")->valuedouble : 0;
-        if (lat && lon) {
-            cJSON_AddNumberToObject(pos, "lat", lat);
-            cJSON_AddNumberToObject(pos, "lon", lon);
+        if (lat || lon) {
+            cJSON_AddNumberToObject(pos, "lat", round(lat * 1e6) / 1e6);
+            cJSON_AddNumberToObject(pos, "lon", round(lon * 1e6) / 1e6);
         }
         cJSON_AddItemToArray(pathArr, pos);
         
@@ -279,14 +272,13 @@ cJSON* ProcessPaths(cJSON* tracker) {
             double finalDuration = (currentTimestamp - previousTimestamp) / 1000.0; // Convert ms to seconds
             cJSON_ReplaceItemInObject(last, "d", cJSON_CreateNumber(finalDuration));
 
-            // Calculate final dwell as maximum "d" value in the path array
+            // Calculate final dwell = max time spent at any single sampled position
             double maxDwell = 0.0;
             for (int i = 0; i < pathLen; ++i) {
                 cJSON* pos = cJSON_GetArrayItem(pathArr, i);
                 cJSON* d_item = cJSON_GetObjectItem(pos, "d");
-                if (d_item && d_item->valuedouble > maxDwell) {
+                if (d_item && d_item->valuedouble > maxDwell)
                     maxDwell = d_item->valuedouble;
-                }
             }
             cJSON_ReplaceItemInObject(path, "dwell", cJSON_CreateNumber(maxDwell));
 
@@ -298,18 +290,13 @@ cJSON* ProcessPaths(cJSON* tracker) {
             cJSON_ReplaceItemInObject(path, "distance", cJSON_CreateNumber(distance));
 
             // Update other final metadata
-            cJSON* pathDirItem = cJSON_GetObjectItem(tracker, "directions");
-            if (pathDirItem)
-                cJSON_AddNumberToObject(path, "directions", pathDirItem->valueint);
             cJSON* pathAnomalyItem = cJSON_GetObjectItem(tracker, "anomaly");
             if (pathAnomalyItem && pathAnomalyItem->valuestring)
                 cJSON_AddStringToObject(path, "anomaly", pathAnomalyItem->valuestring);
             cJSON* pathMaxSpeedItem = cJSON_GetObjectItem(tracker, "maxSpeed");
             if (pathMaxSpeedItem)
                 cJSON_AddNumberToObject(path, "maxSpeed", pathMaxSpeedItem->valuedouble);
-            cJSON* pathMaxIdleItem = cJSON_GetObjectItem(tracker, "maxIdle");
-            if (pathMaxIdleItem)
-                cJSON_AddNumberToObject(path, "maxIdle", pathMaxIdleItem->valuedouble);
+            // maxIdle is redundant — dwell already holds that value
 
             // NO PreviousTimestamp cache cleanup needed anymore!
 
@@ -611,7 +598,8 @@ void Tracker_Data(cJSON *tracker, int timer) {
     if (publishPath && !timer && tracker)
 		Stitch_Path(ProcessPaths(tracker));
 
-    cJSON_DeleteItemFromObject(tracker,"previousTimestamp");
+    cJSON_DeleteItemFromObject(tracker, "previousTimestamp");
+    cJSON_DeleteItemFromObject(tracker, "maxIdle");
 
     if (publishTracker) {
         snprintf(topic, sizeof(topic), "tracker/%s", ACAP_DEVICE_Prop("serial"));
@@ -623,28 +611,30 @@ void Tracker_Data(cJSON *tracker, int timer) {
         cJSON* geoCy = cJSON_GetObjectItem(tracker, "cy");
         if (!geoCx || !geoCy) goto skip_geospace;
         double lat = 0, lon = 0;
-        GeoSpace_transform(geoCx->valueint, geoCy->valueint, &lat, &lon);
-        if (lat && lon) {
-            cJSON_AddNumberToObject(tracker, "lat", lat);
-            cJSON_AddNumberToObject(tracker, "lon", lon);
+        cJSON* geoActive = cJSON_GetObjectItem(tracker, "active");
+        int is_active = geoActive && cJSON_IsTrue(geoActive);
+        int geo_ok = GeoSpace_transform(geoCx->valueint, geoCy->valueint, &lat, &lon);
+        // Publish if transform succeeded (active objects) OR always when object leaves (to clean up map markers)
+        if (geo_ok || !is_active) {
             cJSON* geospaceObject = cJSON_CreateObject();
-            cJSON* geoClass = cJSON_GetObjectItem(tracker, "class");
-            if (geoClass && geoClass->valuestring)
-                cJSON_AddStringToObject(geospaceObject, "class", geoClass->valuestring);
-            cJSON_AddNumberToObject(geospaceObject, "lat", lat);
-            cJSON_AddNumberToObject(geospaceObject, "lon", lon);
-            cJSON* geoAge = cJSON_GetObjectItem(tracker, "age");
-            cJSON* geoIdle = cJSON_GetObjectItem(tracker, "idle");
             cJSON* geoId = cJSON_GetObjectItem(tracker, "id");
-            cJSON* geoActive = cJSON_GetObjectItem(tracker, "active");
-            cJSON* geoConfidence = cJSON_GetObjectItem(tracker, "confidence");
-            cJSON* geoDistance = cJSON_GetObjectItem(tracker, "distance");
-            if (geoAge) cJSON_AddNumberToObject(geospaceObject, "age", geoAge->valuedouble);
-            if (geoIdle) cJSON_AddNumberToObject(geospaceObject, "idle", geoIdle->valuedouble);
             if (geoId && geoId->valuestring) cJSON_AddStringToObject(geospaceObject, "id", geoId->valuestring);
             if (geoActive) cJSON_AddItemToObject(geospaceObject, "active", cJSON_Duplicate(geoActive, 1));
-            if (geoConfidence) cJSON_AddNumberToObject(geospaceObject, "confidence", geoConfidence->valuedouble);
-            if (geoDistance) cJSON_AddNumberToObject(geospaceObject, "distance", geoDistance->valuedouble);
+            if (geo_ok) {
+                cJSON_AddNumberToObject(geospaceObject, "lat", round(lat * 1e6) / 1e6);
+                cJSON_AddNumberToObject(geospaceObject, "lon", round(lon * 1e6) / 1e6);
+                cJSON* geoClass = cJSON_GetObjectItem(tracker, "class");
+                if (geoClass && geoClass->valuestring)
+                    cJSON_AddStringToObject(geospaceObject, "class", geoClass->valuestring);
+                cJSON* geoAge = cJSON_GetObjectItem(tracker, "age");
+                cJSON* geoIdle = cJSON_GetObjectItem(tracker, "idle");
+                cJSON* geoConfidence = cJSON_GetObjectItem(tracker, "confidence");
+                cJSON* geoDistance = cJSON_GetObjectItem(tracker, "distance");
+                if (geoAge) cJSON_AddNumberToObject(geospaceObject, "age", geoAge->valuedouble);
+                if (geoIdle) cJSON_AddNumberToObject(geospaceObject, "idle", geoIdle->valuedouble);
+                if (geoConfidence) cJSON_AddNumberToObject(geospaceObject, "confidence", geoConfidence->valuedouble);
+                if (geoDistance) cJSON_AddNumberToObject(geospaceObject, "distance", geoDistance->valuedouble);
+            }
             snprintf(topic, sizeof(topic), "geospace/%s", ACAP_DEVICE_Prop("serial"));
             MQTT_Publish_JSON(topic, geospaceObject, 0, 0);
             cJSON_Delete(geospaceObject);
@@ -663,6 +653,9 @@ void Publish_Path( cJSON* path ){
 		cJSON_Delete(path);
 		return;
 	}
+	// Strip internal 't' timestamps from path points (used for stitching, not needed in published data)
+	for (cJSON* pt = pathArray->child; pt != NULL; pt = pt->next)
+		cJSON_DeleteItemFromObject(pt, "t");
     char topic[128];
 	snprintf(topic, sizeof(topic), "path/%s", ACAP_DEVICE_Prop("serial"));
 	MQTT_Publish_JSON(topic, path, 0, 0);
@@ -1292,6 +1285,11 @@ void HandleVersionUpdateConfigurations(cJSON* settings) {
         cJSON_AddFalseToObject(publish, "geospace");
     if (!cJSON_GetObjectItem(publish, "image"))
         cJSON_AddFalseToObject(publish, "image");
+
+    if (!cJSON_GetObjectItem(settings, "markers"))
+        cJSON_AddArrayToObject(settings, "markers");
+    if (!cJSON_GetObjectItem(settings, "matrix"))
+        cJSON_AddArrayToObject(settings, "matrix");
 }
 
 int main(void) {

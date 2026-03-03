@@ -13,6 +13,8 @@
 		"anomaly": false,
 		"image": false
 	},
+	"markers": [],
+	"matrix": [],
 	"scene": {
 		"confidence": 30,
 		"rotation": 0,

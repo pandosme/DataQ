@@ -13,6 +13,25 @@
   <script src="js/paho-mqtt-min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/9.4.4/math.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    .tracker-marker {
+      background: transparent !important;
+      border: none !important;
+    }
+    .tracker-id {
+      background: rgba(30, 120, 220, 0.85);
+      color: #fff;
+      font-size: 11px;
+      font-weight: bold;
+      padding: 3px 7px;
+      border-radius: 12px;
+      white-space: nowrap;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      display: inline-block;
+    }
+  </style>
 </head>
 <body>
 <div class="d-flex" id="wrapper">
@@ -1103,7 +1122,7 @@ function onConnectionLost(responseObject) {
 var detections = {};
 
 function onMessageArrived(message) {
-    if (AppState.currentMode !== "default" || App.settings.publish.geospace === false) {
+    if (AppState.currentMode !== "default") {
         return;
     }
 	var topics = message.destinationName.split("/");
@@ -1122,20 +1141,25 @@ function onMessageArrived(message) {
 	}
 	
 	if( topic === "geospace" ) {
+		if( !App.settings.publish.geospace ) return;
 		if (detection.active ) {
 			if (AppState.trackers.has(detection.id)) {
 				const marker = AppState.trackers.get(detection.id);
 				marker.setLatLng([detection.lat, detection.lon]);
 				marker.setIcon(L.divIcon({
 					className: 'tracker-marker',
-					html: '<div class="tracker-id">' + detection.class + " " + age + '</div>'
+					html: '<div class="tracker-id">' + detection.class + " " + age + '</div>',
+					iconSize: [0, 0],
+					iconAnchor: [0, 0]
 				}));
 			} else {
 				// Create new tracker marker
 				const marker = L.marker([detection.lat, detection.lon], {
 					icon: L.divIcon({
 						className: 'tracker-marker',
-						html: '<div class="tracker-id">' + detection.class + " " + age + '</div>'
+						html: '<div class="tracker-id">' + detection.class + " " + age + '</div>',
+						iconSize: [0, 0],
+						iconAnchor: [0, 0]
 					})
 				}).addTo(AppState.map);
 				
