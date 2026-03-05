@@ -25,6 +25,7 @@
 #include "ACAP.h"
 #include "MQTT.h"
 #include "RadarDetection.h"
+#include "Stitch.h"
 
 #define APP_PACKAGE "DataQ"
 
@@ -210,9 +211,7 @@ cJSON* ProcessPaths(cJSON* tracker) {
 			cJSON* dir_item = cJSON_GetObjectItem(tracker, "directions");
 			cJSON_AddNumberToObject(path, "directions", dir_item ? dir_item->valueint : 0);
 			double maxSpeedVal = cJSON_GetObjectItem(tracker,"maxSpeed") ? cJSON_GetObjectItem(tracker,"maxSpeed")->valuedouble : 0;
-			cJSON *radarPath = cJSON_CreateObject();
-			cJSON_AddNumberToObject(radarPath, "maxSpeed", maxSpeedVal);
-			cJSON_AddItemToObject(path, "radar", radarPath);
+			cJSON_AddNumberToObject(path, "maxSpeed", maxSpeedVal);
 			LOG("Path complete: id=%s age=%.1f dist=%.0f points=%d\n", id, age, distance, pathLen);
             return path;
         }
@@ -280,8 +279,8 @@ void Tracker_Data(cJSON *tracker, int timer) {
 
     if (publishPath && !timer && tracker) {
 		cJSON* path = ProcessPaths(tracker);
-		if (path) Publish_Path(path);
-	}
+		if (path) Stitch_Path(path);
+    }
 
     cJSON_Delete(tracker);
 }
@@ -338,6 +337,9 @@ void Publish_Path( cJSON* path ){
 		cJSON_Delete(path);
 		return;
 	}
+	/* Strip internal stitch timestamps before publishing */
+	cJSON* pt = pathArray ? pathArray->child : NULL;
+	while (pt) { cJSON_DeleteItemFromObject(pt, "t"); pt = pt->next; }
     char topic[128];
 	snprintf(topic, sizeof(topic), "path/%s", ACAP_DEVICE_Prop("serial"));
 	MQTT_Publish_JSON(topic, path, 0, 0);
@@ -843,6 +845,9 @@ void Settings_Updated_Callback(const char* service, cJSON* data) {
     if (strcmp(service, "scene") == 0)
         RadarDetection_Config(data);
 
+    if (strcmp(service, "stitch") == 0)
+        Stitch_Settings(data);
+
 }
 
 void HandleVersionUpdateConfigurations(cJSON* settings) {
@@ -896,6 +901,11 @@ int main(void) {
     /* Re-apply scene config after version fix-up so runtime AOI reflects
      * the corrected (full 0-1000) values, not the old 50/950 from storage. */
     RadarDetection_Config(cJSON_GetObjectItem(settings, "scene"));
+
+    Stitch_Init(Publish_Path);
+    cJSON* stitchSettings = cJSON_GetObjectItem(settings, "stitch");
+    if (stitchSettings)
+        Stitch_Settings(stitchSettings);
 
     MQTT_Init(Main_MQTT_Status, Main_MQTT_Subscription_Message);
     ACAP_Set_Config("mqtt", MQTT_Settings());

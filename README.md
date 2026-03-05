@@ -237,6 +237,13 @@ For VMS (Video Mananagement Systems"), a stateful event "anomaly" will be fired 
 
 ## History
 
+### 3.1.3 Mar 5, 2026
+- **Object Stitching** ported from main branch: paths from the same physical object that temporarily disappears (e.g. passes through a dead zone) are automatically merged into one continuous path
+  - Configurable stitch area, max gap duration, angle threshold, and optional class-switch tolerance
+  - Settings managed via the Advanced page
+- Radar-specific fields (`angle`, `speed`, `direction`, `distance`) are now grouped under a `"radar"` sub-object in detection and tracker MQTT payloads, consistent with the main branch
+- Path payloads expose `maxSpeed` as a direct top-level property instead of nesting it inside a `"radar"` object
+
 ### 3.1.0 Mar 1, 2026
 Radar branch — targeting Axis D2110 (armv7hf) and D2210 (aarch64) radar sensors.
 - New MQTT topic `image/{serial}`: publishes a JPEG snapshot encoded as Base64
