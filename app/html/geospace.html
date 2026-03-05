@@ -723,6 +723,8 @@ function setMode(mode) {
         case 'editMarkers':
             $('#editMarkersModeBtn').addClass('active');
             videoView.classList.add('cursor-crosshair');
+            // Recalculate marker positions (video may not have been rendered at init time)
+            updateAllMarkerPositions();
             // Show all markers
             AppState.markers.forEach(marker => {
                 marker.videoMarker.style.display = 'block';

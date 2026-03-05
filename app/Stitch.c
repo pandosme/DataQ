@@ -13,9 +13,15 @@
 #define LOG_WARN(fmt, args...) { syslog(LOG_WARNING, fmt, ## args); printf(fmt, ## args); }
 #define LOG_TRACE(fmt, args...) {}
 
+// Multiplier for how long to keep a held path in memory.
+// stitch_duration controls the *matching window* (max time hidden behind obstruction).
+// The hold timeout must be much larger to outlive the person's full journey across the scene.
+#define STITCH_HOLD_TIMEOUT_MULTIPLIER 24
+
 typedef struct _StitchHeldPath {
     cJSON* path;
     GTimer* expiry_timer;
+    bool is_birth_in;   // true = born inside stitch area (re-emergence); false = died inside (pre-occlusion)
 } StitchHeldPath;
 
 static gint stitch_active = 0;
@@ -64,42 +70,46 @@ static int class_match(cJSON* a, cJSON* b) {
     return strcmp(clsA->valuestring, clsB->valuestring) == 0;
 }
 
+// Compute travel direction using up to MAX_ANGLE_PTS consecutive pairs
+// (either at the start or end of a path) and return their circular mean.
+// This is far more robust than using just a single noisy pair.
+#define MAX_ANGLE_PTS 5
 static void get_vecs_for_angle(cJSON* path, int first, double* ang_out) {
-    if(!path || !ang_out) return;
+    if(!path || !ang_out) { if(ang_out) *ang_out = 0; return; }
     cJSON* arr = cJSON_GetObjectItem(path, "path");
     if(!arr) { *ang_out = 0; return; }
     int n = cJSON_GetArraySize(arr);
-    if (first && n >= 2) {
-        cJSON* p0 = cJSON_GetArrayItem(arr, 0);
-        cJSON* p1 = cJSON_GetArrayItem(arr, 1);
-        if(!p0 || !p1) { *ang_out = 0; return; }
-        cJSON* x0_obj = cJSON_GetObjectItem(p0, "x");
-        cJSON* y0_obj = cJSON_GetObjectItem(p0, "y");
-        cJSON* x1_obj = cJSON_GetObjectItem(p1, "x");
-        cJSON* y1_obj = cJSON_GetObjectItem(p1, "y");
-        if(!x0_obj || !y0_obj || !x1_obj || !y1_obj) { *ang_out = 0; return; }
-        int x0 = x0_obj->valueint;
-        int y0 = y0_obj->valueint;
-        int x1 = x1_obj->valueint;
-        int y1 = y1_obj->valueint;
-        *ang_out = vec_angle(x0, y0, x1, y1);
-    } else if (!first && n >= 2) {
-        cJSON* p0 = cJSON_GetArrayItem(arr, n-2);
-        cJSON* p1 = cJSON_GetArrayItem(arr, n-1);
-        if(!p0 || !p1) { *ang_out = 0; return; }
-        cJSON* x0_obj = cJSON_GetObjectItem(p0, "x");
-        cJSON* y0_obj = cJSON_GetObjectItem(p0, "y");
-        cJSON* x1_obj = cJSON_GetObjectItem(p1, "x");
-        cJSON* y1_obj = cJSON_GetObjectItem(p1, "y");
-        if(!x0_obj || !y0_obj || !x1_obj || !y1_obj) { *ang_out = 0; return; }
-        int x0 = x0_obj->valueint;
-        int y0 = y0_obj->valueint;
-        int x1 = x1_obj->valueint;
-        int y1 = y1_obj->valueint;
-        *ang_out = vec_angle(x0, y0, x1, y1);
-    } else {
-        *ang_out = 0;
+    if(n < 2) { *ang_out = 0; return; }
+
+    int pairs = n - 1;
+    if(pairs > MAX_ANGLE_PTS) pairs = MAX_ANGLE_PTS;
+
+    double sin_sum = 0.0, cos_sum = 0.0;
+    int count = 0;
+
+    for(int i = 0; i < pairs; i++) {
+        int idx0, idx1;
+        if(first) {
+            idx0 = i;
+            idx1 = i + 1;
+        } else {
+            idx0 = n - 2 - i;
+            idx1 = n - 1 - i;
+        }
+        cJSON* p0 = cJSON_GetArrayItem(arr, idx0);
+        cJSON* p1 = cJSON_GetArrayItem(arr, idx1);
+        if(!p0 || !p1) continue;
+        cJSON* x0o = cJSON_GetObjectItem(p0, "x"); cJSON* y0o = cJSON_GetObjectItem(p0, "y");
+        cJSON* x1o = cJSON_GetObjectItem(p1, "x"); cJSON* y1o = cJSON_GetObjectItem(p1, "y");
+        if(!x0o || !y0o || !x1o || !y1o) continue;
+        double a = vec_angle(x0o->valueint, y0o->valueint, x1o->valueint, y1o->valueint);
+        sin_sum += sin(a);
+        cos_sum += cos(a);
+        count++;
     }
+
+    if(count == 0) { *ang_out = 0; return; }
+    *ang_out = atan2(sin_sum / count, cos_sum / count);
 }
 
 static cJSON* merge_paths(cJSON* a, cJSON* b) {
@@ -236,6 +246,26 @@ static cJSON* merge_paths(cJSON* a, cJSON* b) {
     return merged;
 }
 
+/*
+ * Stitch_Path — core stitching logic
+ *
+ * Terminology:
+ *   death_in path  — started outside the stitch area, tracker lost inside (pre-occlusion leg)
+ *   birth_in path  — tracker born inside the stitch area, exited outside (post-occlusion leg)
+ *
+ * Both types are HELD in held_paths when no immediate match is found.
+ * Matching can occur in either order (death_in before birth_in is the normal case,
+ * but birth_in can arrive first due to processing timing).
+ *
+ * The hold timeout is stitch_duration * STITCH_HOLD_TIMEOUT_MULTIPLIER seconds —
+ * much larger than stitch_duration itself, because a person can walk across the
+ * scene for a long time AFTER reappearing, and Stitch_Path is only called when
+ * the post-occlusion tracker DIES.  The embedded "t" timestamps in path points
+ * are what determine the actual matching window (must be <= stitch_duration apart).
+ *
+ * Best-match scoring: all candidates are evaluated; the one with the lowest
+ * combined angular + temporal penalty is chosen.
+ */
 void Stitch_Path(cJSON* path) {
     if(!path) return;
     if(!stitch_active) { stitch_publish(path); return; }
@@ -243,26 +273,23 @@ void Stitch_Path(cJSON* path) {
     cJSON* arr = cJSON_GetObjectItem(path, "path");
     if(!arr) { stitch_publish(path); return; }
     int n = cJSON_GetArraySize(arr);
-    if(n < 2) { stitch_publish(path); return; }  // Require minimum 2 points for direction matching
+    if(n < 2) { stitch_publish(path); return; }
 
     cJSON* start = cJSON_GetArrayItem(arr, 0);
-    cJSON* end = cJSON_GetArrayItem(arr, n-1);
+    cJSON* end   = cJSON_GetArrayItem(arr, n-1);
     if(!start || !end) { stitch_publish(path); return; }
 
-    cJSON* sx_obj = cJSON_GetObjectItem(start, "x");
-    cJSON* sy_obj = cJSON_GetObjectItem(start, "y");
-    cJSON* ex_obj = cJSON_GetObjectItem(end, "x");
-    cJSON* ey_obj = cJSON_GetObjectItem(end, "y");
+    cJSON* sx_obj = cJSON_GetObjectItem(start, "x"); cJSON* sy_obj = cJSON_GetObjectItem(start, "y");
+    cJSON* ex_obj = cJSON_GetObjectItem(end,   "x"); cJSON* ey_obj = cJSON_GetObjectItem(end,   "y");
     if(!sx_obj || !sy_obj || !ex_obj || !ey_obj) { stitch_publish(path); return; }
 
-    int sx = sx_obj->valueint;
-    int sy = sy_obj->valueint;
-    int ex = ex_obj->valueint;
-    int ey = ey_obj->valueint;
+    int sx = sx_obj->valueint, sy = sy_obj->valueint;
+    int ex = ex_obj->valueint, ey = ey_obj->valueint;
 
     bool birth_in = (sx >= stitch_x1 && sx <= stitch_x2 && sy >= stitch_y1 && sy <= stitch_y2);
     bool death_in = (ex >= stitch_x1 && ex <= stitch_x2 && ey >= stitch_y1 && ey <= stitch_y2);
 
+    /* Path touches neither side of stitch area → pass through unchanged */
     if(!birth_in && !death_in) {
         stitch_publish(path);
         return;
@@ -270,118 +297,179 @@ void Stitch_Path(cJSON* path) {
 
     g_mutex_lock(&stitch_mutex);
 
-    // Try to match if both in area OR if only birth in area
-    if((birth_in && death_in) || (birth_in && !death_in)) {
-        GList* node = held_paths;
-        StitchHeldPath* match = NULL;
-        while (node) {
-            StitchHeldPath* hp = node->data;
-            if(!hp) { LOG_WARN("STICH: NULL hp in list\n"); node = node->next; continue; }
-            cJSON* candidate = hp->path;
-            if(!candidate) { LOG_WARN("STICH: NULL candidate path\n"); node = node->next; continue; }
-            // Only check class match if allow_class_switch is disabled
-            if (!stitch_allow_class_switch && !class_match(path, candidate)) { node = node->next; continue; }
+    /* ------------------------------------------------------------------
+     * Find the BEST candidate from held_paths.
+     *
+     * Normal  order: held=death_in  + incoming=birth_in
+     *   → person disappeared into area, now re-emerging
+     *   → temporal check: incoming's first "t" minus held's last "t" in [0, stitch_duration]
+     *
+     * Reversed order: held=birth_in + incoming=death_in
+     *   → race condition: post-occlusion path was born and finished before the
+     *     pre-occlusion path was finalized
+     *   → temporal check: held's first "t" minus incoming's last "t" in [0, stitch_duration]
+     * ------------------------------------------------------------------ */
+    StitchHeldPath* best_match = NULL;
+    double           best_score = 1e18;
 
-            // Check angle match only if angle_threshold > 0 (0 = disabled)
-            if(stitch_angle_threshold > 0.0) {
-                double ang_held = 0, ang_incoming = 0;
-                get_vecs_for_angle(candidate, 0, &ang_held);
-                get_vecs_for_angle(path, 1, &ang_incoming);
-                double ang_diff = angle_between(ang_held, ang_incoming);
-                if(ang_diff > stitch_angle_threshold) { node = node->next; continue; }
-            }
+    for(GList* node = held_paths; node != NULL; node = node->next) {
+        StitchHeldPath* hp = node->data;
+        if(!hp || !hp->path) { LOG_WARN("STICH: NULL entry in held_paths\n"); continue; }
+        cJSON* candidate = hp->path;
 
-            cJSON* held_arr = cJSON_GetObjectItem(candidate, "path");
-            cJSON* incom_arr = cJSON_GetObjectItem(path, "path");
-            if(!held_arr || !incom_arr) { node = node->next; continue; }
-            int held_n = cJSON_GetArraySize(held_arr);
-            if(held_n < 2) { node = node->next; continue; }  // Require minimum 2 points
-            cJSON* held_last = cJSON_GetArrayItem(held_arr, held_n-1);
-            cJSON* incom_first = cJSON_GetArrayItem(incom_arr, 0);
-            if(!held_last || !incom_first) { node = node->next; continue; }
-            cJSON* t_held = cJSON_GetObjectItem(held_last, "t");
-            cJSON* t_incom = cJSON_GetObjectItem(incom_first, "t");
-            if(!t_held || !t_incom) { node = node->next; continue; }
-            double time_held = t_held->valuedouble;
-            double time_incoming = t_incom->valuedouble;
-            if(fabs(time_incoming-time_held) > stitch_duration) { node = node->next; continue; }
+        cJSON* cand_arr = cJSON_GetObjectItem(candidate, "path");
+        if(!cand_arr) continue;
+        int cn = cJSON_GetArraySize(cand_arr);
+        if(cn < 2) continue;
 
-            match = hp;
-            break;
+        /* Determine which is the older / newer path and derive the time gap */
+        cJSON* old_path = NULL;
+        cJSON* new_path = NULL;
+        double time_diff = -1.0;
+
+        if(!hp->is_birth_in && birth_in) {
+            /* Normal: held=death_in (older), incoming=birth_in (newer) */
+            cJSON* t_held_last  = cJSON_GetObjectItem(cJSON_GetArrayItem(cand_arr, cn-1), "t");
+            cJSON* t_incom_first = cJSON_GetObjectItem(cJSON_GetArrayItem(arr,      0),   "t");
+            if(!t_held_last || !t_incom_first) continue;
+            time_diff = t_incom_first->valuedouble - t_held_last->valuedouble;
+            old_path = candidate;
+            new_path = path;
+
+        } else if(hp->is_birth_in && death_in) {
+            /* Reversed: held=birth_in (newer path arrived early), incoming=death_in (older) */
+            cJSON* t_incom_last  = cJSON_GetObjectItem(cJSON_GetArrayItem(arr,      n-1), "t");
+            cJSON* t_held_first  = cJSON_GetObjectItem(cJSON_GetArrayItem(cand_arr, 0),   "t");
+            if(!t_incom_last || !t_held_first) continue;
+            time_diff = t_held_first->valuedouble - t_incom_last->valuedouble;
+            old_path = path;        /* incoming death_in is the older segment */
+            new_path = candidate;   /* held birth_in is the newer segment */
+
+        } else {
+            continue; /* same type (both death_in or both birth_in) — skip */
         }
 
-        if(match) {
-            cJSON* merged = merge_paths(match->path, path);
-            if(!merged) {
-                LOG_WARN("STICH: merge_paths failed\n");
-                g_mutex_unlock(&stitch_mutex);
-                stitch_publish(path);
-                return;
-            }
-            if(!cJSON_GetObjectItem(merged,"stitched"))
-                cJSON_AddTrueToObject(merged,"stitched");
-            g_source_remove_by_user_data(match);
-            held_paths = g_list_remove(held_paths, match);
-            g_timer_destroy(match->expiry_timer);
-            cJSON_Delete(match->path);  // Free the held path's cJSON object
-            free(match);
-            cJSON_Delete(path);
-            // Check last position of merged path
-            cJSON* merged_arr = cJSON_GetObjectItem(merged, "path");
-            if(!merged_arr || cJSON_GetArraySize(merged_arr) < 1) {
-                LOG_WARN("STICH: Invalid merged path array\n");
-                cJSON_Delete(merged);
-                g_mutex_unlock(&stitch_mutex);
-                return;
-            }
-            int m_n = cJSON_GetArraySize(merged_arr);
-            cJSON* merged_end = cJSON_GetArrayItem(merged_arr, m_n-1);
-            if(!merged_end) {
-                LOG_WARN("STICH: Invalid merged path end\n");
-                cJSON_Delete(merged);
-                g_mutex_unlock(&stitch_mutex);
-                return;
-            }
-            cJSON* mex_obj = cJSON_GetObjectItem(merged_end, "x");
-            cJSON* mey_obj = cJSON_GetObjectItem(merged_end, "y");
-            if(!mex_obj || !mey_obj) {
-                LOG_WARN("STICH: Invalid merged path end coordinates\n");
-                cJSON_Delete(merged);
-                g_mutex_unlock(&stitch_mutex);
-                return;
-            }
-            int mex = mex_obj->valueint;
-            int mey = mey_obj->valueint;
-            bool merged_death_in = (mex >= stitch_x1 && mex <= stitch_x2 && mey >= stitch_y1 && mey <= stitch_y2);
+        /* Time must be non-negative and within the matching window */
+        if(time_diff < 0.0 || time_diff > (double)stitch_duration) continue;
 
-            if(merged_death_in) {
-                // Hold merged path for future matching
-                StitchHeldPath* hp_new = malloc(sizeof(StitchHeldPath));
-                hp_new->path = merged;
-                hp_new->expiry_timer = g_timer_new();
-                held_paths = g_list_append(held_paths, hp_new);
-                g_timeout_add_seconds(stitch_duration, publish_timeout_cb, hp_new);
-            } else {
-                stitch_publish(merged);
-            }
+        /* Class constraint */
+        if(!stitch_allow_class_switch && !class_match(path, candidate)) continue;
+
+        /* Angle between the exit direction of the older path and the entry
+         * direction of the newer path — using circular mean of up to 5 vectors */
+        double ang_diff = 0.0;
+        if(stitch_angle_threshold > 0.0) {
+            double ang_old = 0.0, ang_new = 0.0;
+            get_vecs_for_angle(old_path, 0, &ang_old); /* last direction  */
+            get_vecs_for_angle(new_path, 1, &ang_new); /* first direction */
+            ang_diff = angle_between(ang_old, ang_new);
+            if(ang_diff > stitch_angle_threshold) continue;
+        }
+
+        /* Score: lower is better — weight time gap more than angle */
+        double score = ang_diff + time_diff * 5.0;
+        if(score < best_score) {
+            best_score  = score;
+            best_match  = hp;
+        }
+    }
+
+    /* ------------------------------------------------------------------
+     * Match found → merge old + new, then decide whether to hold or publish
+     * ------------------------------------------------------------------ */
+    if(best_match) {
+        cJSON* candidate = best_match->path;
+
+        /* Establish merge order (always old segment first) */
+        cJSON* old_path;
+        cJSON* new_path;
+        if(!best_match->is_birth_in && birth_in) {
+            old_path = candidate; new_path = path;
+        } else {
+            old_path = path;      new_path = candidate;
+        }
+
+        cJSON* merged = merge_paths(old_path, new_path);
+        if(!merged) {
+            LOG_WARN("STICH: merge_paths failed\n");
+            g_mutex_unlock(&stitch_mutex);
+            stitch_publish(path);
+            return;
+        }
+        if(!cJSON_GetObjectItem(merged, "stitched"))
+            cJSON_AddTrueToObject(merged, "stitched");
+
+        /* Remove held entry and free resources */
+        g_source_remove_by_user_data(best_match);
+        held_paths = g_list_remove(held_paths, best_match);
+        g_timer_destroy(best_match->expiry_timer);
+        cJSON_Delete(best_match->path);
+        free(best_match);
+        cJSON_Delete(path); /* original incoming path consumed by merge */
+
+        /* Check whether the merged path's END is still inside the stitch area */
+        cJSON* merged_arr = cJSON_GetObjectItem(merged, "path");
+        if(!merged_arr || cJSON_GetArraySize(merged_arr) < 1) {
+            LOG_WARN("STICH: Invalid merged path array\n");
+            cJSON_Delete(merged);
             g_mutex_unlock(&stitch_mutex);
             return;
         }
-
-        // No match found - publish immediately
-        // (both in area = short path, or birth in area but exited = not the same object)
-        stitch_publish(path);
+        int m_n = cJSON_GetArraySize(merged_arr);
+        cJSON* merged_end = cJSON_GetArrayItem(merged_arr, m_n - 1);
+        if(!merged_end) {
+            LOG_WARN("STICH: Invalid merged path end\n");
+            cJSON_Delete(merged);
+            g_mutex_unlock(&stitch_mutex);
+            return;
+        }
+        cJSON* mex_obj = cJSON_GetObjectItem(merged_end, "x");
+        cJSON* mey_obj = cJSON_GetObjectItem(merged_end, "y");
+        if(!mex_obj || !mey_obj) {
+            LOG_WARN("STICH: Invalid merged path end coords\n");
+            cJSON_Delete(merged);
+            g_mutex_unlock(&stitch_mutex);
+            return;
+        }
+        int mex = mex_obj->valueint, mey = mey_obj->valueint;
+        bool merged_death_in = (mex >= stitch_x1 && mex <= stitch_x2 &&
+                                 mey >= stitch_y1 && mey <= stitch_y2);
+        if(merged_death_in) {
+            /* Still ends inside → hold as a (death_in) segment for further stitching */
+            int hold_timeout = stitch_duration * STITCH_HOLD_TIMEOUT_MULTIPLIER;
+            if(hold_timeout < 60) hold_timeout = 60;
+            StitchHeldPath* hp_new = malloc(sizeof(StitchHeldPath));
+            hp_new->path        = merged;
+            hp_new->expiry_timer = g_timer_new();
+            hp_new->is_birth_in = false;
+            held_paths = g_list_append(held_paths, hp_new);
+            g_timeout_add_seconds(hold_timeout, publish_timeout_cb, hp_new);
+        } else {
+            stitch_publish(merged);
+        }
         g_mutex_unlock(&stitch_mutex);
         return;
     }
 
-    // Hold path for future matching
-    // Path entered from outside and died in stitch area - wait for a new path born in the area
+    /* ------------------------------------------------------------------
+     * No match found → HOLD this path.
+     *
+     * Key fix: previously birth_in paths with no match were published
+     * immediately.  This caused split paths when the post-occlusion path
+     * arrived (via Stitch_Path) before the pre-occlusion path was
+     * finalized — a common race condition.  Now ALL paths that touch the
+     * stitch area are held, with a long hold timeout so they survive the
+     * full scene crossing.
+     * ------------------------------------------------------------------ */
+    int hold_timeout = stitch_duration * STITCH_HOLD_TIMEOUT_MULTIPLIER;
+    if(hold_timeout < 60) hold_timeout = 60;
+
     StitchHeldPath* hp = malloc(sizeof(StitchHeldPath));
-    hp->path = path;
+    hp->path         = path;
     hp->expiry_timer = g_timer_new();
+    hp->is_birth_in  = birth_in && !death_in; /* true only when purely birth_in */
     held_paths = g_list_append(held_paths, hp);
-    g_timeout_add_seconds(stitch_duration, publish_timeout_cb, hp);
+    g_timeout_add_seconds(hold_timeout, publish_timeout_cb, hp);
     g_mutex_unlock(&stitch_mutex);
 }
 

@@ -293,6 +293,16 @@ For VMS (Video Mananagement Systems"), a stateful event "anomaly" will be fired 
 
 ## History
 
+### 3.1.3 Mar 5, 2026
+- **Geospace calibration** — Calibration markers now correctly reappear when switching to Calibrate mode after a page refresh (marker positions were computed before the video stream had rendered, causing all markers to land at 0,0)
+- **Ceiling (Fisheye) COG** — New COG mode for overhead fisheye cameras; shifts the anchor point toward the image center proportionally to the object's distance from center and its size, giving a more accurate ground-contact point for radially distorted views
+- **Stitch overhaul** — Rewrote path-stitching logic to fix the most common failure modes:
+  - Hold timeout increased to `duration × 24` (minimum 60 s) so pre-occlusion paths are not discarded before the post-occlusion tracker completes its journey
+  - Bidirectional matching: post-occlusion paths that finalise *before* the pre-occlusion path are now held and matched in reversed order, eliminating the most common race condition
+  - Best-match scoring (angular penalty + temporal penalty) replaces first-match — prevents incorrect merges when multiple objects of the same class cross the stitch area in quick succession
+  - Angle estimation uses circular mean of up to 5 consecutive vectors instead of a single noisy pair
+- **Documentation** — `MQTT_topics.md`: removed `"stitched": false` from the path example (property is only present when `true`), updated table description accordingly, removed `path[].t` field (stripped before publishing)
+
 ### 3.1.1 Mar 2, 2026
 - Fixed label pipeline: `VOD_Label_List()` returns objects `{id, name, enabled}` rather than strings — now correctly extracts the `id` field and maps it through `NiceName()` before storing
 - Added `ObjectDetection_Labels()` / `RadarDetection_Labels()` functions that read mapped label names from the status group, replacing direct VOD access in the MQTT connect message

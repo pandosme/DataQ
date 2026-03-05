@@ -568,9 +568,32 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
         rotate_bbox(obj->x, obj->y, obj->w, obj->h, &rx, &ry, &rw, &rh, config_rotation);
         int cx, cy;
         if (config_cog == 0) {
+            // Center of object
             cx = rx + rw / 2;
             cy = ry + rh / 2;
+        } else if (config_cog == 2) {
+            // Ceiling (Fisheye): shift object center toward image center,
+            // proportional to distance from image center.
+            // Image center is at (500, 500) in normalized 0-1000 space.
+            double ocx = rx + rw / 2.0;
+            double ocy = ry + rh / 2.0;
+            double dx = 500.0 - ocx;
+            double dy = 500.0 - ocy;
+            double dist = sqrt(dx * dx + dy * dy);
+            if (dist > 0.5) {
+                double r = (double)(rw > rh ? rw : rh) / 2.0 * (dist / 500.0);
+                cx = (int)(ocx + r * dx / dist);
+                cy = (int)(ocy + r * dy / dist);
+                if (cx <    0) cx =    0;
+                if (cx > 1000) cx = 1000;
+                if (cy <    0) cy =    0;
+                if (cy > 1000) cy = 1000;
+            } else {
+                cx = (int)ocx;
+                cy = (int)ocy;
+            }
         } else {
+            // Bottom-center (feet / wheels)
             cx = rx + rw / 2;
             cy = ry + rh;
         }

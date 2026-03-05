@@ -176,7 +176,7 @@ Every payload published via `MQTT_Publish_JSON` automatically receives three ext
   "maxIdle": 0.5,
   "id": "abc123",
   "color": "Silver",
-  "stitched": false,
+  "stitched": true,
   "anomaly": "Wrong way",
   "path": [
     { "x": 120, "y": 720, "d": 0.0, "t": 1772276395.000 },
@@ -206,10 +206,9 @@ Every payload published via `MQTT_Publish_JSON` automatically receives three ext
 | `face` | Boolean | Face visible _(optional, humans only)_ |
 | `hat` | String | Hat type _(optional, humans only)_ |
 | `anomaly` | String | Anomaly reason _(optional)_ |
-| `stitched` | Boolean | True if merged from multiple segments _(optional)_ |
+| `stitched` | Boolean | `true` if merged from multiple segments — **only present when stitched**, omitted otherwise |
 | `path[].x`, `.y` | Integer | Sample position in [0,1000] |
 | `path[].d` | Float | Seconds dwelled at this position |
-| `path[].t` | Float | Epoch seconds when sampled |
 | `path[].lat`, `.lon` | Float | Geographic coordinates _(optional, requires Geospace)_ |
 
 ---
