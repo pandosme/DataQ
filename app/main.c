@@ -1296,7 +1296,7 @@ int main(void) {
     openlog(APP_PACKAGE, LOG_PID | LOG_CONS, LOG_USER);
     LOG("------ Starting ACAP Service ------\n");
 
-    cJSON* settings = ACAP(APP_PACKAGE, Settings_Updated_Callback);
+    cJSON* settings = ACAP_Init(APP_PACKAGE, Settings_Updated_Callback);
     HandleVersionUpdateConfigurations(settings);
 
     ACAP_STATUS_SetObject("detections", "paths", cJSON_CreateArray());
