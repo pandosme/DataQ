@@ -177,6 +177,8 @@ async function initializeApplication() {
         await loadGeolocation();
         initializeMap();
         initializeVideo();
+        // Initialize saved markers after video is created
+        initializeSavedMarkers();
         setupEventHandlers();
 		$('#defaultModeBtn').addClass('active');
         updateModeHelp('default');
@@ -324,15 +326,15 @@ function initializeMap() {
         maxNativeZoom: 19
     }).addTo(AppState.map);
     
-    // Initialize saved markers after map is created
-    initializeSavedMarkers();
+    // Note: initializeSavedMarkers() is called after video is ready
 }
 
 function initializeSavedMarkers() {
-    if (!AppState.savedMarkers) return;
+    if (!AppState.savedMarkers || AppState.savedMarkers.length === 0) return;
     
     AppState.savedMarkers.forEach(markerData => {
         const [normalizedX, normalizedY, lat, lng] = markerData;
+        AppState.nextMarkerId++;
         const label = AppState.nextMarkerId;
         
         // Create video marker element
@@ -341,11 +343,9 @@ function initializeSavedMarkers() {
         videoMarker.innerHTML = '<span class="marker-label">' + label + '</span>';
         videoMarker.style.display = 'none';  // Initially hidden
         
-        // Convert normalized coordinates to view coordinates
-        const videoElement = document.getElementById('video-view');
-        const viewCoords = normalizedToViewCoords(normalizedX, normalizedY, videoElement);
-        videoMarker.style.left = viewCoords.x + 'px';
-        videoMarker.style.top = viewCoords.y + 'px';
+        // Position will be calculated later by updateAllMarkerPositions()
+        videoMarker.style.left = '0px';
+        videoMarker.style.top = '0px';
         
         // Create map marker with numbered tooltip
         const mapMarker = L.marker([lat, lng], {
@@ -359,7 +359,7 @@ function initializeSavedMarkers() {
         });
         
         // Store both markers
-        const id = 'marker-' + AppState.nextMarkerId++;
+        const id = 'marker-' + label;
         AppState.markers.set(id, {
             id: id,
             normalizedX: normalizedX,
@@ -414,8 +414,9 @@ function createMarker(viewX, viewY) {
 
     const videoElement = document.getElementById('video-view');
     const normalized = viewToNormalizedCoords(viewX, viewY, videoElement);
-    const id = 'marker-' + AppState.nextMarkerId++;
+    AppState.nextMarkerId++;
     const label = AppState.nextMarkerId;
+    const id = 'marker-' + label;
     
     // Create video marker element
     const videoMarker = document.createElement('div');
@@ -724,7 +725,9 @@ function setMode(mode) {
             $('#editMarkersModeBtn').addClass('active');
             videoView.classList.add('cursor-crosshair');
             // Recalculate marker positions (video may not have been rendered at init time)
-            updateAllMarkerPositions();
+            if (AppState.markers.size > 0) {
+                updateAllMarkerPositions();
+            }
             // Show all markers
             AppState.markers.forEach(marker => {
                 marker.videoMarker.style.display = 'block';
@@ -966,12 +969,18 @@ function setupResizeHandler() {
 }
 
 function updateAllMarkerPositions() {
+    if (AppState.markers.size === 0) return;
+    
     const video = document.getElementById('video');
+    if (!video) return;  // Video not ready yet
+    
     const markerCanvas = document.getElementById('marker-canvas');
     
     // Ensure marker canvas matches video dimensions exactly
-    markerCanvas.style.width = video.offsetWidth + 'px';
-    markerCanvas.style.height = video.offsetHeight + 'px';
+    if (markerCanvas) {
+        markerCanvas.style.width = video.offsetWidth + 'px';
+        markerCanvas.style.height = video.offsetHeight + 'px';
+    }
     
     AppState.markers.forEach(marker => {
         const viewCoords = normalizedToViewCoords(

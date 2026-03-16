@@ -147,8 +147,9 @@ cJSON* ProcessPaths(cJSON* tracker) {
         if (hat) cJSON_AddStringToObject(path, "hat", hat->valuestring);
 
         double blat = 0, blon = 0;
+        int geo_success_birth = 0;
         if (bxItem && byItem)
-            GeoSpace_transform(bxItem->valueint, byItem->valueint, &blat, &blon);
+            geo_success_birth = GeoSpace_transform(bxItem->valueint, byItem->valueint, &blat, &blon);
 
         cJSON* pathArr = cJSON_CreateArray();
         
@@ -158,7 +159,7 @@ cJSON* ProcessPaths(cJSON* tracker) {
         cJSON_AddNumberToObject(pos1, "y", byItem ? byItem->valuedouble : 0);
         cJSON_AddNumberToObject(pos1, "d", 0);  // Will be updated on first tracker update
         cJSON_AddNumberToObject(pos1, "t", birthTime / 1000.0);  // Epoch seconds for stitch matching
-        if (blat || blon) {
+        if (geo_success_birth) {
             cJSON_AddNumberToObject(pos1, "lat", round(blat * 1e6) / 1e6);
             cJSON_AddNumberToObject(pos1, "lon", round(blon * 1e6) / 1e6);
         }
@@ -169,13 +170,13 @@ cJSON* ProcessPaths(cJSON* tracker) {
         cJSON* cyNew = cJSON_GetObjectItem(tracker, "cy");
         if (!cxNew || !cyNew) return 0;
         double clat = 0, clon = 0;
-        GeoSpace_transform(cxNew->valueint, cyNew->valueint, &clat, &clon);
+        int geo_success_current = GeoSpace_transform(cxNew->valueint, cyNew->valueint, &clat, &clon);
         cJSON* pos2 = cJSON_CreateObject();
         cJSON_AddNumberToObject(pos2, "x", cxNew->valuedouble);
         cJSON_AddNumberToObject(pos2, "y", cyNew->valuedouble);
         cJSON_AddNumberToObject(pos2, "d", 0);  // Will be updated on next tracker update
         cJSON_AddNumberToObject(pos2, "t", currentTimestamp / 1000.0);  // Epoch seconds for stitch matching
-        if (clat || clon) {
+        if (geo_success_current) {
             cJSON_AddNumberToObject(pos2, "lat", round(clat * 1e6) / 1e6);
             cJSON_AddNumberToObject(pos2, "lon", round(clon * 1e6) / 1e6);
         }
@@ -241,13 +242,13 @@ cJSON* ProcessPaths(cJSON* tracker) {
         cJSON* cyUpd = cJSON_GetObjectItem(tracker, "cy");
         if (!cxUpd || !cyUpd) return 0;
         double lat = 0, lon = 0;
-        GeoSpace_transform(cxUpd->valueint, cyUpd->valueint, &lat, &lon);
+        int geo_success_upd = GeoSpace_transform(cxUpd->valueint, cyUpd->valueint, &lat, &lon);
         cJSON* pos = cJSON_CreateObject();
         cJSON_AddNumberToObject(pos, "x", cxUpd->valuedouble);
         cJSON_AddNumberToObject(pos, "y", cyUpd->valuedouble);
         cJSON_AddNumberToObject(pos, "d", 0);  // Always 0 for newest position
         cJSON_AddNumberToObject(pos, "t", currentTimestamp / 1000.0);  // Epoch seconds for stitch matching
-        if (lat || lon) {
+        if (geo_success_upd) {
             cJSON_AddNumberToObject(pos, "lat", round(lat * 1e6) / 1e6);
             cJSON_AddNumberToObject(pos, "lon", round(lon * 1e6) / 1e6);
         }

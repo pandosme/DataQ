@@ -113,8 +113,6 @@
 		}
 	],
 	"userTopics": [],
-	"markers": [],
-	"matrix": [],
 	"occupancy": {
 		"stationary": true,
 		"moving": true,		

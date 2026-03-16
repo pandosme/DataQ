@@ -293,6 +293,11 @@ For VMS (Video Mananagement Systems"), a stateful event "anomaly" will be fired 
 
 ## History
 
+### 3.1.5 Mar 16, 2026
+- **Geospace calibration persistence** — Fixed duplicate `markers` and `matrix` keys in settings.json template that caused calibration data to be overwritten with empty arrays after saving
+- **Geospace marker initialization** — Corrected initialization sequence to load saved markers after video element is created, ensuring markers display properly when switching to Calibrate mode
+- **Path geolocation coordinates** — Fixed condition check that prevented `lat` and `lon` properties from being added to path points when coordinates were `0,0` or other valid locations; now checks the GeoSpace transformation success instead
+
 ### 3.1.3 Mar 5, 2026
 - **Geospace calibration** — Calibration markers now correctly reappear when switching to Calibrate mode after a page refresh (marker positions were computed before the video stream had rendered, causing all markers to land at 0,0)
 - **Ceiling (Fisheye) COG** — New COG mode for overhead fisheye cameras; shifts the anchor point toward the image center proportionally to the object's distance from center and its size, giving a more accurate ground-contact point for radially distorted views
