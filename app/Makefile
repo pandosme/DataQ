@@ -2,7 +2,7 @@ PROG1	= DataQ
 OBJS1	= main.c cJSON.c ACAP.c MQTT.c CERTS.c RadarDetection.c radarscene.pb-c.c protobuf-c.c Stitch.c
 PROGS	= $(PROG1) 
 
-PKGS = glib-2.0 gio-2.0 fcgi axevent libcurl
+PKGS = glib-2.0 gio-2.0 fcgi axevent axparameter libcurl
 
 CFLAGS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --cflags $(PKGS))
 LDLIBS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs $(PKGS))

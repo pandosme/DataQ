@@ -34,9 +34,6 @@
 //#define LOG_TRACE(fmt, args...) { syslog(LOG_WARNING, fmt, ## args); printf(fmt, ## args); }
 #define LOG_TRACE(fmt, args...) {}
 
-/* VAPIX curl handle + credentials — owned by ACAP.c */
-extern char  *VAPIX_Credentials;
-extern CURL  *VAPIX_CURL;
 
 cJSON* activeTrackers = 0;
 cJSON* PreviousPosition = 0;
@@ -295,7 +292,7 @@ static double pending_vapix_heading = 0.0;
 
 static gboolean Store_Location_VAPIX(gpointer userdata) {
     (void)userdata;
-    ACAP_DEVICE_Set_Location(pending_vapix_lat, pending_vapix_lon, pending_vapix_heading);
+    ACAP_DEVICE_Set_Location(pending_vapix_lat, pending_vapix_lon);
     return G_SOURCE_REMOVE;
 }
 
@@ -631,22 +628,6 @@ static gboolean MQTT_Publish_Device_Status(gpointer user_data) {
 /* -------------------------------------------------------
  * Image capture + MQTT publish
  * ------------------------------------------------------- */
-typedef struct {
-    unsigned char *data;
-    size_t         size;
-} BinaryBuffer;
-
-static size_t binary_write_cb(void *ptr, size_t size, size_t nmemb, void *userdata) {
-    BinaryBuffer *buf = (BinaryBuffer *)userdata;
-    size_t bytes = size * nmemb;
-    unsigned char *tmp = realloc(buf->data, buf->size + bytes);
-    if (!tmp) return 0;
-    memcpy(tmp + buf->size, ptr, bytes);
-    buf->data = tmp;
-    buf->size += bytes;
-    return bytes;
-}
-
 static const char b64_table[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
@@ -671,7 +652,7 @@ static char *base64_encode(const unsigned char *in, size_t len, size_t *out_len)
 }
 
 static gboolean Publish_Image(gpointer user_data) {
-    if (!publishImage || !VAPIX_Credentials || !VAPIX_CURL) return G_SOURCE_REMOVE;
+    if (!publishImage) return G_SOURCE_REMOVE;
 
     /* Pick a resolution: smallest with width >= 640 for the device aspect */
     const char *aspect = ACAP_DEVICE_Prop("aspect");
@@ -692,35 +673,20 @@ static gboolean Publish_Image(gpointer user_data) {
         }
     }
 
-    char url[256];
-    snprintf(url, sizeof(url),
-             "http://127.0.0.12/axis-cgi/jpg/image.cgi?resolution=%s", resolution);
+    char endpoint[128];
+    snprintf(endpoint, sizeof(endpoint), "jpg/image.cgi?resolution=%s", resolution);
 
-    BinaryBuffer buf = { NULL, 0 };
-    curl_easy_setopt(VAPIX_CURL, CURLOPT_URL, url);
-    curl_easy_setopt(VAPIX_CURL, CURLOPT_USERPWD, VAPIX_Credentials);
-    curl_easy_setopt(VAPIX_CURL, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
-    curl_easy_setopt(VAPIX_CURL, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(VAPIX_CURL, CURLOPT_WRITEFUNCTION, binary_write_cb);
-    curl_easy_setopt(VAPIX_CURL, CURLOPT_WRITEDATA, &buf);
-
-    CURLcode res = curl_easy_perform(VAPIX_CURL);
-    if (res != CURLE_OK || !buf.data || buf.size == 0) {
-        LOG_WARN("Image capture failed: %s\n", curl_easy_strerror(res));
-        free(buf.data);
-        return G_SOURCE_REMOVE;
-    }
-    long http_code = 0;
-    curl_easy_getinfo(VAPIX_CURL, CURLINFO_RESPONSE_CODE, &http_code);
-    if (http_code >= 300) {
-        LOG_WARN("Image capture HTTP %ld\n", http_code);
-        free(buf.data);
+    size_t imgsize = 0;
+    unsigned char *imgdata = ACAP_VAPIX_Get_Binary(endpoint, &imgsize);
+    if (!imgdata || imgsize == 0) {
+        LOG_WARN("Image capture failed\n");
+        free(imgdata);
         return G_SOURCE_REMOVE;
     }
 
     size_t b64len = 0;
-    char *b64 = base64_encode(buf.data, buf.size, &b64len);
-    free(buf.data);
+    char *b64 = base64_encode(imgdata, imgsize, &b64len);
+    free(imgdata);
     if (!b64) { LOG_WARN("Image base64 encode failed\n"); return G_SOURCE_REMOVE; }
 
     cJSON *payload = cJSON_CreateObject();
@@ -734,7 +700,7 @@ static gboolean Publish_Image(gpointer user_data) {
     snprintf(topic, sizeof(topic), "image/%s", ACAP_DEVICE_Prop("serial"));
     MQTT_Publish_JSON(topic, payload, 0, 0);
     cJSON_Delete(payload);
-    LOG("Published image (%zu bytes, %s)\n", buf.size, resolution);
+    LOG("Published image (%zu bytes, %s)\n", imgsize, resolution);
     return G_SOURCE_REMOVE;
 }
 
@@ -896,7 +862,7 @@ int main(void) {
     openlog(APP_PACKAGE, LOG_PID | LOG_CONS, LOG_USER);
     LOG("------ Starting ACAP Service ------\n");
 
-    cJSON* settings = ACAP(APP_PACKAGE, Settings_Updated_Callback);
+    cJSON* settings = ACAP_Init(APP_PACKAGE, Settings_Updated_Callback);
     HandleVersionUpdateConfigurations(settings);
     /* Re-apply scene config after version fix-up so runtime AOI reflects
      * the corrected (full 0-1000) values, not the old 50/950 from storage. */
