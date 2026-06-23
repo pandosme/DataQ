@@ -11,11 +11,22 @@
     <script src="js/media-stream-player.min.js"></script>
     <script src="js/paho-mqtt-min.js"></script>
     <script src="js/labelselector.js"></script>
-    <script src="js/areaselect.js"></script>
+    <script src="js/polygon-editor.js"></script>
+    <style>
+        .zone-tab-btn { border-radius: 6px 6px 0 0; font-weight: 500; }
+        .zone-tab-btn.active { background: var(--accent) !important; color: #fff !important; border-color: var(--accent) !important; }
+        .zone-item { display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:6px; margin-bottom:4px; background:#f8fafc; border:1px solid #e2e8f0; }
+        .zone-color-swatch { width:14px; height:14px; border-radius:3px; flex-shrink:0; }
+        .zone-name-input { background:transparent; border:none; font-weight:600; outline:none; flex:1; font-size:.875rem; }
+        .zone-name-input:focus { background:#f0f6ff; border-bottom:1px solid var(--accent); border-radius:0; }
+        #poly-canvas { cursor: default; }
+        #poly-canvas.draw-mode { cursor: crosshair; }
+        .hint-bar { font-size:.8rem; color:#64748b; background:#f0f6ff; border-left:3px solid var(--accent); padding:4px 10px; border-radius:0 6px 6px 0; min-height:26px; }
+    </style>
 </head>
 <body>
 <div class="d-flex" id="wrapper">
-            <div class="bg-light border-right" id="sidebar-wrapper">
+    <div class="bg-light border-right" id="sidebar-wrapper">
         <div class="sidebar-heading">&nbsp;</div>
         <div class="list-group list-group-flush">
             <a href="index.html" class="list-group-item list-group-item-action">Overview</a>
@@ -32,560 +43,566 @@
             <a href="about.html" class="list-group-item list-group-item-action">About</a>
         </div>
     </div>
-    
+
     <div id="page-content-wrapper" class="p-0">
         <div class="container-fluid">
-			<div class="col-12">
-				<div class="card mb-3">
-					<div class="card-header d-flex justify-content-between align-items-center">
-						<div class="publish-control">
-							<label class="switch">
-								<input type="checkbox" id="pageToggle">
-								<span class="slider round"></span>
-							</label>
-							<span class="switch-label">Publish Detections</span>
-						</div>
-						<div id="connectionStatus" class="connection-status">
-							<span id="statusMessage">Connected</span>
-						</div>
-					</div>
-					<div id="locationContent" class="location-content">
-						<div class="card-body" id="settings-form">
-						  <div class="row">
-							<!-- Left: Video and Area Filter -->
-							<div class="col-12">
-							  <div id="video-view" style="display:block">
-								<div style="width:100%; height:100%; position:relative">
-								  <div id="video" style="width:100%; height:100%; position:absolute; top:0; left:0;"></div>
-								  <canvas id="detection-canvas" width="1000" height="1000" style="width:100%; height:100%; position:absolute; top:0px; left:0px; z-index:2;"></canvas>
-								  <canvas id="settings-canvas" width="1000" height="1000" style="width:100%; height:100%; position:absolute; top:0px; left:0px; z-index:10; pointer-events:auto; border:2px solid red;"></canvas>
-								</div>
-							  </div>
-							  <!-- Area Filter below video -->
-							  <div class="mt-3">
-								<div class="card">
-								  <div class="card-header">
-									<h5 class="card-title mb-0">Size & Area filter</h5>
-								  </div>
-								  <div class="card-body">
-									<div class="btn-group btn-group-mode btn-group-sm w-100 mb-2" role="group">
-									  <button type="button" class="btn btn-outline-secondary" id="btn-area">Set Area of Interest</button>
-									  <button type="button" class="btn btn-outline-warning" id="btn-min-size">Set minimum size</button>
-									  <button type="button" class="btn btn-outline-primary" id="btn-max-size">Set maximum size</button>
-									</div>
-									<button type="button" class="btn btn-success mt-2" id="btn-save-area">Save Area</button>
-								  </div>
-								</div>
-							  </div>
-							</div>
-						  </div>
-						</div>
-					</div>
+
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div class="publish-control">
+                        <label class="switch">
+                            <input type="checkbox" id="pageToggle">
+                            <span class="slider round"></span>
+                        </label>
+                        <span class="switch-label">Publish Detections</span>
+                    </div>
+                    <div id="connectionStatus" class="connection-status">
+                        <span id="statusMessage">Connected</span>
+                    </div>
                 </div>
-				<!-- Settings and Label Filter - always visible -->
-				<div class="row">
-					<div class="col-lg-4 col-md-5 mb-3">
-					  <div class="card">
-						<div class="card-header">
-						  <h5 class="card-title mb-0">Settings</h5>
-						</div>
-						<div class="card-body">
-							<div class="form-group mb-3">
-								<label for="scene-confidence" class="form-label">Confidence</label>
-								<select class="form-select" id="scene-confidence">
-									<option value="0">0</option>
-									<option value="10">10</option>
-									<option value="20">20</option>
-									<option value="30">30</option>
-									<option value="40">40</option>
-									<option value="50">50</option>
-									<option value="60">60</option>
-									<option value="70">70</option>
-									<option value="80">80</option>
-									<option value="85">85</option>
-									<option value="90">90</option>
-									<option value="95">95</option>
-								</select>
-							</div>
-							<div class="form-group mb-3">
-								<label for="scene-maxIdle" class="form-label">Max idle</label>
-								<select class="form-select" id="scene-maxIdle">
-									<option value="0">Forever</option>
-									<option value="1">1s</option>
-									<option value="2">2s</option>
-									<option value="3">3s</option>
-									<option value="4">4s</option>
-									<option value="5">5s</option>
-									<option value="10">10s</option>
-									<option value="15">15s</option>
-									<option value="20">20s</option>
-									<option value="30">30s</option>
-									<option value="45">45s</option>
-									<option value="60">1m</option>
-									<option value="120">2m</option>
-									<option value="180">3m</option>
-									<option value="240">4m</option>
-									<option value="300">5m</option>
-									<option value="600">10m</option>
-									<option value="900">15m</option>
-									<option value="1200">20m</option>
-									<option value="1500">25m</option>
-									<option value="1800">30m</option>
-									<option value="2700">45m</option>
-									<option value="3600">1h</option>
-									<option value="7200">2h</option>
-								</select>
-							</div>
-							<div class="form-group mb-3">
-								<label for="scene-cog" class="form-label">COG</label>
-								<select class="form-select" id="scene-cog">
-									<option value="0">Center of the object</option>
-									<option value="1">Bottom-center (feet/wheels)</option>
-									<option value="2">Ceiling (Fisheye)</option>
-								</select>
-							</div>
-							<div class="form-group mb-3">
-								<label for="scene-rotation" class="form-label">Rotation</label>
-								<select class="form-select" id="scene-rotation">
-									<option value="0">0</option>
-									<option value="90">90</option>
-									<option value="180">180</option>
-									<option value="270">270</option>
-								</select>
-							</div>
-							<div class="d-grid mt-3">
-								<button type="button" class="btn btn-success" id="btn-save">Save</button>
-							</div>
-						</div>
-					  </div>
-					</div>
-					<div class="col-lg-8 col-md-7 mb-3">
-					  <div class="card h-100">
-						<div class="card-header">
-						  <h5 class="card-title mb-0">Label filter</h5>
-						</div>
-						<div id="labelSelector" class="card-body">
-						</div>
-					  </div>
-					</div>
-				</div>
-            </div>
+
+                <div id="locationContent" class="location-content">
+                    <div class="card-body p-2">
+                        <div class="row g-3">
+
+                            <!-- Left: video + zone editor + size filter -->
+                            <div class="col-12 col-xl-8">
+
+                                <div id="video-view" style="position:relative;background:#0f172a;border-radius:6px;overflow:hidden;">
+                                    <div id="video" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;"></div>
+                                    <canvas id="detection-canvas" width="1000" height="1000"
+                                            style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:2;pointer-events:none;"></canvas>
+                                    <canvas id="poly-canvas" width="1000" height="1000"
+                                            style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:5;"></canvas>
+                                </div>
+
+                                <div id="hint-bar" class="hint-bar mt-1">Select a zone type below to draw.</div>
+
+                                <!-- Zone editor -->
+                                <div class="card mt-2">
+                                    <div class="card-header p-0 d-flex gap-1 align-items-end"
+                                         style="background:var(--card-header-bg);border-bottom:none;padding:8px 12px 0 !important;">
+                                        <button id="tab-aoi"  class="btn btn-sm zone-tab-btn active" style="padding:5px 16px;">Area of Interest</button>
+                                        <button id="tab-excl" class="btn btn-sm zone-tab-btn btn-outline-secondary" style="padding:5px 16px;">Exclusion Zones</button>
+                                        <div class="ms-auto d-flex gap-2 pb-1">
+                                            <button id="btn-draw" class="btn btn-sm btn-primary">+ Draw</button>
+                                            <button id="btn-cancel-draw" class="btn btn-sm btn-secondary" style="display:none;">Cancel</button>
+                                            <button id="btn-save-zones" class="btn btn-sm btn-success">Save</button>
+                                        </div>
+                                    </div>
+                                    <div class="card-body py-2 px-3" style="border-top:2px solid var(--accent);">
+                                        <div id="panel-aoi">
+                                            <p class="text-muted small mb-2">Draw a single polygon where detections are <strong>accepted</strong>. Leave empty to use the full frame.</p>
+                                            <div id="aoi-status" class="text-muted small fst-italic">No AOI defined — full frame active.</div>
+                                        </div>
+                                        <div id="panel-excl" style="display:none;">
+                                            <p class="text-muted small mb-2">Draw polygons where detections are <strong>ignored</strong>. Multiple zones allowed.</p>
+                                            <div id="excl-list"></div>
+                                            <div id="excl-empty" class="text-muted small fst-italic">No exclusion zones defined.</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Size filter -->
+                                <div class="card mt-2">
+                                    <div class="card-header"><h5 class="card-title mb-0">Size Filter <span class="text-muted fw-normal" style="font-size:.8rem">(canvas units 0–1000)</span></h5></div>
+                                    <div class="card-body py-2 px-3">
+                                        <div class="row g-2 align-items-end">
+                                            <div class="col-6 col-sm-3">
+                                                <label class="form-label">Min width</label>
+                                                <input type="number" class="form-control form-control-sm" id="scene-minWidth" min="1" max="500">
+                                            </div>
+                                            <div class="col-6 col-sm-3">
+                                                <label class="form-label">Min height</label>
+                                                <input type="number" class="form-control form-control-sm" id="scene-minHeight" min="1" max="500">
+                                            </div>
+                                            <div class="col-6 col-sm-3">
+                                                <label class="form-label">Max width</label>
+                                                <input type="number" class="form-control form-control-sm" id="scene-maxWidth" min="50" max="1000">
+                                            </div>
+                                            <div class="col-6 col-sm-3">
+                                                <label class="form-label">Max height</label>
+                                                <input type="number" class="form-control form-control-sm" id="scene-maxHeight" min="50" max="1000">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div><!-- /left col -->
+
+                            <!-- Right: settings + labels -->
+                            <div class="col-12 col-xl-4">
+
+                                <div class="card mb-3">
+                                    <div class="card-header"><h5 class="card-title mb-0">Detection Settings</h5></div>
+                                    <div class="card-body">
+                                        <div class="mb-3">
+                                            <label for="scene-confidence" class="form-label">Confidence</label>
+                                            <select class="form-select" id="scene-confidence">
+                                                <option value="0">0%</option><option value="10">10%</option>
+                                                <option value="20">20%</option><option value="30">30%</option>
+                                                <option value="40">40%</option><option value="50">50%</option>
+                                                <option value="60">60%</option><option value="70">70%</option>
+                                                <option value="80">80%</option><option value="85">85%</option>
+                                                <option value="90">90%</option><option value="95">95%</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="scene-maxIdle" class="form-label">Max idle</label>
+                                            <select class="form-select" id="scene-maxIdle">
+                                                <option value="0">Forever</option>
+                                                <option value="1">1s</option><option value="2">2s</option>
+                                                <option value="3">3s</option><option value="5">5s</option>
+                                                <option value="10">10s</option><option value="15">15s</option>
+                                                <option value="20">20s</option><option value="30">30s</option>
+                                                <option value="60">1m</option><option value="120">2m</option>
+                                                <option value="300">5m</option><option value="600">10m</option>
+                                                <option value="1800">30m</option><option value="3600">1h</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="scene-cog" class="form-label">Center of Gravity</label>
+                                            <select class="form-select" id="scene-cog">
+                                                <option value="0">Center of object</option>
+                                                <option value="1">Bottom-center (feet/wheels)</option>
+                                                <option value="2">Ceiling / Fisheye</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="scene-rotation" class="form-label">Rotation</label>
+                                            <select class="form-select" id="scene-rotation">
+                                                <option value="0">0°</option><option value="90">90°</option>
+                                                <option value="180">180°</option><option value="270">270°</option>
+                                            </select>
+                                        </div>
+                                        <div class="d-grid">
+                                            <button type="button" class="btn btn-success" id="btn-save">Save Settings</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="card">
+                                    <div class="card-header"><h5 class="card-title mb-0">Label Filter</h5></div>
+                                    <div id="labelSelector" class="card-body"></div>
+                                </div>
+
+                            </div><!-- /right col -->
+                        </div><!-- /row -->
+                    </div><!-- /card-body -->
+                </div><!-- /locationContent -->
+            </div><!-- /card -->
+
         </div>
     </div>
-    <div class="toast-container position-fixed top-0 end-0 p-3">
-    </div>
+    <div class="toast-container position-fixed top-0 end-0 p-3"></div>
 </div>
+
 <script>
 let MQTT_Client = 0;
-var app = null;
-var width = 800;
-var height = 450;
-var forcePublish = false;
+let app = null;
+let aoiPolygons = [];
+let exclusions  = [];
+let activeTab   = 'aoi';
+let polyEditor  = null;
 
-$(document).ready(function() {
-	
-	$.ajax({
-		type: "GET",
-		url: 'app',
-		dataType: 'json',
-		cache: false,
-		success: function(data) {
-			app = data;
-			document.title = app.manifest.acapPackageConf.setup.friendlyName;
-			$('.sidebar-heading').text(app.manifest.acapPackageConf.setup.friendlyName);
-			const aspectRatio = app.device.aspect || '16:9';
-			const [aspectWidth, aspectHeight] = aspectRatio.split(':').map(Number);
-			const paddingPercentage = (aspectHeight / aspectWidth) * 100;
+const AOI_COLOR   = '#22c55e';
+const EXCL_COLORS = ['#ef4444','#f97316','#a855f7','#ec4899','#06b6d4','#eab308','#14b8a6','#6366f1'];
 
-			const toggle = document.getElementById('pageToggle');
-			const content = document.getElementById('locationContent');
+$(document).ready(function () {
+    $.ajax({ type: 'GET', url: 'app', dataType: 'json', cache: false,
+        success: function (data) {
+            app = data;
+            document.title = app.manifest.acapPackageConf.setup.friendlyName;
+            $('.sidebar-heading').text(app.manifest.acapPackageConf.setup.friendlyName);
 
-			toggle.checked = app.settings.publish.detections;
-			content.classList.toggle('hidden', !app.settings.publish.detections);
+            const aspectRatio = app.device.aspect || '16:9';
+            const toggle  = document.getElementById('pageToggle');
+            const content = document.getElementById('locationContent');
 
-			toggle.addEventListener('change', async function() {
-				try {
-					app.settings.publish.detections = this.checked;
-					var payload = {
-						publish: app.settings.publish
-					};
-					$.ajax({
-						type: "POST",
-						url: "settings",
-						contentType: "application/json",
-						data: JSON.stringify(payload),
-						success: function(response) {
-							showToast("Settings updated", "info");
-						},
-						error: function(xhr, status, error) {
-							showToast("Settings update failed", "danger");
-						}
-					});
-					content.classList.toggle("hidden", !this.checked);
-				} catch (error) {
-					console.error("Failed to update detection setting:", error);
-					this.checked = !this.checked;
-					alert("Failed to update detection settings");
-				}
-			});
+            toggle.checked = app.settings.publish.detections;
+            content.classList.toggle('hidden', !app.settings.publish.detections);
+            toggle.addEventListener('change', function () {
+                app.settings.publish.detections = this.checked;
+                $.ajax({ type: 'POST', url: 'settings', contentType: 'application/json',
+                    data: JSON.stringify({ publish: app.settings.publish }),
+                    success: () => showToast('Settings updated', 'info'),
+                    error:   () => showToast('Settings update failed', 'danger')
+                });
+                content.classList.toggle('hidden', !this.checked);
+            });
 
-			$("#scene-confidence").val(app.settings.scene.confidence);
-			$("#scene-rotation").val(app.settings.scene.rotation);
-			$("#scene-cog").val(app.settings.scene.cog);
-			$("#scene-maxIdle").val(app.settings.scene.maxIdle);
+            $('#scene-confidence').val(app.settings.scene.confidence);
+            $('#scene-rotation').val(app.settings.scene.rotation);
+            $('#scene-cog').val(app.settings.scene.cog);
+            $('#scene-maxIdle').val(app.settings.scene.maxIdle);
+            $('#scene-minWidth').val(app.settings.scene.minWidth  || 10);
+            $('#scene-minHeight').val(app.settings.scene.minHeight || 10);
+            $('#scene-maxWidth').val(app.settings.scene.maxWidth  || 800);
+            $('#scene-maxHeight').val(app.settings.scene.maxHeight || 800);
 
-			renderLabelSelector(
-				(app.status && app.status.detections && Array.isArray(app.status.detections.labels)) ? app.status.detections.labels : []
-			);
+            /* Load zone data */
+            const aoiPts = app.settings.scene.aoi_polygon;
+            aoiPolygons = Array.isArray(aoiPts) && aoiPts.length >= 3
+                ? [{ id: 1, name: 'AOI', active: true, polygon: aoiPts }]
+                : [];
+            exclusions = Array.isArray(app.settings.scene.exclusions)
+                ? JSON.parse(JSON.stringify(app.settings.scene.exclusions))
+                : [];
 
-			if( app.status.mqtt.connected ) {
-				ConnectWebSocketClient();
-			} else {
-				setTimeout(() => {
-					updateConnectionStatus('disconnected');
-					showToast("DataQ is not connected to a broker.  Please go to MQTT Settings","warning");
-				}, 100);
-			}
+            PlayVideo(aspectRatio, app.settings.scene.rotation);
+            initPolyEditor();
+            switchTab('aoi');
+            updateAoiStatus();
+            renderExclList();
 
-			$('.video-panel').css('padding-top', `${paddingPercentage}%`);
-			PlayVideo(aspectRatio, app.settings.scene.rotation );
-			
-		   // >>>> AREA SELECTOR CODE HERE <<<<
-			areaSelector = new AreaSelector('settings-canvas', {
-				modes: areaModes,
-				onchange: function(areas) { },
-				minWidth: 10,
-				minHeight: 10
-			});
-console.log(areaSelector)
-			const canvasWidth = 1000;
-			const canvasHeight = 1000;
+            renderLabelSelector(
+                (app.status && app.status.detections && Array.isArray(app.status.detections.labels))
+                ? app.status.detections.labels : []
+            );
 
-			const minWidth  = app.settings.scene.minWidth  || 5;
-			const minHeight = app.settings.scene.minHeight || 20;
-			const maxWidth  = app.settings.scene.maxWidth  || 800;
-			const maxHeight = app.settings.scene.maxHeight || 800;
-
-			function centerRect(width, height) {
-			  return {
-				x1: Math.round((canvasWidth  - width) / 2),
-				y1: Math.round((canvasHeight - height) / 2),
-				x2: Math.round((canvasWidth  + width) / 2),
-				y2: Math.round((canvasHeight + height) / 2)
-			  };
-			}
-
-			const minArea = centerRect(minWidth, minHeight);
-			const maxArea = centerRect(maxWidth, maxHeight);
-
-			areaSelector.setAreas({
-			  aoi: app.settings.scene.aoi,
-			  min: minArea,
-			  max: maxArea
-			});
-
-			areaSelector.setMode('aoi');
-			areaSelector.hideAreas(); // Hide overlays after save
-			
-			// Buttons
-			$('#btn-area').off('click').on('click', ()=>areaSelector.setMode('aoi'));
-			$('#btn-min-size').off('click').on('click', ()=>areaSelector.setMode('min'));
-			$('#btn-max-size').off('click').on('click', ()=>areaSelector.setMode('max'));
-			$('#btn-save-area').off('click').on('click', function() {
-				const areas = areaSelector.getAreas();
-				// Save AOI only as an actual rectangle
-				if (areas.aoi) {
-					app.settings.scene.aoi = areas.aoi;
-				} else {
-					app.settings.scene.aoi = null;
-				}
-
-				// For min and max: calculate width/height and save to top-level keys
-				if (areas.min) {
-					const minW = areas.min.x2 - areas.min.x1;
-					const minH = areas.min.y2 - areas.min.y1;
-					app.settings.scene.minWidth = minW;
-					app.settings.scene.minHeight = minH;
-				}
-
-				if (areas.max) {
-					const maxW = areas.max.x2 - areas.max.x1;
-					const maxH = areas.max.y2 - areas.max.y1;
-					app.settings.scene.maxWidth = maxW;
-					app.settings.scene.maxHeight = maxH;
-				}
-
-				saveFilter();
-				areaSelector.hideAreas(); // Hide overlays after save
-			});
-			window.addEventListener('resize', function() { areaSelector.resizeCanvas(); });
-            // Make sure resizing works for video/rotation changes:
-            window.addEventListener('resize', ()=>areaSelector.resizeCanvas());
-			
-		},
-        error: function(response) {
-			showToast("The application is not running",'danger');
-        }
-	});
+            if (app.status.mqtt.connected) {
+                ConnectWebSocketClient();
+            } else {
+                setTimeout(() => {
+                    updateConnectionStatus('disconnected');
+                    showToast('DataQ is not connected to a broker. Go to MQTT Settings', 'warning');
+                }, 100);
+            }
+        },
+        error: () => showToast('The application is not running', 'danger')
+    });
 });
 
-function buildLabelSelector(labels) {
-	new LabelSelector('labelSelector', labels, app.settings.scene.ignoreClass || [], function(selection) {
-		app.settings.scene.ignoreClass = selection;
-		saveFilter();
-	});
+/* ── Polygon editor ──────────────────────────────────────────────── */
+function initPolyEditor() {
+    const canvas = document.getElementById('poly-canvas');
+    const hint   = document.getElementById('hint-bar');
+    polyEditor = new PolygonEditor(canvas, {
+        colors:   [AOI_COLOR],
+        hintEl:   hint,
+        onChanged: function (polys) {
+            if (activeTab === 'aoi') {
+                aoiPolygons = polys.slice(0, 1);
+                updateAoiStatus();
+            } else {
+                exclusions = polys.map(p => Object.assign({}, p));
+                renderExclList();
+            }
+            polyEditor.redraw(drawDetections);
+        },
+        onCommit: function (newPoly) {
+            if (activeTab === 'aoi') {
+                aoiPolygons = [{ id: 1, name: 'AOI', active: true, polygon: newPoly }];
+                polyEditor.setPolygons(aoiPolygons);
+                updateAoiStatus();
+            } else {
+                const id = exclusions.length ? Math.max.apply(null, exclusions.map(e => e.id)) + 1 : 1;
+                exclusions.push({ id: id, name: 'Zone ' + id, active: true, polygon: newPoly });
+                polyEditor.setPolygons(exclusions);
+                renderExclList();
+            }
+            polyEditor.cancelDraw();
+            polyEditor.redraw(drawDetections);
+            hideCancelBtn();
+        }
+    });
+    polyEditor.setPolygons(aoiPolygons);
 }
 
-function renderLabelSelector(labels, retryCount) {
-	const el = document.getElementById('labelSelector');
-	retryCount = retryCount || 0;
-
-	if (labels && labels.length) {
-		buildLabelSelector(labels);
-		return;
-	}
-
-	// Labels not available yet - fetch /status directly and retry
-	el.innerHTML = '<p class="text-muted small">Waiting for Object Detection...</p>';
-	$.ajax({
-		type: "GET",
-		url: 'status',
-		dataType: 'json',
-		cache: false,
-		success: function(status) {
-			const fetched = (status && status.detections && Array.isArray(status.detections.labels))
-				? status.detections.labels : [];
-			if (fetched.length) {
-				buildLabelSelector(fetched);
-			} else if (retryCount < 10) {
-				setTimeout(function() { renderLabelSelector([], retryCount + 1); }, 3000);
-			} else {
-				el.innerHTML = '<p class="text-muted small">No labels available. Ensure Object Detection is running.</p>';
-			}
-		},
-		error: function() {
-			if (retryCount < 10) {
-				setTimeout(function() { renderLabelSelector([], retryCount + 1); }, 3000);
-			} else {
-				el.innerHTML = '<p class="text-muted small">Could not load labels.</p>';
-			}
-		}
-	});
+function switchTab(tab) {
+    activeTab = tab;
+    if (tab === 'aoi') {
+        $('#tab-aoi').addClass('active').removeClass('btn-outline-secondary');
+        $('#tab-excl').removeClass('active').addClass('btn-outline-secondary');
+        $('#panel-aoi').show();
+        $('#panel-excl').hide();
+        polyEditor._colors = [AOI_COLOR];
+        polyEditor.setPolygons(aoiPolygons);
+    } else {
+        $('#tab-excl').addClass('active').removeClass('btn-outline-secondary');
+        $('#tab-aoi').removeClass('active').addClass('btn-outline-secondary');
+        $('#panel-aoi').hide();
+        $('#panel-excl').show();
+        polyEditor._colors = EXCL_COLORS;
+        polyEditor.setPolygons(exclusions);
+    }
+    polyEditor.cancelDraw();
+    polyEditor.redraw(drawDetections);
+    hideCancelBtn();
 }
 
-function ConnectWebSocketClient() {
-	updateConnectionStatus('connecting');
-	const clientID = "WS-" + app.manifest.acapPackageConf.setup.appName + "-" + app.device.serial + "-" + Math.floor(Math.random() * 10000);
-	if(MQTT_Client)
-		delete MQTT_Client;
-	
-	// Use WSS if page is loaded over HTTPS
-	updateConnectionStatus('connecting');
-
-	
-	var tls = app.settings.tls;
-	if( location.protocol === 'https:')
-		tls = true;
-	var port = tls?app.settings.WSS_Port:app.settings.WS_Port;
-
-	MQTT_Client = new Paho.MQTT.Client(app.mqtt.address, port, clientID);
-	
-	MQTT_Client.onConnectionLost = onConnectionLost;
-	MQTT_Client.onMessageArrived = onMessageArrived;
-	var connectionOptions = {
-		useSSL: tls,
-		timeout: 3,
-		onSuccess: onConnect,
-		onFailure: onFailure
-	};
-	
-	if(app.mqtt.user && app.mqtt.user.length)
-		connectionOptions.userName = app.mqtt.user;
-	if(app.mqtt.password && app.mqtt.password.length)
-		connectionOptions.password = app.mqtt.password;
-		
-	MQTT_Client.connect(connectionOptions);
-}
-
-function updateConnectionStatus(status) {
-    const el = document.getElementById('connectionStatus');
-    const msg = document.getElementById('statusMessage');
-    el.className = 'connection-status';
-    switch (status) {
-        case 'connected':
-            msg.textContent = 'Connected';
-            break;
-        case 'disconnected':
-            el.classList.add('status-disconnected');
-            msg.textContent = 'Disconnected';
-            break;
-        case 'connecting':
-        case 'reconnecting':
-            el.classList.add('status-connecting');
-            msg.textContent = status.charAt(0).toUpperCase() + status.slice(1);
-            break;
+function updateAoiStatus() {
+    const el = document.getElementById('aoi-status');
+    if (aoiPolygons.length > 0 && aoiPolygons[0].polygon && aoiPolygons[0].polygon.length >= 3) {
+        el.innerHTML = '<span class="text-success fw-semibold">AOI active</span> — '
+            + aoiPolygons[0].polygon.length
+            + ' vertices. Click polygon to select. Delete key removes it.';
+    } else {
+        el.textContent = 'No AOI defined — full frame active.';
     }
 }
 
-function onConnect() {
-	updateConnectionStatus('connected');
-	var topic = app.mqtt.preTopic + "/detections/" + app.device.serial;
-	MQTT_Client.subscribe(topic);
+function renderExclList() {
+    var list  = document.getElementById('excl-list');
+    var empty = document.getElementById('excl-empty');
+    list.innerHTML = '';
+    if (!exclusions.length) { empty.style.display = ''; return; }
+    empty.style.display = 'none';
+    exclusions.forEach(function (zone, idx) {
+        var color = EXCL_COLORS[idx % EXCL_COLORS.length];
+        var div = document.createElement('div');
+        div.className = 'zone-item';
+        div.innerHTML = '<span class="zone-color-swatch" style="background:' + color + '"></span>'
+            + '<input class="zone-name-input" type="text" value="' + escHtml(zone.name) + '" data-idx="' + idx + '">'
+            + '<div class="form-check mb-0 ms-auto">'
+            + '<input class="form-check-input" type="checkbox" id="ea-' + idx + '" ' + (zone.active !== false ? 'checked' : '') + ' data-idx="' + idx + '">'
+            + '<label class="form-check-label small" for="ea-' + idx + '">Active</label></div>'
+            + '<button class="btn btn-sm btn-outline-danger py-0 px-2 ms-2" data-del="' + idx + '" title="Delete">✕</button>';
+        list.appendChild(div);
+    });
+    list.querySelectorAll('.zone-name-input').forEach(function (inp) {
+        inp.addEventListener('change', function () { exclusions[+this.dataset.idx].name = this.value; });
+    });
+    list.querySelectorAll('.form-check-input').forEach(function (chk) {
+        chk.addEventListener('change', function () { exclusions[+this.dataset.idx].active = this.checked; });
+    });
+    list.querySelectorAll('[data-del]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            exclusions.splice(+this.dataset.del, 1);
+            exclusions.forEach(function (z, i) { z.id = i + 1; });
+            polyEditor.setPolygons(exclusions);
+            polyEditor.redraw(drawDetections);
+            renderExclList();
+        });
+    });
 }
 
-function onFailure(message) {
-	updateConnectionStatus('disconnected');	
-	showToast( message.errorMessage + "Check WebSocket connection in MQTT Settings","warning");
+$('#tab-aoi').click(function () { switchTab('aoi'); });
+$('#tab-excl').click(function () { switchTab('excl'); });
+
+$('#btn-draw').click(function () {
+    if (activeTab === 'aoi' && aoiPolygons.length >= 1) {
+        showToast('Clear the existing AOI first before drawing a new one.', 'warning');
+        return;
+    }
+    polyEditor.startDraw();
+    $(this).hide();
+    $('#btn-cancel-draw').show();
+    $('#hint-bar').text('Click to place vertices. Click the first (green) point or double-click to close the polygon.');
+});
+
+$('#btn-cancel-draw').click(function () {
+    polyEditor.cancelDraw();
+    polyEditor.redraw(drawDetections);
+    hideCancelBtn();
+});
+
+function hideCancelBtn() {
+    $('#btn-draw').show();
+    $('#btn-cancel-draw').hide();
 }
 
-function onConnectionLost(responseObject) {
-	if (responseObject.errorCode !== 0) {
-		showToast(responseObject.errorMessage, "warning");
-		updateConnectionStatus('disconnected');
-		// Attempt to reconnect after 5 seconds
-		setTimeout(() => {
-			console.log("Attempting to reconnect...");
-			ConnectWebSocketClient();
-		}, 5000);
-	}
+document.addEventListener('keydown', function (e) {
+    if (e.key === 'Delete' && polyEditor && polyEditor.selectedIndex >= 0) {
+        var idx = polyEditor.selectedIndex;
+        if (activeTab === 'aoi') {
+            aoiPolygons = [];
+            polyEditor.setPolygons(aoiPolygons);
+            updateAoiStatus();
+        } else {
+            exclusions.splice(idx, 1);
+            exclusions.forEach(function (z, i) { z.id = i + 1; });
+            polyEditor.setPolygons(exclusions);
+            renderExclList();
+        }
+        polyEditor.redraw(drawDetections);
+    }
+});
+
+$('#btn-save-zones').click(function () {
+    app.settings.scene.aoi_polygon =
+        (aoiPolygons.length > 0 && aoiPolygons[0].polygon && aoiPolygons[0].polygon.length >= 3)
+        ? aoiPolygons[0].polygon : [];
+
+    app.settings.scene.exclusions = exclusions.map(function (z) {
+        return { id: z.id, name: z.name, active: z.active !== false, polygon: z.polygon || [] };
+    });
+
+    app.settings.scene.minWidth  = parseInt($('#scene-minWidth').val())  || 10;
+    app.settings.scene.minHeight = parseInt($('#scene-minHeight').val()) || 10;
+    app.settings.scene.maxWidth  = parseInt($('#scene-maxWidth').val())  || 800;
+    app.settings.scene.maxHeight = parseInt($('#scene-maxHeight').val()) || 800;
+
+    $.ajax({ type: 'POST', url: 'settings', contentType: 'application/json',
+        data: JSON.stringify({ scene: app.settings.scene }),
+        success: function () { showToast('Zones saved', 'info'); },
+        error:   function () { showToast('Save failed', 'danger'); }
+    });
+});
+
+$('#btn-save').click(function () {
+    app.settings.scene.confidence = parseInt($('#scene-confidence').val());
+    app.settings.scene.rotation   = parseInt($('#scene-rotation').val());
+    app.settings.scene.cog        = parseInt($('#scene-cog').val());
+    app.settings.scene.maxIdle    = parseInt($('#scene-maxIdle').val());
+    $.ajax({ type: 'POST', url: 'settings', contentType: 'application/json',
+        data: JSON.stringify({ scene: app.settings.scene }),
+        success: function () { showToast('Settings saved', 'info'); },
+        error:   function () { showToast('Save failed', 'danger'); }
+    });
+});
+
+/* ── Labels ──────────────────────────────────────────────────────── */
+function buildLabelSelector(labels) {
+    new LabelSelector('labelSelector', labels, app.settings.scene.ignoreClass || [], function (sel) {
+        app.settings.scene.ignoreClass = sel;
+        $.ajax({ type: 'POST', url: 'settings', contentType: 'application/json',
+            data: JSON.stringify({ scene: app.settings.scene }) });
+    });
+}
+
+function renderLabelSelector(labels, retryCount) {
+    var el = document.getElementById('labelSelector');
+    retryCount = retryCount || 0;
+    if (labels && labels.length) { buildLabelSelector(labels); return; }
+    el.innerHTML = '<p class="text-muted small">Waiting for Object Detection…</p>';
+    $.ajax({ type: 'GET', url: 'status', dataType: 'json', cache: false,
+        success: function (status) {
+            var fetched = (status && status.detections && Array.isArray(status.detections.labels))
+                ? status.detections.labels : [];
+            if (fetched.length) {
+                buildLabelSelector(fetched);
+            } else if (retryCount < 10) {
+                setTimeout(function () { renderLabelSelector([], retryCount + 1); }, 3000);
+            } else {
+                el.innerHTML = '<p class="text-muted small">No labels available.</p>';
+            }
+        },
+        error: function () {
+            if (retryCount < 10) setTimeout(function () { renderLabelSelector([], retryCount + 1); }, 3000);
+            else el.innerHTML = '<p class="text-muted small">Could not load labels.</p>';
+        }
+    });
+}
+
+/* ── Detection overlay ───────────────────────────────────────────── */
+var latestDetections = [];
+
+function drawDetections(ctx) {
+    if (!latestDetections.length) return;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#facc15';
+    ctx.font = 'bold 28px sans-serif';
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath();
+    latestDetections.forEach(function (d) {
+        if (!d) return;
+        ctx.rect(d.x, d.y, d.w, d.h);
+        var text = (d.class || 'Unknown') + (d.confidence != null ? ' ' + d.confidence + '%' : '');
+        ctx.fillText(text, d.x, d.y > 30 ? d.y - 8 : d.y + d.h + 26);
+    });
+    ctx.stroke();
 }
 
 function onMessageArrived(message) {
-	var payload = JSON.parse(message.payloadString);
-	if( !payload )
-		return;
-	detections = payload.list;
-	// Update canvas
-	var ctx = document.getElementById('detection-canvas').getContext("2d");
-	if (!ctx)
-		return;
-		
-	ctx.beginPath();
-	ctx.clearRect(0, 0, 1000, 1000);
-	ctx.stroke();
-
-	ctx.lineWidth = 3;
-	ctx.strokeStyle = '#FFFF00';
-	ctx.font = "30px Arial";
-	ctx.fillStyle = '#FFFF00';
-
-	ctx.beginPath();
-	detections.forEach(function(detection) {
-		// Skip invalid detections
-		if (typeof detection !== 'object' || detection === null) return;
-		ctx.rect(detection.x, detection.y, detection.w, detection.h);
-		var text = detection.class || "Undefined";
-		if (detection.hasOwnProperty("confidence"))
-			text += " " + detection.confidence;
-				
-		var age = "";
-		if (detection.hasOwnProperty("age")) {
-			age = detection.age.toFixed(1) + "s";
-			if (detection.age > 60)
-				age = parseInt(detection.age/60) + "m";
-			if (detection.age > 3600)
-				age = parseInt(detection.age/3600) + "h";
-			text += " " + age;
-		}
-		ctx.fillText(text, detection.x, detection.y-10);
-	});
-	ctx.stroke();
+    var payload = JSON.parse(message.payloadString);
+    if (!payload) return;
+    latestDetections = payload.list || [];
+    if (polyEditor) polyEditor.redraw(drawDetections);
 }
 
+/* ── MQTT ────────────────────────────────────────────────────────── */
+function ConnectWebSocketClient() {
+    updateConnectionStatus('connecting');
+    var cid  = 'WS-Det-' + app.device.serial + '-' + Math.floor(Math.random() * 10000);
+    if (MQTT_Client) delete MQTT_Client;
+    var tls  = (location.protocol === 'https:') || app.settings.tls;
+    var port = tls ? app.settings.WSS_Port : app.settings.WS_Port;
+    MQTT_Client = new Paho.MQTT.Client(app.mqtt.address, port, cid);
+    MQTT_Client.onConnectionLost = onConnectionLost;
+    MQTT_Client.onMessageArrived = onMessageArrived;
+    var opts = { useSSL: tls, timeout: 3, onSuccess: onConnect, onFailure: onFailure };
+    if (app.mqtt.user && app.mqtt.user.length)         opts.userName = app.mqtt.user;
+    if (app.mqtt.password && app.mqtt.password.length) opts.password = app.mqtt.password;
+    MQTT_Client.connect(opts);
+}
+function onConnect() {
+    updateConnectionStatus('connected');
+    MQTT_Client.subscribe(app.mqtt.preTopic + '/detections/' + app.device.serial);
+}
+function onFailure(msg) {
+    updateConnectionStatus('disconnected');
+    showToast(msg.errorMessage + ' — Check WebSocket in MQTT Settings', 'warning');
+}
+function onConnectionLost(resp) {
+    if (resp.errorCode !== 0) {
+        updateConnectionStatus('disconnected');
+        setTimeout(ConnectWebSocketClient, 5000);
+    }
+}
+function updateConnectionStatus(status) {
+    var el  = document.getElementById('connectionStatus');
+    var msg = document.getElementById('statusMessage');
+    el.className = 'connection-status';
+    switch (status) {
+        case 'connected':    msg.textContent = 'Connected'; break;
+        case 'disconnected': el.classList.add('status-disconnected'); msg.textContent = 'Disconnected'; break;
+        default:             el.classList.add('status-connecting');   msg.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+    }
+}
+
+/* ── Video ───────────────────────────────────────────────────────── */
 function PlayVideo(aspect, rotation) {
-	width = 800;
-	height = 450;
-	var videoWidth = 1280;
-	var videoHeight = 720;
-
-	switch (aspect) {
-		case '4:3': width = 800; height = 600; videoWidth = 800; videoHeight = 600;break;
-		case '1:1': width = 800; height = 800; videoWidth = 640; videoHeight = 640;break;
-		case '16:10': width = 800; height = 500; videoWidth = 800; videoHeight = 500;break;
-		default: width = 800; height = 450; videoWidth = 1280; videoHeight = 720;break;
-	}
-
-	if( rotation === 90 || rotation === 270 ) {
-		var temp = width;
-		width = height;
-		height = temp;
-	}
-
-	$("#video-view").css("width", width + "px");
-	$("#video-view").css("height", height + "px");
-
-	var secureConnection = "";
-	if (location.protocol === 'https:')
-		secureConnection = " secure=true"
-	var player = '<media-stream-player hostname="' + window.location.hostname + '"'	+ secureConnection
-				+ ' format="RTP_H264" compression="40" audio="0"'
-				+ ' resolution="' + videoWidth + 'x' + videoHeight + '"'
-				+ ' variant="basic" autoplay></media-stream-player>';
-	$("#video").append(player);
-}
-
-function saveFilter() {
-	var payload = {
-		scene: app.settings.scene
-	}
-	$.ajax({type: "POST",
-		url: "settings",
-		contentType: "application/json",
-		data: JSON.stringify(payload),
-		success: function(response) {
-			showToast("Settings updated",'info');
-		},
-		error: function(xhr, status, error) {
-			showToast("Settings update failed",'danger');
-		}
-	});
-}
-
-$('#btn-save').click(function() {
-	app.settings.scene.confidence = parseInt($("#scene-confidence").val());
-	app.settings.scene.rotation = parseInt($("#scene-rotation").val());
-	app.settings.scene.cog = parseInt($("#scene-cog").val());
-	app.settings.scene.maxIdle = parseInt($("#scene-maxIdle").val());
-	saveFilter();
-});
-
-
-function showToast(message, type = 'danger') {
-    const toastContainer = document.querySelector('.toast-container');
-    
-    // Determine text color class based on type
-    const textColorClass = type === 'warning' ? 'text-dark' : 'text-white';
-    
-    // Create the toast HTML structure
-    var toastHtml = '';
-    toastHtml += '<div class="toast align-items-center ' + textColorClass + ' bg-' + type + ' border-0" role="alert" aria-live="assertive" aria-atomic="true">';
-    toastHtml += '   <div class="d-flex">';
-    toastHtml += '     <div class="toast-body">' + message + '</div>';
-    toastHtml += '     <button type="button" class="btn-close' + (type === 'warning' ? '' : ' btn-close-white') + ' me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>';
-    toastHtml += '   </div>';
-    toastHtml += '</div>';
-    
-    // Rest of the function remains the same
-    toastContainer.insertAdjacentHTML('beforeend', toastHtml);
-    const toastElement = toastContainer.lastElementChild;
-    const toast = new bootstrap.Toast(toastElement, {
-        autohide: true,
-        delay: 4000
-    });
-    toast.show();
-    toastElement.addEventListener('hidden.bs.toast', function() {
-        this.remove();
+    var w = 800, h = 450, vw = 1280, vh = 720;
+    switch (aspect) {
+        case '4:3':   w = 800; h = 600; vw = 800;  vh = 600; break;
+        case '1:1':   w = 800; h = 800; vw = 640;  vh = 640; break;
+        case '16:10': w = 800; h = 500; vw = 800;  vh = 500; break;
+        default:      w = 800; h = 450; vw = 1280; vh = 720; break;
+    }
+    if (rotation === 90 || rotation === 270) { var t = w; w = h; h = t; }
+    $('#video-view').css({ width: w + 'px', height: h + 'px' });
+    var sec = (location.protocol === 'https:') ? ' secure=true' : '';
+    $('#video').append('<media-stream-player hostname="' + window.location.hostname + '"' + sec
+        + ' format="RTP_H264" compression="40" audio="0" resolution="' + vw + 'x' + vh
+        + '" variant="basic" autoplay></media-stream-player>');
+    window.addEventListener('resize', function () {
+        if (polyEditor) polyEditor.redraw(drawDetections);
     });
 }
 
-// --- Area Select integration ---
-let areaSelector = null;
-const areaModes = [
-  { key: 'aoi',  button: '#btn-area',     color: 'rgba(128,128,128,0.4)' },
-  { key: 'min',  button: '#btn-min-size', color: 'rgba(255,214,0,0.4)'   },
-  { key: 'max',  button: '#btn-max-size', color: 'rgba(25,118,210,0.4)'  }
-];
+/* ── Utilities ───────────────────────────────────────────────────── */
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 
+function showToast(message, type) {
+    type = type || 'info';
+    var container = document.querySelector('.toast-container');
+    var textCls = (type === 'warning') ? 'text-dark' : 'text-white';
+    var closeCls = (type === 'warning') ? '' : ' btn-close-white';
+    var el = document.createElement('div');
+    el.className = 'toast align-items-center ' + textCls + ' bg-' + type + ' border-0';
+    el.setAttribute('role', 'alert');
+    el.setAttribute('aria-live', 'assertive');
+    el.setAttribute('aria-atomic', 'true');
+    var flex = document.createElement('div');
+    flex.className = 'd-flex';
+    var body = document.createElement('div');
+    body.className = 'toast-body';
+    body.textContent = message;
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn-close' + closeCls + ' me-2 m-auto';
+    button.setAttribute('data-bs-dismiss', 'toast');
+    flex.appendChild(body);
+    flex.appendChild(button);
+    el.appendChild(flex);
+    container.appendChild(el);
+    var t = new bootstrap.Toast(el, { autohide: true, delay: 4000 });
+    t.show();
+    el.addEventListener('hidden.bs.toast', function () { this.remove(); });
+}
 </script>
 </body>
 </html>

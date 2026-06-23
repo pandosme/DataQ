@@ -43,7 +43,7 @@ typedef int (*MQTTAsync_unsubscribe_func)(MQTTAsync, const char*, MQTTAsync_resp
 typedef int (*MQTTAsync_setCallbacks_func)(MQTTAsync, void*, MQTTAsync_connectionLost*, MQTTAsync_messageArrived*, MQTTAsync_deliveryComplete*);
 typedef void (*MQTTAsync_freeMessage_func)(MQTTAsync_message**);
 typedef void (*MQTTAsync_destroy_func)(MQTTAsync*);
-typedef void (*MQTTAsync_free_func)(void* ptr);	
+typedef void (*MQTTAsync_free_func)(void* ptr);
 typedef void (*MQTTAsync_setConnected_func)(MQTTAsync handle, void* context, MQTTAsync_connected* co);
 static struct {
     MQTTAsync_create_func create;
@@ -86,11 +86,28 @@ static int  MQTT_Load_Library(void);
 static int  MQTT_Connect(void);
 static int  MQTT_SetupClient(void);
 static void MQTT_HTTP_callback(const ACAP_HTTP_Response response, const ACAP_HTTP_Request request);
+static cJSON* MQTT_Public_Settings(void);
 
 
 cJSON*
 MQTT_Settings() {
 	return MQTTSettings;
+}
+
+static cJSON*
+MQTT_Public_Settings(void) {
+    cJSON* copy = cJSON_Duplicate(MQTTSettings, 1);
+    if (!copy) return NULL;
+
+    cJSON* password = cJSON_GetObjectItem(copy, "password");
+    int password_set = password && password->valuestring && strlen(password->valuestring) > 0;
+    if (password)
+        cJSON_ReplaceItemInObject(copy, "password", cJSON_CreateString(""));
+    if (cJSON_GetObjectItem(copy, "passwordSet"))
+        cJSON_ReplaceItemInObject(copy, "passwordSet", cJSON_CreateBool(password_set));
+    else
+        cJSON_AddBoolToObject(copy, "passwordSet", password_set);
+    return copy;
 }
 
 int
@@ -103,10 +120,10 @@ MQTT_Init(MQTT_Callback_Connection stateCallback, MQTT_Callback_Message messageC
     if (!MQTT_Load_Settings()) return 0;
     if (!MQTT_Load_Library()) return 0;
     if (!MQTT_SetupClient()) return 0;
-    
+
     CERTS_Init();
     connectionCallback(MQTT_CONNECTING);
-	
+
 	MQTT_Connect();
     return 1;
 }
@@ -116,18 +133,18 @@ MQTT_Connect() {
     LOG_TRACE("%s:\n", __func__);
 	ACAP_STATUS_SetString("mqtt","status","Connecting");
 	ACAP_STATUS_SetBool("mqtt","connected",0);
-    
+
     if (!mqtt_client) {
         LOG_WARN("%s: Invalid mqtt-client\n", __func__);
         return 0;
     }
-    
+
     // Static storage to prevent dangling pointers - CRITICAL FIX
     static MQTTAsync_SSLOptions ssl_opts = MQTTAsync_SSLOptions_initializer;
     static MQTTAsync_willOptions will_opts = MQTTAsync_willOptions_initializer;
-    
+
     MQTTAsync_connectOptions conn_opts = MQTTAsync_connectOptions_initializer;
-    
+
     // Essential connection parameters
     conn_opts.keepAliveInterval = 60;
     conn_opts.cleansession = 1;
@@ -138,15 +155,15 @@ MQTT_Connect() {
     conn_opts.onSuccess = onConnect;
     conn_opts.onFailure = onConnectFailure;
     conn_opts.context = mqtt_client;
-    
+
     // Authentication configuration
     cJSON* user_item = cJSON_GetObjectItem(MQTTSettings, "user");
     cJSON* password_item = cJSON_GetObjectItem(MQTTSettings, "password");
-    
+
     if (user_item && user_item->valuestring && strlen(user_item->valuestring)) {
         conn_opts.username = user_item->valuestring;
     }
-    
+
     // Fixed password validation bug - was checking user_item instead of password_item
     if (password_item && password_item->valuestring && strlen(password_item->valuestring)) {
         conn_opts.password = password_item->valuestring;
@@ -158,11 +175,11 @@ MQTT_Connect() {
 		const char* cert = CERTS_Get_Cert();
 		const char* key = CERTS_Get_Key();
 		const char* password = CERTS_Get_Password();
-		
+
 		LOG_TRACE("%s: Initializing TLS", __func__);
 		ssl_opts = (MQTTAsync_SSLOptions)MQTTAsync_SSLOptions_initializer;
 		ssl_opts.sslVersion = 3; // TLS 1.2
-		
+
 		// Always set trust store if available, regardless of length
 		if (caCert && strlen(caCert) > 0) {
 			ssl_opts.trustStore = caCert;
@@ -170,7 +187,7 @@ MQTT_Connect() {
 		} else {
 			LOG_WARN("TLS: No CA certificate available");
 		}
-		
+
 		// Client certificate configuration
 		if (cert && strlen(cert) > 0 && key && strlen(key) > 0) {
 			ssl_opts.keyStore = cert;
@@ -180,31 +197,31 @@ MQTT_Connect() {
 			}
 			LOG_TRACE("TLS: Client certificate configured");
 		}
-		
+
 		ssl_opts.enableServerCertAuth = cJSON_IsTrue(cJSON_GetObjectItem(MQTTSettings, "verify"));
 		LOG_TRACE("TLS: Server cert auth = %d", ssl_opts.enableServerCertAuth);
-		
+
 		conn_opts.ssl = &ssl_opts;
 	}
-    
+
     // Last Will Configuration - Now using static storage
     will_opts = (MQTTAsync_willOptions)MQTTAsync_willOptions_initializer;
-    
+
     cJSON* lwt = cJSON_CreateObject();
     if (!lwt) {
         LOG_WARN("%s: Failed to create LWT JSON object\n", __func__);
         return 0;
     }
-    
+
     cJSON_AddFalseToObject(lwt, "connected");
     cJSON_AddStringToObject(lwt, "address", ACAP_DEVICE_Prop("IPv4"));
-    
+
     // Add additional payload properties
     cJSON* additionalProperties = cJSON_GetObjectItem(MQTTSettings, "payload");
     if (additionalProperties) {
         cJSON* name_item = cJSON_GetObjectItem(additionalProperties, "name");
         cJSON* location_item = cJSON_GetObjectItem(additionalProperties, "location");
-        
+
         if (name_item && name_item->valuestring && strlen(name_item->valuestring)) {
             cJSON_AddStringToObject(lwt, "name", name_item->valuestring);
         }
@@ -213,7 +230,7 @@ MQTT_Connect() {
         }
     }
     cJSON_AddStringToObject(lwt, "serial", ACAP_DEVICE_Prop("serial"));
-    
+
     // Construct Last Will Topic with bounds checking
     cJSON* preTopic_item = cJSON_GetObjectItem(MQTTSettings, "preTopic");
     if (preTopic_item && preTopic_item->valuestring && strlen(preTopic_item->valuestring)) {
@@ -223,13 +240,13 @@ MQTT_Connect() {
             LOG_WARN("%s: Last Will Topic truncated\n", __func__);
         }
     } else {
-        int result = snprintf(LastWillTopic, sizeof(LastWillTopic), "connect/%s", 
+        int result = snprintf(LastWillTopic, sizeof(LastWillTopic), "connect/%s",
                              ACAP_DEVICE_Prop("serial"));
         if (result >= sizeof(LastWillTopic)) {
             LOG_WARN("%s: Last Will Topic truncated\n", __func__);
         }
     }
-    
+
     // Create Last Will message with proper error handling
     char* json = cJSON_PrintUnformatted(lwt);
     if (json) {
@@ -237,25 +254,25 @@ MQTT_Connect() {
         if (result >= sizeof(LastWillMessage)) {
             LOG_WARN("%s: Last Will Message truncated\n", __func__);
         }
-        
+
         will_opts.topicName = LastWillTopic;
         will_opts.message = LastWillMessage;
         will_opts.retained = 1;
         will_opts.qos = 0;
         conn_opts.will = &will_opts;  // Now safe - static storage
-        
+
         free(json);
     } else {
         LOG_WARN("%s: Failed to serialize Last Will message\n", __func__);
     }
-    
+
     cJSON_Delete(lwt);
 
     // Attempt connection
     int rc = mqtt.connect(mqtt_client, &conn_opts);
     if (rc != MQTTASYNC_SUCCESS) {
         LOG_WARN("%s: Unable to initialize MQTT connection. Code %d\n", __func__, rc);
-        
+
         // Log detailed error information
         switch (rc) {
             case MQTTASYNC_FAILURE:
@@ -289,7 +306,7 @@ MQTT_Connect() {
                 LOG_WARN("MQTT Connect: Unknown error code %d\n", rc);
                 break;
         }
-        
+
         return 0;
     } else {
         LOG_TRACE("%s: Connection initialized successfully\n", __func__);
@@ -300,7 +317,7 @@ MQTT_Connect() {
         connect_item->type = cJSON_True;
 		ACAP_FILE_Write("localdata/mqtt.json", MQTTSettings);
 	}
-   
+
     return 1;
 }
 
@@ -310,11 +327,11 @@ MQTT_Disconnect() {
 
 	ACAP_STATUS_SetString("mqtt","status","Disconnection");
 	ACAP_STATUS_SetBool("mqtt","connected",0);
-    
+
     MQTTAsync_disconnectOptions disc_opts = MQTTAsync_disconnectOptions_initializer;
     disc_opts.onSuccess = onDisconnect;
     disc_opts.context = mqtt_client;
-    
+
     return (mqtt.disconnect(mqtt_client, &disc_opts) == MQTTASYNC_SUCCESS);
 }
 
@@ -324,16 +341,16 @@ MQTT_Publish(const char *topic, const char *payload, int qos, int retained) {
     if (!mqtt_client || !mqtt.isConnected(mqtt_client)) {
         return 0;
     }
-    
+
     if (!topic || !payload) {
         LOG_WARN("%s: Invalid parameters\n", __func__);
         return 0;
     }
 
-    char *preTopic = cJSON_GetObjectItem(MQTTSettings, "preTopic") ? 
+    char *preTopic = cJSON_GetObjectItem(MQTTSettings, "preTopic") ?
                      cJSON_GetObjectItem(MQTTSettings, "preTopic")->valuestring : NULL;
     char fullTopic[256];
-    
+
     if (preTopic && strlen(preTopic) > 0) {
         int result = snprintf(fullTopic, sizeof(fullTopic), "%s/%s", preTopic, topic);
         if (result >= sizeof(fullTopic)) {
@@ -355,11 +372,11 @@ MQTT_Publish(const char *topic, const char *payload, int qos, int retained) {
 
     MQTTAsync_responseOptions opts = MQTTAsync_responseOptions_initializer;
     opts.context = mqtt_client;
-    
+
     int rc = mqtt.sendMessage(mqtt_client, fullTopic, &pubmsg, &opts);
     if( rc != MQTTASYNC_SUCCESS )
         LOG_TRACE("%s: Published failed\n",__func__);
-    
+
     return (rc == MQTTASYNC_SUCCESS);
 }
 
@@ -369,7 +386,7 @@ MQTT_Publish_JSON(const char *topic, cJSON *payload, int qos, int retained) {
     if (!mqtt_client || !mqtt.isConnected(mqtt_client)) {
         return 0;
     }
-    
+
     if (!payload) {
         LOG_WARN("%s: %s NULL payload\n", __func__, topic);
         return 0;
@@ -380,13 +397,13 @@ MQTT_Publish_JSON(const char *topic, cJSON *payload, int qos, int retained) {
         LOG_WARN("%s: Failed to duplicate JSON\n", __func__);
         return 0;
     }
-    
+
     cJSON* additional = cJSON_GetObjectItem(MQTTSettings, "payload");
     if(additional) {
         // Fixed: Proper NULL checking
         cJSON* name_item = cJSON_GetObjectItem(additional, "name");
         cJSON* location_item = cJSON_GetObjectItem(additional, "location");
-        
+
         if(name_item && name_item->valuestring && strlen(name_item->valuestring)) {
             cJSON_AddStringToObject(publish, "name", name_item->valuestring);
         }
@@ -394,33 +411,33 @@ MQTT_Publish_JSON(const char *topic, cJSON *payload, int qos, int retained) {
             cJSON_AddStringToObject(publish, "location", location_item->valuestring);
         }
     }
-    
+
     const char* serial = ACAP_DEVICE_Prop("serial");
     if (serial) {
         cJSON_AddStringToObject(publish, "serial", serial);
     }
-    
+
     char* json = cJSON_PrintUnformatted(publish);
     int result = 0;
-    
+
     if (json) {
         result = MQTT_Publish(topic, json, qos, retained);
         free(json);
     } else {
         LOG_WARN("%s: Failed to serialize JSON\n", __func__);
     }
-    
+
     cJSON_Delete(publish);
     return result;
 }
 
 int
 MQTT_Publish_Binary(const char *topic, int payloadlen, void *payload, int qos, int retained) {
-    
+
     if (!mqtt_client || !mqtt.isConnected(mqtt_client)) {
         return 0;
     }
-    
+
     if (!topic || !payload || payloadlen <= 0) {
         LOG_WARN("%s: Invalid parameters\n", __func__);
         return 0;
@@ -428,7 +445,7 @@ MQTT_Publish_Binary(const char *topic, int payloadlen, void *payload, int qos, i
 
     char *preTopic = cJSON_GetObjectItem(MQTTSettings, "preTopic") ? cJSON_GetObjectItem(MQTTSettings, "preTopic")->valuestring : NULL;
     char *fullTopic = NULL;
-    
+
     if (preTopic && strlen(preTopic) > 0) {
         fullTopic = malloc(strlen(preTopic) + strlen(topic) + 2); // +2 for '/' and null terminator
         if (!fullTopic) {
@@ -450,9 +467,9 @@ MQTT_Publish_Binary(const char *topic, int payloadlen, void *payload, int qos, i
 
     MQTTAsync_responseOptions opts = MQTTAsync_responseOptions_initializer;
     opts.context = mqtt_client;
-   
+
     int rc = mqtt.sendMessage(mqtt_client, fullTopic, &pubmsg, &opts);
-    
+
     return (rc == MQTTASYNC_SUCCESS);
 }
 
@@ -481,7 +498,7 @@ MQTT_Load_Library() {
         LOG_WARN("Failed to load MQTT library: %s\n", dlerror());
         return 0;
     }
-	
+
     #define LOAD_SYMBOL(sym) \
         if (!(mqtt.sym = dlsym(MQTT_libHandle, "MQTTAsync_" #sym))) { \
             LOG_WARN("Failed to load symbol: MQTTAsync_" #sym "\n"); \
@@ -508,12 +525,12 @@ MQTT_Load_Library() {
 static int
 MQTT_SetupClient() {
 	LOG_TRACE("%s:\n",__func__);
-    
+
     /* Validate settings structure */
     cJSON *address_item = cJSON_GetObjectItem(MQTTSettings, "address");
     cJSON *port_item = cJSON_GetObjectItem(MQTTSettings, "port");
     cJSON *tls_item = cJSON_GetObjectItem(MQTTSettings, "tls");
-    
+
     if (!address_item || !port_item || !tls_item) {
         LOG_WARN("%s: Invalid MQTT settings structure\n", __func__);
         return 0;
@@ -525,17 +542,17 @@ MQTT_SetupClient() {
 
     /* Construct server URI with bounds checking */
     char serverURI[256];
-    int uri_len = snprintf(serverURI, sizeof(serverURI), "%s://%s:%s", 
+    int uri_len = snprintf(serverURI, sizeof(serverURI), "%s://%s:%s",
                           scheme, address, port);
     if (uri_len >= sizeof(serverURI)) {
-        LOG_WARN("%s: Server URI too long (max %zu chars)\n", 
+        LOG_WARN("%s: Server URI too long (max %zu chars)\n",
                 __func__, sizeof(serverURI)-1);
         return 0;
     }
 	LOG("Broker URI: %s",serverURI);
     /* Generate unique client ID */
     char clientId[128];
-    snprintf(clientId, sizeof(clientId), "%s-%s", 
+    snprintf(clientId, sizeof(clientId), "%s-%s",
             ACAP_Name(), ACAP_DEVICE_Prop("serial"));
 
     /* Create client instance */
@@ -546,7 +563,7 @@ MQTT_SetupClient() {
     }
 
     /* Set callbacks with validation */
-	mqtt.setConnected(mqtt_client, NULL, onReconnect);	
+	mqtt.setConnected(mqtt_client, NULL, onReconnect);
     rc = mqtt.setCallbacks(mqtt_client, NULL, connectionLost, messageArrived, deliveryComplete);
     if (rc != MQTTASYNC_SUCCESS) {
         LOG_WARN("%s: Failed to set callbacks: %d\n", __func__, rc);
@@ -561,15 +578,15 @@ MQTT_SetupClient() {
 static void connectionLost(void* context, char* cause) {
 	ACAP_STATUS_SetString("mqtt","status","Connection lost");
 	ACAP_STATUS_SetBool("mqtt","connected",0);
-	
+
     LOG_WARN("Connection lost: %s\n", cause ? cause : "unknown reason");
-    
+
     connectionCallback(MQTT_RECONNECTING);
 }
 
 static int
 messageArrived(void* context, char* topicName, int topicLen, MQTTAsync_message* message) {
-/*	
+/*
     if (userSubscriptionCallback) {
         // Create null-terminated copy for callback
         char *payload = malloc(message->payloadlen + 1);
@@ -580,10 +597,10 @@ messageArrived(void* context, char* topicName, int topicLen, MQTTAsync_message* 
             free(payload);  // Free our copy, not the original
         }
     }
-    
+
     mqtt.freeMessage(&message);  // Proper cleanup
     mqtt.free(topicName);
-*/	
+*/
     return 1;
 }
 
@@ -622,21 +639,21 @@ onDisconnect(void* context, MQTTAsync_successData* response) {
 static void
 onConnectFailure(void* context, MQTTAsync_failureData* response) {
     char text[256] = "Connection failed";
-    
+
     if (response) {
         if (response->message) {
-            snprintf(text, sizeof(text), "%s (code: %d)", 
+            snprintf(text, sizeof(text), "%s (code: %d)",
                     response->message, response->code);
         } else {
             snprintf(text, sizeof(text), "Connection failed. Code: %d", response->code);
         }
     }
-    
+
     LOG_WARN("%s", text);
 
 	ACAP_STATUS_SetString("mqtt","status",text);
 	ACAP_STATUS_SetBool("mqtt","connected",0);
-    
+
     connectionCallback(MQTT_DISCONNECTED);
 }
 
@@ -644,18 +661,18 @@ onConnectFailure(void* context, MQTTAsync_failureData* response) {
 void
 MQTT_Cleanup() {
     LOG_TRACE("%s:\n", __func__);
-    
+
     pthread_mutex_lock(&config_mutex);
-    
+
     if (mqtt_client) {
         // Check if already connected before attempting disconnect
         if (mqtt.isConnected && mqtt.isConnected(mqtt_client)) {
             // Synchronous disconnect with timeout
             MQTTAsync_disconnectOptions opts = MQTTAsync_disconnectOptions_initializer;
             opts.timeout = 5000;  // 5 second timeout
-            
+
             pthread_mutex_unlock(&config_mutex);  // Release mutex before async call
-            
+
             int rc = mqtt.disconnect(mqtt_client, &opts);
             if (rc == MQTTASYNC_SUCCESS) {
                 // Wait for disconnect to complete (simple polling approach)
@@ -665,27 +682,27 @@ MQTT_Cleanup() {
                     wait_count++;
                 }
             }
-            
+
             pthread_mutex_lock(&config_mutex);  // Reacquire for destroy
         }
-        
+
         // Now safe to destroy
         mqtt.destroy(&mqtt_client);
         mqtt_client = NULL;
     }
-    
+
     // Clean up library handle
     if (MQTT_libHandle) {
         dlclose(MQTT_libHandle);
         MQTT_libHandle = NULL;
     }
-    
+
     // Clean up settings
     if (MQTTSettings) {
         cJSON_Delete(MQTTSettings);
         MQTTSettings = NULL;
     }
-    
+
     pthread_mutex_unlock(&config_mutex);
     LOG_TRACE("%s: Exit\n", __func__);
 }
@@ -717,7 +734,7 @@ static void
 MQTT_HTTP_callback(const ACAP_HTTP_Response response, const ACAP_HTTP_Request request)
 {
     pthread_mutex_lock(&config_mutex); // Lock configuration mutex
-    
+
     // 1. Handle initial state checks
     if (!MQTTSettings) {
         ACAP_HTTP_Respond_Error(response, 500, "MQTT not initialized");
@@ -726,13 +743,59 @@ MQTT_HTTP_callback(const ACAP_HTTP_Response response, const ACAP_HTTP_Request re
         return;
     }
 
-    const char* action = ACAP_HTTP_Request_Param(request, "action");
-    const char* json = ACAP_HTTP_Request_Param(request, "json");
+    const char* method = ACAP_HTTP_Get_Method(request);
     int full_reinit_required = 0;
 
-    if (action && strcmp(action, "disconnect") == 0) {
+    if (!method) {
+        ACAP_HTTP_Respond_Error(response, 400, "Invalid request method");
+        pthread_mutex_unlock(&config_mutex);
+        return;
+    }
+
+    if (strcmp(method, "GET") == 0) {
+        cJSON* public_settings = MQTT_Public_Settings();
+        if (public_settings) {
+            ACAP_HTTP_Respond_JSON(response, public_settings);
+            cJSON_Delete(public_settings);
+        } else {
+            ACAP_HTTP_Respond_Error(response, 500, "Failed to serialize MQTT settings");
+        }
+        pthread_mutex_unlock(&config_mutex);
+        return;
+    }
+
+    if (strcmp(method, "POST") != 0) {
+        ACAP_HTTP_Respond_Error(response, 405, "Method Not Allowed - Use GET or POST");
+        pthread_mutex_unlock(&config_mutex);
+        return;
+    }
+
+    const char* content_type = ACAP_HTTP_Get_Content_Type(request);
+    if (!content_type || strstr(content_type, "application/json") == NULL) {
+        ACAP_HTTP_Respond_Error(response, 415, "Unsupported Media Type - Use application/json");
+        pthread_mutex_unlock(&config_mutex);
+        return;
+    }
+
+    const char* body = ACAP_HTTP_Get_Body(request);
+    if (!body || ACAP_HTTP_Get_Body_Length(request) == 0) {
+        ACAP_HTTP_Respond_Error(response, 400, "Missing JSON body");
+        pthread_mutex_unlock(&config_mutex);
+        return;
+    }
+
+    cJSON *new_settings = cJSON_Parse(body);
+    if (!new_settings) {
+        ACAP_HTTP_Respond_Error(response, 400, "Invalid JSON");
+        pthread_mutex_unlock(&config_mutex);
+        return;
+    }
+
+    cJSON* action = cJSON_GetObjectItem(new_settings, "action");
+
+    if (cJSON_IsString(action) && action->valuestring && strcmp(action->valuestring, "disconnect") == 0) {
         if (connectionCallback) connectionCallback(MQTT_DISCONNECTING);
-        
+
         if (MQTT_Disconnect()) {
             cJSON_GetObjectItem(MQTTSettings, "connect")->type = cJSON_False;
             ACAP_FILE_Write("localdata/mqtt.json", MQTTSettings);
@@ -740,19 +803,7 @@ MQTT_HTTP_callback(const ACAP_HTTP_Response response, const ACAP_HTTP_Request re
         } else {
             ACAP_HTTP_Respond_Error(response, 500, "Disconnect failed");
         }
-        pthread_mutex_unlock(&config_mutex);
-        return;
-    }
-
-    if (!json) {
-        ACAP_HTTP_Respond_JSON(response, MQTTSettings);
-        pthread_mutex_unlock(&config_mutex);
-        return;
-    }
-
-    cJSON *new_settings = cJSON_Parse(json);
-    if (!new_settings) {
-        ACAP_HTTP_Respond_Error(response, 400, "Invalid JSON");
+        cJSON_Delete(new_settings);
         pthread_mutex_unlock(&config_mutex);
         return;
     }
@@ -764,13 +815,13 @@ MQTT_HTTP_callback(const ACAP_HTTP_Response response, const ACAP_HTTP_Request re
             mqtt_payload = cJSON_CreateObject();
             cJSON_AddItemToObject(MQTTSettings, "payload", mqtt_payload);
         }
-        
+
         cJSON *item = payload->child;
         while (item) {
             cJSON_ReplaceItemInObject(mqtt_payload, item->string, cJSON_Duplicate(item, 1));
             item = item->next;
         }
-        
+
         ACAP_FILE_Write("localdata/mqtt.json", MQTTSettings);
         ACAP_HTTP_Respond_Text(response, "Payload updated");
         cJSON_Delete(new_settings);
@@ -782,12 +833,16 @@ MQTT_HTTP_callback(const ACAP_HTTP_Response response, const ACAP_HTTP_Request re
     while (item) {
         const char *key = item->string;
         cJSON *existing = cJSON_GetObjectItem(MQTTSettings, key);
-        
+
         if (existing) {
             // Check if parameter requires reinitialization
-            if (strcmp(key, "address") == 0 || strcmp(key, "port") == 0 || 
+            if (strcmp(key, "address") == 0 || strcmp(key, "port") == 0 ||
                 strcmp(key, "user") == 0 || strcmp(key, "password") == 0) {
                 full_reinit_required = 1;
+            }
+            if (strcmp(key, "password") == 0 && cJSON_IsString(item) && item->valuestring && strlen(item->valuestring) == 0) {
+                item = item->next;
+                continue;
             }
             cJSON_ReplaceItemInObject(MQTTSettings, key, cJSON_Duplicate(item, 1));
         }
@@ -803,7 +858,7 @@ MQTT_HTTP_callback(const ACAP_HTTP_Response response, const ACAP_HTTP_Request re
 
     if (full_reinit_required) {
         LOG_TRACE("%s Performing full MQTT reinitialization\n",__func__);
-        
+
         if (mqtt_client) {
             MQTT_Disconnect();
             mqtt.destroy(&mqtt_client);
@@ -812,6 +867,7 @@ MQTT_HTTP_callback(const ACAP_HTTP_Response response, const ACAP_HTTP_Request re
 
         if (!MQTT_SetupClient() ) {
             ACAP_HTTP_Respond_Error(response, 500, "Reinitialization failed");
+            cJSON_Delete(new_settings);
             pthread_mutex_unlock(&config_mutex);
             return;
         }
@@ -822,7 +878,7 @@ MQTT_HTTP_callback(const ACAP_HTTP_Response response, const ACAP_HTTP_Request re
 	} else {
 		ACAP_HTTP_Respond_Error(response, 500, "Error initializing connection");
 	}
-    
+
     cJSON_Delete(new_settings);
     pthread_mutex_unlock(&config_mutex); // Release configuration mutex
 }

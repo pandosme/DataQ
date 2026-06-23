@@ -43,7 +43,7 @@
             <a href="about.html" class="list-group-item list-group-item-action">About</a>
         </div>
     </div>
-    
+
     <div id="page-content-wrapper" class="p-0">
         <div class="container-fluid">
             <div class="col-12">
@@ -60,9 +60,9 @@
                             <span id="statusMessage">Connected</span>
                         </div>
                     </div>
-                    <div id="locationContent" class="location-content">    
+                    <div id="locationContent" class="location-content">
                         <div class="card-body" id="settings-form">
-						
+
 							<div class="row gx-0 d-flex align-items-start" style="margin:0;">
 								<!-- Video area -->
 								<div class="col-8 p-0" style="width:800px; min-width:800px; max-width:800px;">
@@ -83,7 +83,7 @@
                                                     <th style="width: 20%">Age</th>
                                                     <th style="width: 20%">Distance</th>
                                                     <th style="width: 20%">Color</th>
-                                                    <th style="width: 20%">Color2</th>                                               
+                                                    <th style="width: 20%">Color2</th>
                                                 </tr>
 											</thead>
 											<tbody id="detections-table">
@@ -126,6 +126,14 @@ var height = 450;
 var paths = [];
 let stitchArea = {x1:250, y1:250, x2:750, y2:750};
 let areaSelector = null;
+
+function appendTextCells(row, values) {
+    values.forEach(function(value) {
+        const cell = document.createElement('td');
+        cell.textContent = value === undefined || value === null || value === '' ? '-' : String(value);
+        row.appendChild(cell);
+    });
+}
 
 $(document).ready(function() {
     $.ajax({
@@ -176,7 +184,7 @@ $(document).ready(function() {
                 ConnectWebSocketClient();
             } else {
                 setTimeout(() => {
-                    updateConnectionStatus('disconnected');               
+                    updateConnectionStatus('disconnected');
                     showToast("DataQ is not connected to a broker.  Please go to MQTT Settings", "warning");
                 }, 100);
             }
@@ -266,7 +274,7 @@ function onConnect() {
 }
 
 function onFailure(message) {
-    updateConnectionStatus('disconnected');  
+    updateConnectionStatus('disconnected');
     showToast( message.errorMessage + "Check WebSocket connection in MQTT Settings","warning");
 }
 
@@ -311,7 +319,7 @@ function DrawPaths() {
             ctx.lineTo(item.path[i].x,item.path[i].y );
         ctx.lineTo(last.x,last.y );
         ctx.stroke();
-        
+
         ctx.beginPath();
         ctx.strokeStyle='#FF0000';
         ctx.moveTo(last.x, last.y );
@@ -327,13 +335,7 @@ function DrawPaths() {
                 age = parseInt(item.age/3600) + "h";
         }
         const row = document.createElement('tr');
-        row.innerHTML = '';
-        row.innerHTML += '<td>' + (item.class || '-') + '</td>';
-        row.innerHTML += '<td>' + (item.confidence || '-') + '</td>';
-        row.innerHTML += '<td>' + (age || '-') + '</td>';
-        row.innerHTML += '<td>' + (item.distance || '-') + '</td>';
-        row.innerHTML += '<td>' + (item.color || '-') + '</td>';
-        row.innerHTML += '<td>' + (item.color2 || '-') + '</td>';
+        appendTextCells(row, [item.class, item.confidence, age, item.distance, item.color, item.color2]);
         tableBody.appendChild(row);
     });
 }
@@ -381,15 +383,25 @@ function PlayVideo(aspect, rotation) {
 function showToast(message, type = 'danger') {
     const toastContainer = document.querySelector('.toast-container');
     const textColorClass = type === 'warning' ? 'text-dark' : 'text-white';
-    var toastHtml = '';
-    toastHtml += '<div class="toast align-items-center ' + textColorClass + ' bg-' + type + ' border-0" role="alert" aria-live="assertive" aria-atomic="true">';
-    toastHtml += '   <div class="d-flex">';
-    toastHtml += '     <div class="toast-body">' + message + '</div>';
-    toastHtml += '     <button type="button" class="btn-close' + (type === 'warning' ? '' : ' btn-close-white') + ' me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>';
-    toastHtml += '   </div>';
-    toastHtml += '</div>';
-    toastContainer.insertAdjacentHTML('beforeend', toastHtml);
-    const toastElement = toastContainer.lastElementChild;
+    const toastElement = document.createElement('div');
+    toastElement.className = 'toast align-items-center ' + textColorClass + ' bg-' + type + ' border-0';
+    toastElement.setAttribute('role', 'alert');
+    toastElement.setAttribute('aria-live', 'assertive');
+    toastElement.setAttribute('aria-atomic', 'true');
+    const flex = document.createElement('div');
+    flex.className = 'd-flex';
+    const body = document.createElement('div');
+    body.className = 'toast-body';
+    body.textContent = message;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn-close' + (type === 'warning' ? '' : ' btn-close-white') + ' me-2 m-auto';
+    button.setAttribute('data-bs-dismiss', 'toast');
+    button.setAttribute('aria-label', 'Close');
+    flex.appendChild(body);
+    flex.appendChild(button);
+    toastElement.appendChild(flex);
+    toastContainer.appendChild(toastElement);
     const toast = new bootstrap.Toast(toastElement, {
         autohide: true,
         delay: 4000

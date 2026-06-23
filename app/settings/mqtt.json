@@ -6,8 +6,8 @@
 	"password":"",
 	"clientID":"",
 	"preTopic":"dataq",
-	"tls": false,
-	"verify": false,
+	"tls": true,
+	"verify": true,
 	"lwt":null,
 	"announce":null,
 	"payload": {
