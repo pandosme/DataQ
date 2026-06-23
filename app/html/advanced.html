@@ -144,6 +144,36 @@
                                             </div>
                                         </div>
 
+                                        <!-- 4. Size Filter -->
+                                        <div class="card">
+                                            <div class="card-header py-2">
+                                                <h6 class="card-title mb-0">Size Filter <span class="text-muted fw-normal" style="font-size:.75rem">(canvas units 0-1000)</span></h6>
+                                            </div>
+                                            <div class="card-body py-2 px-3">
+                                                <div class="row g-2">
+                                                    <div class="col-6">
+                                                        <label class="form-label small mb-1" for="scene-minWidth">Min width</label>
+                                                        <input type="number" class="form-control form-control-sm" id="scene-minWidth" min="1" max="500">
+                                                    </div>
+                                                    <div class="col-6">
+                                                        <label class="form-label small mb-1" for="scene-minHeight">Min height</label>
+                                                        <input type="number" class="form-control form-control-sm" id="scene-minHeight" min="1" max="500">
+                                                    </div>
+                                                    <div class="col-6">
+                                                        <label class="form-label small mb-1" for="scene-maxWidth">Max width</label>
+                                                        <input type="number" class="form-control form-control-sm" id="scene-maxWidth" min="50" max="1000">
+                                                    </div>
+                                                    <div class="col-6">
+                                                        <label class="form-label small mb-1" for="scene-maxHeight">Max height</label>
+                                                        <input type="number" class="form-control form-control-sm" id="scene-maxHeight" min="50" max="1000">
+                                                    </div>
+                                                </div>
+                                                <div class="d-grid mt-2">
+                                                    <button type="button" class="btn btn-success btn-sm" id="btn-save-size-filter">Save Size Filter</button>
+                                                </div>
+                                            </div>
+                                        </div>
+
                                     </div>
                                 </div>
                             </div>
@@ -267,6 +297,12 @@ $(document).ready(function() {
             $('#stitch-allow-class-switch').prop('checked', stitchSettings.allow_class_switch || false);
             if (stitchSettings.active) $('#stitch-controls').show();
 
+            // Load size filter
+            $('#scene-minWidth').val(app.settings.scene.minWidth || 10);
+            $('#scene-minHeight').val(app.settings.scene.minHeight || 10);
+            $('#scene-maxWidth').val(app.settings.scene.maxWidth || 800);
+            $('#scene-maxHeight').val(app.settings.scene.maxHeight || 800);
+
             // Connect to MQTT if available
             if (app.status.mqtt.connected) {
                 ConnectWebSocketClient();
@@ -369,6 +405,15 @@ $(document).ready(function() {
 
     // Stitch area buttons
     $('#btn-stitch-area').on('click', () => areaSelector.setMode('stitch'));
+
+    $('#btn-save-size-filter').on('click', function() {
+        if (!appData) return;
+        appData.settings.scene.minWidth = parseInt($('#scene-minWidth').val()) || 10;
+        appData.settings.scene.minHeight = parseInt($('#scene-minHeight').val()) || 10;
+        appData.settings.scene.maxWidth = parseInt($('#scene-maxWidth').val()) || 800;
+        appData.settings.scene.maxHeight = parseInt($('#scene-maxHeight').val()) || 800;
+        saveSceneSettings();
+    });
 
     // Save stitch settings button (also saves area)
     $('#btn-save-stitch').on('click', function() {

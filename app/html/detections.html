@@ -65,8 +65,8 @@
                     <div class="card-body p-2">
                         <div class="row g-3">
 
-                            <!-- Left: video + zone editor + size filter -->
-                            <div class="col-12 col-xl-8">
+                            <!-- Left: video + zone editor -->
+                            <div class="col-12 col-xl-8" id="zoneEditorColumn">
 
                                 <div id="video-view" style="position:relative;background:#0f172a;border-radius:6px;overflow:hidden;">
                                     <div id="video" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;"></div>
@@ -93,7 +93,10 @@
                                     <div class="card-body py-2 px-3" style="border-top:2px solid var(--accent);">
                                         <div id="panel-aoi">
                                             <p class="text-muted small mb-2">Draw a single polygon where detections are <strong>accepted</strong>. Leave empty to use the full frame.</p>
-                                            <div id="aoi-status" class="text-muted small fst-italic">No AOI defined — full frame active.</div>
+                                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                                <div id="aoi-status" class="text-muted small fst-italic">No AOI defined — full frame active.</div>
+                                                <button type="button" id="btn-clear-aoi" class="btn btn-sm btn-outline-danger py-0 px-2" style="display:none;">Clear</button>
+                                            </div>
                                         </div>
                                         <div id="panel-excl" style="display:none;">
                                             <p class="text-muted small mb-2">Draw polygons where detections are <strong>ignored</strong>. Multiple zones allowed.</p>
@@ -103,35 +106,10 @@
                                     </div>
                                 </div>
 
-                                <!-- Size filter -->
-                                <div class="card mt-2">
-                                    <div class="card-header"><h5 class="card-title mb-0">Size Filter <span class="text-muted fw-normal" style="font-size:.8rem">(canvas units 0–1000)</span></h5></div>
-                                    <div class="card-body py-2 px-3">
-                                        <div class="row g-2 align-items-end">
-                                            <div class="col-6 col-sm-3">
-                                                <label class="form-label">Min width</label>
-                                                <input type="number" class="form-control form-control-sm" id="scene-minWidth" min="1" max="500">
-                                            </div>
-                                            <div class="col-6 col-sm-3">
-                                                <label class="form-label">Min height</label>
-                                                <input type="number" class="form-control form-control-sm" id="scene-minHeight" min="1" max="500">
-                                            </div>
-                                            <div class="col-6 col-sm-3">
-                                                <label class="form-label">Max width</label>
-                                                <input type="number" class="form-control form-control-sm" id="scene-maxWidth" min="50" max="1000">
-                                            </div>
-                                            <div class="col-6 col-sm-3">
-                                                <label class="form-label">Max height</label>
-                                                <input type="number" class="form-control form-control-sm" id="scene-maxHeight" min="50" max="1000">
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
                             </div><!-- /left col -->
 
                             <!-- Right: settings + labels -->
-                            <div class="col-12 col-xl-4">
+                            <div class="col-12 col-xl-4" id="settingsColumn">
 
                                 <div class="card mb-3">
                                     <div class="card-header"><h5 class="card-title mb-0">Detection Settings</h5></div>
@@ -217,10 +195,9 @@ $(document).ready(function () {
 
             const aspectRatio = app.device.aspect || '16:9';
             const toggle  = document.getElementById('pageToggle');
-            const content = document.getElementById('locationContent');
 
             toggle.checked = app.settings.publish.detections;
-            content.classList.toggle('hidden', !app.settings.publish.detections);
+            setPublishToolsVisible(app.settings.publish.detections);
             toggle.addEventListener('change', function () {
                 app.settings.publish.detections = this.checked;
                 $.ajax({ type: 'POST', url: 'settings', contentType: 'application/json',
@@ -228,17 +205,13 @@ $(document).ready(function () {
                     success: () => showToast('Settings updated', 'info'),
                     error:   () => showToast('Settings update failed', 'danger')
                 });
-                content.classList.toggle('hidden', !this.checked);
+                setPublishToolsVisible(this.checked);
             });
 
             $('#scene-confidence').val(app.settings.scene.confidence);
             $('#scene-rotation').val(app.settings.scene.rotation);
             $('#scene-cog').val(app.settings.scene.cog);
             $('#scene-maxIdle').val(app.settings.scene.maxIdle);
-            $('#scene-minWidth').val(app.settings.scene.minWidth  || 10);
-            $('#scene-minHeight').val(app.settings.scene.minHeight || 10);
-            $('#scene-maxWidth').val(app.settings.scene.maxWidth  || 800);
-            $('#scene-maxHeight').val(app.settings.scene.maxHeight || 800);
 
             /* Load zone data */
             const aoiPts = app.settings.scene.aoi_polygon;
@@ -272,6 +245,16 @@ $(document).ready(function () {
         error: () => showToast('The application is not running', 'danger')
     });
 });
+
+function setPublishToolsVisible(enabled) {
+    const tools = document.getElementById('zoneEditorColumn');
+    const settings = document.getElementById('settingsColumn');
+    if (!tools || !settings) return;
+    tools.style.display = enabled ? '' : 'none';
+    settings.classList.toggle('col-xl-4', enabled);
+    settings.classList.toggle('col-xl-6', !enabled);
+    if (enabled && polyEditor) polyEditor.redraw(drawDetections);
+}
 
 /* ── Polygon editor ──────────────────────────────────────────────── */
 function initPolyEditor() {
@@ -337,8 +320,10 @@ function updateAoiStatus() {
         el.innerHTML = '<span class="text-success fw-semibold">AOI active</span> — '
             + aoiPolygons[0].polygon.length
             + ' vertices. Click polygon to select. Delete key removes it.';
+        $('#btn-clear-aoi').show();
     } else {
         el.textContent = 'No AOI defined — full frame active.';
+        $('#btn-clear-aoi').hide();
     }
 }
 
@@ -379,6 +364,15 @@ function renderExclList() {
 
 $('#tab-aoi').click(function () { switchTab('aoi'); });
 $('#tab-excl').click(function () { switchTab('excl'); });
+
+$('#btn-clear-aoi').click(function () {
+    aoiPolygons = [];
+    if (polyEditor) {
+        polyEditor.setPolygons(aoiPolygons);
+        polyEditor.redraw(drawDetections);
+    }
+    updateAoiStatus();
+});
 
 $('#btn-draw').click(function () {
     if (activeTab === 'aoi' && aoiPolygons.length >= 1) {
@@ -427,11 +421,6 @@ $('#btn-save-zones').click(function () {
     app.settings.scene.exclusions = exclusions.map(function (z) {
         return { id: z.id, name: z.name, active: z.active !== false, polygon: z.polygon || [] };
     });
-
-    app.settings.scene.minWidth  = parseInt($('#scene-minWidth').val())  || 10;
-    app.settings.scene.minHeight = parseInt($('#scene-minHeight').val()) || 10;
-    app.settings.scene.maxWidth  = parseInt($('#scene-maxWidth').val())  || 800;
-    app.settings.scene.maxHeight = parseInt($('#scene-maxHeight').val()) || 800;
 
     $.ajax({ type: 'POST', url: 'settings', contentType: 'application/json',
         data: JSON.stringify({ scene: app.settings.scene }),
