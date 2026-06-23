@@ -29,7 +29,7 @@
             <a href="about.html" class="list-group-item list-group-item-action">About</a>
         </div>
     </div>
-	
+
 	<div id="page-content-wrapper" class="p-0">
 		<div class="container-fluid">
 
@@ -140,10 +140,10 @@
 			</div>
 		</div>
 	</div>
-	
+
     <div class="toast-container position-fixed top-0 end-0 p-3">
     </div>
-	
+
 </div>
 <script>
 
@@ -338,22 +338,26 @@ $(document).ready(function() {
 
 function showToast(message, type = 'danger') {
     const toastContainer = document.querySelector('.toast-container');
-    
-    // Determine text color class based on type
     const textColorClass = type === 'warning' ? 'text-dark' : 'text-white';
-    
-    // Create the toast HTML structure
-    var toastHtml = '';
-    toastHtml += '<div class="toast align-items-center ' + textColorClass + ' bg-' + type + ' border-0" role="alert" aria-live="assertive" aria-atomic="true">';
-    toastHtml += '   <div class="d-flex">';
-    toastHtml += '     <div class="toast-body">' + message + '</div>';
-    toastHtml += '     <button type="button" class="btn-close' + (type === 'warning' ? '' : ' btn-close-white') + ' me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>';
-    toastHtml += '   </div>';
-    toastHtml += '</div>';
-    
-    // Rest of the function remains the same
-    toastContainer.insertAdjacentHTML('beforeend', toastHtml);
-    const toastElement = toastContainer.lastElementChild;
+	const toastElement = document.createElement('div');
+	toastElement.className = 'toast align-items-center ' + textColorClass + ' bg-' + type + ' border-0';
+	toastElement.setAttribute('role', 'alert');
+	toastElement.setAttribute('aria-live', 'assertive');
+	toastElement.setAttribute('aria-atomic', 'true');
+	const flex = document.createElement('div');
+	flex.className = 'd-flex';
+	const body = document.createElement('div');
+	body.className = 'toast-body';
+	body.textContent = message;
+	const button = document.createElement('button');
+	button.type = 'button';
+	button.className = 'btn-close' + (type === 'warning' ? '' : ' btn-close-white') + ' me-2 m-auto';
+	button.setAttribute('data-bs-dismiss', 'toast');
+	button.setAttribute('aria-label', 'Close');
+	flex.appendChild(body);
+	flex.appendChild(button);
+	toastElement.appendChild(flex);
+	toastContainer.appendChild(toastElement);
     const toast = new bootstrap.Toast(toastElement, {
         autohide: true,
         delay: 4000

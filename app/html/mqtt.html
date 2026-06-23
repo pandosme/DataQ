@@ -30,7 +30,7 @@
             <a href="about.html" class="list-group-item list-group-item-action">About</a>
         </div>
     </div>
-	
+
     <div id="page-content-wrapper" class="p-0">
         <div class="container-fluid">
             <div class="row mt-3">
@@ -40,7 +40,7 @@
                             <h5 class="card-title mb-0">MQTT Connection</h5>
                         </div>
                         <div class="card-body">
-                            
+
                             <div class="form-group">
                                 <label for="mqtt_status">Status</label>
                                 <input id="mqtt_status" type="text" readonly class="form-control-plaintext" value="Status">
@@ -99,7 +99,7 @@
                         </div>
                         <div class="card-body">
                             <p class="text-muted" style="font-size:.85rem">Additional properties to identify this device in a multi-camera system. <strong>Name</strong> is a system device identifier. <strong>Location</strong> is a human-readable identifier such as city, building, or IP address. Leave blank when not used.</p>
-                            
+
                             <div class="form-group">
                                 <label for="payload_name">Name</label>
                                 <input id="payload_name" type="text" class="form-control">
@@ -244,16 +244,16 @@ function ConnectWebSocketClient() {
 	const clientID = app.manifest.acapPackageConf.setup.appName + "-" + app.device.serial + "-" + Math.floor(Math.random() * 1000);
 	if(MQTT_Client)
 		delete MQTT_Client;
-	
+
 	// Use WSS if page is loaded over HTTPS
-	
+
 	var tls = app.settings.tls;
 	if( location.protocol === 'https:')
 		tls = true;
 	var port = tls?app.settings.WSS_Port:app.settings.WS_Port;
 
 	MQTT_Client = new Paho.MQTT.Client(app.mqtt.address, port, clientID);
-	
+
 	MQTT_Client.onConnectionLost = onConnectionLost;
 	var connectionOptions = {
 		useSSL: tls,
@@ -261,12 +261,12 @@ function ConnectWebSocketClient() {
 		onSuccess: onConnect,
 		onFailure: onFailure
 	};
-	
+
 	if(app.mqtt.user && app.mqtt.user.length)
 		connectionOptions.userName = app.mqtt.user;
 	if(app.mqtt.password && app.mqtt.password.length)
 		connectionOptions.password = app.mqtt.password;
-		
+
 	MQTT_Client.connect(connectionOptions);
 }
 
@@ -288,7 +288,7 @@ function onConnectionLost(message) {
 // Function to update button state
 function updateButtonState(mqtt) {
 	const button = $("#connect");
-	
+
 	if (mqtt.connected) {
 		// Connected state - show disconnect button
 		button.text("Disconnect")
@@ -308,14 +308,16 @@ function updateButtonState(mqtt) {
 $("#connect").click(function() {
 	const button = $(this);
 	const isConnected = button.hasClass("btn-danger");
-	
+
 	// Disable button during ajax call
 	button.prop("disabled", true);
 
 	if( isConnected ) {
 		$.ajax({
-			type: "GET",
-			url: 'mqtt?action=disconnect',
+			type: "POST",
+			url: 'mqtt',
+			contentType: 'application/json',
+			data: JSON.stringify({action: 'disconnect'}),
 			dataType: 'text',
 			success: function(response) {
 				showToast("Disconnected","success");
@@ -341,15 +343,16 @@ $("#connect").click(function() {
 			settings.tls = true;
 			settings.verify = true;
 		}
-		
+
 		if(tlsMode === "noverify" ) {
 			settings.tls = true;
 			settings.verify = false;
 		}
 		$.ajax({
-			type: "GET",
-			url: 'mqtt?json=' + encodeURI(JSON.stringify(settings)),
+			type: "POST",
+			url: 'mqtt',
 			contentType: 'application/json',
+			data: JSON.stringify(settings),
 			dataType: 'text',
 			success: function(response) {
 				showToast("Updated and connected","success");
@@ -375,11 +378,12 @@ $("#update_ws").click(function() {
 		WSS_Port: app.settings.WSS_Port,
 		tls: $("#tls").prop("checked")
 	};
-	
+
 	$.ajax({
-		type: "GET",
-		url: 'settings?json=' + encodeURI(JSON.stringify(settings)),
+		type: "POST",
+		url: 'settings',
 		contentType: 'application/json',
+		data: JSON.stringify(settings),
 		dataType: 'text',
 		success: function(response) {
 			showToast("WebSocket settings updated","success");
@@ -389,7 +393,7 @@ $("#update_ws").click(function() {
 			showToast("WebSocket settings update failed","warning");
 		}
 	});
-	
+
 });
 
 
@@ -400,11 +404,12 @@ $("#update_payload").click(function() {
 			location: $('#payload_location').val()
 		}
 	};
-	
+
 	$.ajax({
-		type: "GET",
-		url: 'mqtt?json=' + encodeURI(JSON.stringify(settings)),
+		type: "POST",
+		url: 'mqtt',
 		contentType: 'application/json',
+		data: JSON.stringify(settings),
 		dataType: 'text',
 		success: function(response) {
 			showToast("System properties updated","success");
@@ -417,22 +422,26 @@ $("#update_payload").click(function() {
 
 function showToast(message, type = 'danger') {
     const toastContainer = document.querySelector('.toast-container');
-    
-    // Determine text color class based on type
     const textColorClass = type === 'warning' ? 'text-dark' : 'text-white';
-    
-    // Create the toast HTML structure
-    var toastHtml = '';
-    toastHtml += '<div class="toast align-items-center ' + textColorClass + ' bg-' + type + ' border-0" role="alert" aria-live="assertive" aria-atomic="true">';
-    toastHtml += '   <div class="d-flex">';
-    toastHtml += '     <div class="toast-body">' + message + '</div>';
-    toastHtml += '     <button type="button" class="btn-close' + (type === 'warning' ? '' : ' btn-close-white') + ' me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>';
-    toastHtml += '   </div>';
-    toastHtml += '</div>';
-    
-    // Rest of the function remains the same
-    toastContainer.insertAdjacentHTML('beforeend', toastHtml);
-    const toastElement = toastContainer.lastElementChild;
+	const toastElement = document.createElement('div');
+	toastElement.className = 'toast align-items-center ' + textColorClass + ' bg-' + type + ' border-0';
+	toastElement.setAttribute('role', 'alert');
+	toastElement.setAttribute('aria-live', 'assertive');
+	toastElement.setAttribute('aria-atomic', 'true');
+	const flex = document.createElement('div');
+	flex.className = 'd-flex';
+	const body = document.createElement('div');
+	body.className = 'toast-body';
+	body.textContent = message;
+	const button = document.createElement('button');
+	button.type = 'button';
+	button.className = 'btn-close' + (type === 'warning' ? '' : ' btn-close-white') + ' me-2 m-auto';
+	button.setAttribute('data-bs-dismiss', 'toast');
+	button.setAttribute('aria-label', 'Close');
+	flex.appendChild(body);
+	flex.appendChild(button);
+	toastElement.appendChild(flex);
+	toastContainer.appendChild(toastElement);
     const toast = new bootstrap.Toast(toastElement, {
         autohide: true,
         delay: 4000
@@ -442,7 +451,7 @@ function showToast(message, type = 'danger') {
         this.remove();
     });
 }
-	
+
 </script>
 </body>
 

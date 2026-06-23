@@ -1,10 +1,10 @@
 /*
  * main.c
  * ACAP Object Detection Application Main Entry Point
- * 
+ *
  * Integrates VOD, ObjectDetection, MQTT, and ACAP for real-time detection,
  * tracking, and event publishing.
- * 
+ *
  * Author: Fred Juhlin (2025)
  */
 
@@ -98,39 +98,39 @@ static int     g_occ_interval_sec   = 300;   /* default 5 min               */
 cJSON* ProcessPaths(cJSON* tracker) {
     if (!PathCache)
         PathCache = cJSON_CreateObject();
-    
-    const char* id = cJSON_GetObjectItem(tracker, "id") ? 
+
+    const char* id = cJSON_GetObjectItem(tracker, "id") ?
                      cJSON_GetObjectItem(tracker, "id")->valuestring : 0;
     if (!id) return 0;
 
-    const char* class = cJSON_GetObjectItem(tracker, "class") ? 
+    const char* class = cJSON_GetObjectItem(tracker, "class") ?
                         cJSON_GetObjectItem(tracker, "class")->valuestring : 0;
     if (!class) return 0;
 
-    int active = cJSON_GetObjectItem(tracker, "active") ? 
+    int active = cJSON_GetObjectItem(tracker, "active") ?
                  cJSON_GetObjectItem(tracker, "active")->type == cJSON_True : 0;
 
-    int confidence = cJSON_GetObjectItem(tracker, "confidence") ? 
+    int confidence = cJSON_GetObjectItem(tracker, "confidence") ?
                      cJSON_GetObjectItem(tracker, "confidence")->valueint : 0;
     if (!confidence) return 0;
 
-    double age = cJSON_GetObjectItem(tracker, "age") ? 
+    double age = cJSON_GetObjectItem(tracker, "age") ?
                  cJSON_GetObjectItem(tracker, "age")->valuedouble : 0;
     if (!age) return 0;
 
-    double distance = cJSON_GetObjectItem(tracker, "distance") ? 
+    double distance = cJSON_GetObjectItem(tracker, "distance") ?
                       cJSON_GetObjectItem(tracker, "distance")->valuedouble : 0;
     if (!distance) return 0;
 
     // Get timestamps from tracker (passed from ObjectDetection.c)
-    double currentTimestamp = cJSON_GetObjectItem(tracker, "timestamp") ? 
+    double currentTimestamp = cJSON_GetObjectItem(tracker, "timestamp") ?
                               cJSON_GetObjectItem(tracker, "timestamp")->valuedouble : 0;
-    
-    double previousTimestamp = cJSON_GetObjectItem(tracker, "previousTimestamp") ? 
+
+    double previousTimestamp = cJSON_GetObjectItem(tracker, "previousTimestamp") ?
                                cJSON_GetObjectItem(tracker, "previousTimestamp")->valuedouble : currentTimestamp;
 
     cJSON* path = cJSON_GetObjectItem(PathCache, id);
-    
+
     if (!path && active) {
         // ============================================================
         // NEW PATH CREATION - First time seeing this tracker
@@ -140,22 +140,22 @@ cJSON* ProcessPaths(cJSON* tracker) {
         cJSON_AddNumberToObject(path, "confidence", confidence);
         cJSON_AddNumberToObject(path, "age", age);
         cJSON_AddNumberToObject(path, "distance", distance);
-        
+
         if (cJSON_GetObjectItem(tracker, "color"))
             cJSON_AddStringToObject(path, "color", cJSON_GetObjectItem(tracker, "color")->valuestring);
         if (cJSON_GetObjectItem(tracker, "color2"))
             cJSON_AddStringToObject(path, "color2", cJSON_GetObjectItem(tracker, "color2")->valuestring);
-        
+
         cJSON* dxItem = cJSON_GetObjectItem(tracker, "dx");
         cJSON* dyItem = cJSON_GetObjectItem(tracker, "dy");
         cJSON* bxItem = cJSON_GetObjectItem(tracker, "bx");
         cJSON* byItem = cJSON_GetObjectItem(tracker, "by");
-        
+
         cJSON_AddNumberToObject(path, "dx", dxItem ? dxItem->valuedouble : 0);
         cJSON_AddNumberToObject(path, "dy", dyItem ? dyItem->valuedouble : 0);
         cJSON_AddNumberToObject(path, "bx", bxItem ? bxItem->valuedouble : 0);
         cJSON_AddNumberToObject(path, "by", byItem ? byItem->valuedouble : 0);
-        
+
         double birthTime = cJSON_GetObjectItem(tracker, "birth") ?
                           cJSON_GetObjectItem(tracker, "birth")->valuedouble : currentTimestamp;
         cJSON_AddNumberToObject(path, "timestamp", birthTime);
@@ -173,7 +173,7 @@ cJSON* ProcessPaths(cJSON* tracker) {
             geo_success_birth = GeoSpace_transform(bxItem->valueint, byItem->valueint, &blat, &blon);
 
         cJSON* pathArr = cJSON_CreateArray();
-        
+
         // Position 0: Birth position (bx, by)
         cJSON* pos1 = cJSON_CreateObject();
         cJSON_AddNumberToObject(pos1, "x", bxItem ? bxItem->valuedouble : 0);
@@ -205,12 +205,12 @@ cJSON* ProcessPaths(cJSON* tracker) {
 
         cJSON_AddItemToObject(path, "path", pathArr);
         cJSON_AddItemToObject(PathCache, id, path);
-        
+
         // NO PreviousTimestamp cache operations needed anymore!
-        
+
         return 0;
     }
-    
+
     if (path && active) {
         // ============================================================
         // UPDATE EXISTING PATH - Tracker still active
@@ -219,12 +219,12 @@ cJSON* ProcessPaths(cJSON* tracker) {
         cJSON_ReplaceItemInObject(path, "confidence", cJSON_Duplicate(cJSON_GetObjectItem(tracker, "confidence"), 1));
         cJSON_ReplaceItemInObject(path, "age", cJSON_Duplicate(cJSON_GetObjectItem(tracker, "age"), 1));
         cJSON_ReplaceItemInObject(path, "distance", cJSON_Duplicate(cJSON_GetObjectItem(tracker, "distance"), 1));
-        
+
         if (cJSON_GetObjectItem(tracker, "color"))
             cJSON_ReplaceItemInObject(path, "color", cJSON_Duplicate(cJSON_GetObjectItem(tracker, "color"), 1));
         if (cJSON_GetObjectItem(tracker, "color2"))
             cJSON_ReplaceItemInObject(path, "color2", cJSON_Duplicate(cJSON_GetObjectItem(tracker, "color2"), 1));
-        
+
         cJSON_ReplaceItemInObject(path, "dx", cJSON_Duplicate(cJSON_GetObjectItem(tracker, "dx"), 1));
         cJSON_ReplaceItemInObject(path, "dy", cJSON_Duplicate(cJSON_GetObjectItem(tracker, "dy"), 1));
 
@@ -274,12 +274,12 @@ cJSON* ProcessPaths(cJSON* tracker) {
             cJSON_AddNumberToObject(pos, "lon", round(lon * 1e6) / 1e6);
         }
         cJSON_AddItemToArray(pathArr, pos);
-        
+
         // NO PreviousTimestamp cache operations needed anymore!
-        
+
         return 0;
     }
-    
+
     if (path && !active) {
         // ============================================================
         // FINALIZE PATH - Object exited scene
@@ -324,13 +324,13 @@ cJSON* ProcessPaths(cJSON* tracker) {
 
             return path;
         }
-        
+
         cJSON_DetachItemFromObject(PathCache, id);
         // NO PreviousTimestamp cache cleanup needed anymore!
         cJSON_Delete(path);
         return 0;
     }
-    
+
     return 0;
 }
 
@@ -551,7 +551,7 @@ Check_Anomaly(cJSON* tracker) {
     float age = ageItem ? ageItem->valuedouble : 0;
     if (maxAge && age > maxAge) {
 		snprintf(text, sizeof(text), "Age: %d>%d", (int)age , (int)maxAge);
-		//LOG("%s",text);		
+		//LOG("%s",text);
         cJSON_AddStringToObject(tracker, "anomaly", text);
         Fire_Anomaly();
         return;
@@ -681,7 +681,7 @@ void Publish_Path( cJSON* path ){
     char topic[128];
 	snprintf(topic, sizeof(topic), "path/%s", ACAP_DEVICE_Prop("serial"));
 	MQTT_Publish_JSON(topic, path, 0, 0);
-	
+
     cJSON* statusPaths = ACAP_STATUS_Object("detections", "paths");
 	if (statusPaths) {
 		cJSON_AddItemToArray(statusPaths, cJSON_Duplicate(path, 1));
@@ -1198,7 +1198,7 @@ void Event_Callback(cJSON *event, void* userdata) {
     if (!ignore && strstr(eventTopic->valuestring, "SystemInitializing")) ignore = 1;
     if (!ignore && strstr(eventTopic->valuestring, "Network")) ignore = 1;
     if (!ignore && strstr(eventTopic->valuestring, "xinternal_data")) ignore = 1;
-    if (!ignore && strstr(eventTopic->valuestring, "xinternal_data")) ignore = 1;	
+    if (!ignore && strstr(eventTopic->valuestring, "xinternal_data")) ignore = 1;
     if (ignore) {
         cJSON_Delete(eventTopic);
         return;
@@ -1470,6 +1470,39 @@ static gboolean signal_handler(gpointer user_data) {
     return G_SOURCE_REMOVE;
 }
 
+static void HTTP_ObjectDetections(const ACAP_HTTP_Response response, const ACAP_HTTP_Request request) {
+    const char *method = ACAP_HTTP_Get_Method(request);
+    if (!method) {
+        ACAP_HTTP_Respond_Error(response, 400, "Bad request");
+        return;
+    }
+
+    if (strcmp(method, "GET") != 0) {
+        ACAP_HTTP_Respond_Error(response, 405, "Method Not Allowed - Use GET");
+        return;
+    }
+
+    cJSON *result = cJSON_CreateObject();
+    if (!result) {
+        ACAP_HTTP_Respond_Error(response, 500, "Failed to create response");
+        return;
+    }
+
+    cJSON *object_detection_status = ACAP_STATUS_Group("objectdetection");
+    cJSON *detections_status = ACAP_STATUS_Group("detections");
+    cJSON *labels = ObjectDetection_Labels();
+
+    if (object_detection_status)
+        cJSON_AddItemToObject(result, "objectdetection", cJSON_Duplicate(object_detection_status, 1));
+    if (detections_status)
+        cJSON_AddItemToObject(result, "detections", cJSON_Duplicate(detections_status, 1));
+    if (labels)
+        cJSON_AddItemToObject(result, "labels", labels);
+
+    ACAP_HTTP_Respond_JSON(response, result);
+    cJSON_Delete(result);
+}
+
 void Settings_Updated_Callback(const char* service, cJSON* data) {
 
     char *json = cJSON_PrintUnformatted(data);
@@ -1547,6 +1580,10 @@ void HandleVersionUpdateConfigurations(cJSON* settings) {
         cJSON_AddNumberToObject(aoi, "y2", 950);
         cJSON_AddItemToObject(scene, "aoi", aoi);
     }
+    if (!cJSON_GetObjectItem(scene, "aoi_polygon"))
+        cJSON_AddArrayToObject(scene, "aoi_polygon");
+    if (!cJSON_GetObjectItem(scene, "exclusions"))
+        cJSON_AddArrayToObject(scene, "exclusions");
     if (!cJSON_GetObjectItem(scene, "ignoreClass"))
         cJSON_AddArrayToObject(scene, "ignoreClass");
     if (!cJSON_GetObjectItem(scene, "cutoff")) {
@@ -1621,6 +1658,7 @@ int main(void) {
 
 
 	ACAP_EVENTS_Add_Event("anomaly", "DataQ: Anomaly", 1);
+    ACAP_HTTP_Node("objectdetections", HTTP_ObjectDetections);
     main_loop = g_main_loop_new(NULL, FALSE);
     GSource *signal_source = g_unix_signal_source_new(SIGTERM);
     if (signal_source) {

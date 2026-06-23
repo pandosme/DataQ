@@ -177,6 +177,21 @@ cJSON* ACAP_Init(const char* package, ACAP_Config_Update callback) {
     return settings;
 }
 
+static void redact_mqtt_password(cJSON* root) {
+    if (!root) return;
+    cJSON* mqtt_config = cJSON_GetObjectItem(root, "mqtt");
+    if (!mqtt_config) return;
+    cJSON* password = cJSON_GetObjectItem(mqtt_config, "password");
+    int password_set = password && password->valuestring && strlen(password->valuestring) > 0;
+    if (password)
+        cJSON_ReplaceItemInObject(mqtt_config, "password", cJSON_CreateString(""));
+    cJSON* has_password = cJSON_GetObjectItem(mqtt_config, "passwordSet");
+    if (has_password)
+        cJSON_ReplaceItemInObject(mqtt_config, "passwordSet", cJSON_CreateBool(password_set));
+    else
+        cJSON_AddBoolToObject(mqtt_config, "passwordSet", password_set);
+}
+
 static void
 ACAP_ENDPOINT_app(const ACAP_HTTP_Response response, const ACAP_HTTP_Request request) {
     const char* method = ACAP_HTTP_Get_Method(request);
@@ -184,7 +199,14 @@ ACAP_ENDPOINT_app(const ACAP_HTTP_Response response, const ACAP_HTTP_Request req
         ACAP_HTTP_Respond_Error(response, 405, "Method Not Allowed - Use GET");
         return;
     }
-    ACAP_HTTP_Respond_JSON(response, app);
+    cJSON* public_app = cJSON_Duplicate(app, 1);
+    if (!public_app) {
+        ACAP_HTTP_Respond_Error(response, 500, "Failed to serialize app data");
+        return;
+    }
+    redact_mqtt_password(public_app);
+    ACAP_HTTP_Respond_JSON(response, public_app);
+    cJSON_Delete(public_app);
 }
 
 static void
@@ -430,10 +452,14 @@ void ACAP_HTTP_Process(void) {
     if (fcgi_sock == -1) {
         fcgi_sock = FCGX_OpenSocket(socket_path, 5);
         if (fcgi_sock < 0) {
-            LOG_WARN("Failed to open FCGI socket\n");
+            LOG_WARN("Failed to open FCGI socket %s: %s\n", socket_path, strerror(errno));
             return;
         }
-        chmod(socket_path, 0777);
+        if (chmod(socket_path, 0666) != 0) {
+            LOG_WARN("Failed to set FastCGI socket permissions: %s\n", strerror(errno));
+        } else {
+            LOG("FastCGI socket ready: %s mode=0666\n", socket_path);
+        }
     }
 
     if (FCGX_InitRequest(&fcgi_request, fcgi_sock, 0) != 0) {
@@ -480,6 +506,7 @@ void ACAP_HTTP_Process(void) {
     char pathBuffer[ACAP_MAX_PATH_LENGTH];
     const char* pathOnly = get_path_without_query(uriString, pathBuffer, sizeof(pathBuffer));
     ACAP_HTTP_Callback matching_callback = NULL;
+    LOG("HTTP %s %s\n", requestData.method ? requestData.method : "-", pathOnly ? pathOnly : "-");
 
     for (int i = 0; i < http_node_count; i++) {
         if (strcmp(http_nodes[i].path, pathOnly) == 0) {

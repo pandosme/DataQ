@@ -41,7 +41,7 @@
             <a href="about.html" class="list-group-item list-group-item-action">About</a>
         </div>
     </div>
-    
+
     <div id="page-content-wrapper" class="p-0">
         <div class="container-fluid">
             <div class="col-12">
@@ -301,13 +301,30 @@ function showToast(msg, type) {
     const container = document.querySelector('.toast-container');
     const id = 'toast-' + Date.now();
     const bg = type === 'danger' ? 'bg-danger' : type === 'warning' ? 'bg-warning text-dark' : 'bg-info';
-    container.insertAdjacentHTML('beforeend',
-        `<div id="${id}" class="toast align-items-center text-white ${bg} border-0 show" role="alert">
-            <div class="d-flex">
-                <div class="toast-body">${msg}</div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" onclick="this.closest('.toast').remove()"></button>
-            </div></div>`);
+    const toast = document.createElement('div');
+    toast.id = id;
+    toast.className = 'toast align-items-center text-white ' + bg + ' border-0 show';
+    toast.setAttribute('role', 'alert');
+    const flex = document.createElement('div');
+    flex.className = 'd-flex';
+    const body = document.createElement('div');
+    body.className = 'toast-body';
+    body.textContent = msg;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn-close btn-close-white me-2 m-auto';
+    button.addEventListener('click', () => toast.remove());
+    flex.appendChild(body);
+    flex.appendChild(button);
+    toast.appendChild(flex);
+    container.appendChild(toast);
     setTimeout(() => document.getElementById(id)?.remove(), 4000);
+}
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, function(ch) {
+        return {'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[ch];
+    });
 }
 
 /* ─────────────────────────────────────────────────────────────────── */
@@ -331,8 +348,10 @@ function renderAreaList() {
         const counter = areaCounters[area.name]   || {};
         let rows = '';
         for (const cls of seen)
-            rows += `<tr><td>${cls}</td><td><strong>${counter[cls] ?? 0}</strong></td></tr>`;
+            rows += `<tr><td>${escapeHtml(cls)}</td><td><strong>${escapeHtml(counter[cls] ?? 0)}</strong></td></tr>`;
         if (!rows) rows = '<tr><td colspan="2" class="text-muted small">—</td></tr>';
+
+        const areaName = escapeHtml(area.name);
 
         container.insertAdjacentHTML('beforeend',
             `<div class="card area-card" id="area-card-${area.id}">
@@ -340,7 +359,7 @@ function renderAreaList() {
                      style="border-left:4px solid ${color}; background:#fafafa;">
                     <span>
                         <span class="area-color-swatch" style="background:${color};"></span>
-                        <input type="text" class="area-name-input" value="${area.name}"
+                        <input type="text" class="area-name-input" value="${areaName}"
                                data-area-id="${area.id}">
                     </span>
                     <span class="d-flex align-items-center gap-2">
@@ -389,7 +408,7 @@ function updateAreaCounterTable(areaId, areaName, counter) {
     /* Only render rows for labels that have been seen at least once */
     let html = '';
     for (const cls of seen)
-        html += `<tr><td>${cls}</td><td><strong>${areaCounters[areaName][cls] ?? 0}</strong></td></tr>`;
+        html += `<tr><td>${escapeHtml(cls)}</td><td><strong>${escapeHtml(areaCounters[areaName][cls] ?? 0)}</strong></td></tr>`;
     tbody.innerHTML = html || '<tr><td colspan="2" class="text-muted small">—</td></tr>';
 }
 

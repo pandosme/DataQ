@@ -38,7 +38,7 @@ extern "C" {
 #define ACAP_MAX_HTTP_NODES 32          /**< Maximum number of HTTP endpoint handlers */
 #define ACAP_MAX_PATH_LENGTH 128        /**< Maximum file path length */
 #define ACAP_MAX_PACKAGE_NAME 30        /**< Maximum ACAP package name length */
-#define ACAP_MAX_BUFFER_SIZE 4096       /**< Maximum buffer size for HTTP POST data */
+#define ACAP_MAX_BUFFER_SIZE (48 * 1024 * 1024) /**< Maximum buffer size for HTTP POST data */
 
 /*-----------------------------------------------------
  * Opaque HTTP Types

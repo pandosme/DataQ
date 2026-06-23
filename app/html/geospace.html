@@ -71,7 +71,7 @@
 							<span id="statusMessage">Connected</span>
 						</div>
 					</div>
-					<div id="locationContent" class="location-content">	
+					<div id="locationContent" class="location-content">
 						<div class="card-body" id="settings-form">
 							<!-- Mode selector with descriptions -->
 							<div class="geospace-toolbar mb-3">
@@ -165,6 +165,20 @@ var forcePublish = false;
 let MQTT_Client = null;
 const mqttReconnectInterval = 5000;
 
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, function(ch) {
+        return {'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[ch];
+    });
+}
+
+function setMarkerLabel(element, label) {
+    element.textContent = '';
+    const span = document.createElement('span');
+    span.className = 'marker-label';
+    span.textContent = label;
+    element.appendChild(span);
+}
+
 // Initialization
 $(document).ready(() => {
     initializeApplication();
@@ -194,23 +208,23 @@ async function initializeApplication() {
 async function loadAppConfig() {
     const toggle = document.getElementById('geolocationToggle');
     const content = document.getElementById('locationContent');
-    
+
     try {
         App = await $.ajax({ url: 'app', dataType: 'json' });
         AppState.videoAspect = App.device.aspect || '16:9';
         document.title = App.manifest.acapPackageConf.setup.friendlyName;
         $('.sidebar-heading').text(document.title);
-        
+
         // Store marker data for later initialization
         AppState.savedMarkers = App.settings.markers || [];
 
 		// Initialize switch state from settings
 		const toggle = document.getElementById('pageToggle');
 		const content = document.getElementById('locationContent');
-		
+
 		toggle.checked = App.settings.publish.geospace;
 		content.classList.toggle('hidden', !App.settings.publish.geospace);
-		
+
 		toggle.addEventListener('change', async function() {
 			try {
 				// Update the settings
@@ -227,7 +241,7 @@ async function loadAppConfig() {
                         showToast("Calibration failed", 'danger');
                     }
                 });
-				
+
 				// Show/hide content
 				content.classList.toggle('hidden', !this.checked);
 			} catch (error) {
@@ -255,7 +269,7 @@ async function loadAppConfig() {
 
 async function loadGeolocation() {
     try {
-        const data = await $.ajax({ 
+        const data = await $.ajax({
             url: '/axis-cgi/geolocation/get.cgi',
             dataType: 'xml'
         });
@@ -270,21 +284,21 @@ async function loadGeolocation() {
 function formatLongitude(lng) {
     // Ensure 3 digits before decimal point
     const absLng = Math.abs(lng);
-    const formatted = absLng < 100 ? 
-        (absLng < 10 ? "00" + absLng : "0" + absLng) : 
+    const formatted = absLng < 100 ?
+        (absLng < 10 ? "00" + absLng : "0" + absLng) :
         absLng.toString();
-    
+
     return (lng < 0 ? "-" : "") + formatted;
 }
 
 function saveMapLocation() {
     if (AppState.currentMode !== 'editMarkers') return;
-    
+
     const center = AppState.map.getCenter();
     // Format as DD (Decimal Degrees) with proper padding
     const lat = center.lat.toFixed(8);
     const lng = formatLongitude(center.lng.toFixed(8));
-    
+
     $.ajax({
         type: "GET",
         url: '/axis-cgi/geolocation/set.cgi',
@@ -311,10 +325,10 @@ function saveMapLocation() {
 
 function initializeMap() {
     if (!document.getElementById('map')) return;
-    
+
     // Set initial zoom level based on coordinates
     const zoomLevel = (AppState.geoData.lat === 0 && AppState.geoData.lng === 0) ? 3 : 18;
-    
+
     AppState.map = L.map('map', {
         maxZoom: 22,
         zoomControl: true
@@ -325,28 +339,28 @@ function initializeMap() {
         maxZoom: 22,
         maxNativeZoom: 19
     }).addTo(AppState.map);
-    
+
     // Note: initializeSavedMarkers() is called after video is ready
 }
 
 function initializeSavedMarkers() {
     if (!AppState.savedMarkers || AppState.savedMarkers.length === 0) return;
-    
+
     AppState.savedMarkers.forEach(markerData => {
         const [normalizedX, normalizedY, lat, lng] = markerData;
         AppState.nextMarkerId++;
         const label = AppState.nextMarkerId;
-        
+
         // Create video marker element
         const videoMarker = document.createElement('div');
         videoMarker.className = 'marker';
-        videoMarker.innerHTML = '<span class="marker-label">' + label + '</span>';
+        setMarkerLabel(videoMarker, label);
         videoMarker.style.display = 'none';  // Initially hidden
-        
+
         // Position will be calculated later by updateAllMarkerPositions()
         videoMarker.style.left = '0px';
         videoMarker.style.top = '0px';
-        
+
         // Create map marker with numbered tooltip
         const mapMarker = L.marker([lat, lng], {
             draggable: true
@@ -357,7 +371,7 @@ function initializeSavedMarkers() {
             className: 'marker-tooltip',
             offset: [0, -10]
         });
-        
+
         // Store both markers
         const id = 'marker-' + label;
         AppState.markers.set(id, {
@@ -399,8 +413,8 @@ function initializeVideo() {
 	}
 
     const secureConnection = location.protocol === 'https:' ? ' secure=true' : '';
-    const player = '<media-stream-player hostname="' + window.location.hostname + '" ' + 
-        secureConnection + ' format="RTP_H264" compression="40" audio="0" resolution="' + 
+    const player = '<media-stream-player hostname="' + window.location.hostname + '" ' +
+        secureConnection + ' format="RTP_H264" compression="40" audio="0" resolution="' +
         videoWidth + 'x' + videoHeight + '" variant="basic" autoplay></media-stream-player>';
 
     // Update only the video div instead of video-view
@@ -417,17 +431,17 @@ function createMarker(viewX, viewY) {
     AppState.nextMarkerId++;
     const label = AppState.nextMarkerId;
     const id = 'marker-' + label;
-    
+
     // Create video marker element
     const videoMarker = document.createElement('div');
     videoMarker.className = 'marker';
-    videoMarker.innerHTML = '<span class="marker-label">' + label + '</span>';
-    
+    setMarkerLabel(videoMarker, label);
+
     // Convert normalized coordinates back to view coordinates for display
     const viewCoords = normalizedToViewCoords(normalized.x, normalized.y, videoElement);
     videoMarker.style.left = viewCoords.x + 'px';
     videoMarker.style.top = viewCoords.y + 'px';
-    
+
     // Create map marker with numbered popup
     const mapMarker = L.marker(AppState.map.getCenter(), {
         draggable: true
@@ -438,7 +452,7 @@ function createMarker(viewX, viewY) {
         className: 'marker-tooltip',
         offset: [0, -10]
     });
-    
+
     // Store normalized coordinates
     AppState.markers.set(id, {
         id: id,
@@ -467,7 +481,7 @@ function selectMarker(id) {
 
 function deleteMarker(id) {
     if (!AppState.markers.has(id)) return;
-    
+
     const marker = AppState.markers.get(id);
     marker.videoMarker.remove();
     AppState.map.removeLayer(marker.mapMarker);
@@ -491,7 +505,7 @@ function calculateHomography(points) {
         const B = math.matrix(points.flatMap(p => [p.map.lng, p.map.lat]));
 
         // Solve H using LU decomposition
-        const H = math.lusolve(math.multiply(math.transpose(A), A), 
+        const H = math.lusolve(math.multiply(math.transpose(A), A),
                              math.multiply(math.transpose(A), B));
 
         // Convert to array and normalize
@@ -534,14 +548,14 @@ function saveMarkers() {
         showToast('Need at least 4 markers to calibrate (currently ' + AppState.markers.size + ')', 'warning');
         return;
     }
-    
+
     // Disable save button during operation
     $('#saveBtn').prop('disabled', true).text('Saving...');
-    
+
     // First save markers as before
     const markerArray = [];
     const points = [];
-    
+
     AppState.markers.forEach(marker => {
         const latlng = marker.mapMarker.getLatLng();
         markerArray.push([
@@ -550,7 +564,7 @@ function saveMarkers() {
             latlng.lat,
             latlng.lng
         ]);
-        
+
         // Create points array for homography
         points.push({
             video: {
@@ -563,12 +577,12 @@ function saveMarkers() {
             }
         });
     });
-    
+
     // First save markers
     const markersPayload = {
         "markers": markerArray
     };
-    
+
     $.ajax({
         type: "POST",
         url: 'settings',
@@ -581,7 +595,7 @@ function saveMarkers() {
                 const matrixPayload = {
                     "matrix": matrix
                 };
-                
+
                 $.ajax({
                     type: "POST",
                     url: 'settings',
@@ -617,7 +631,7 @@ function createVideoMarkerElement(id, x, y) {
     marker.className = 'marker';
     marker.style.left = x + 'px';
     marker.style.top = y + 'px';
-    marker.innerHTML = '<span class="marker-label">' + AppState.nextMarkerId + '</span>';
+    setMarkerLabel(marker, AppState.nextMarkerId);
     document.getElementById('video-view').appendChild(marker);
     return marker;
 }
@@ -654,9 +668,9 @@ function updateCalibrationStatus() {
     const count = AppState.markers.size;
     const badge = document.getElementById('markerCountBadge');
     const hint = document.getElementById('calibrationHint');
-    
+
     badge.textContent = count + (count === 1 ? ' marker' : ' markers');
-    
+
     if (count === 0) {
         badge.className = 'badge bg-secondary';
         hint.textContent = 'Click on the video to place reference markers.';
@@ -685,7 +699,7 @@ function setMode(mode) {
     AppState.currentMode = mode;
 
     $('.mode-button').removeClass('active').css('background-color', '');
-    
+
     // Hide all markers first
     AppState.markers.forEach(marker => {
         marker.videoMarker.style.display = 'none';
@@ -720,7 +734,7 @@ function setMode(mode) {
 				marker.mapMarker.remove();
 			});
             break;
-            
+
         case 'editMarkers':
             $('#editMarkersModeBtn').addClass('active');
             videoView.classList.add('cursor-crosshair');
@@ -737,7 +751,7 @@ function setMode(mode) {
             setupMapMarkerHandlers();
             updateCalibrationStatus();
             break;
-            
+
 		case 'validate':
 			$('#validateCalibrationModeBtn').addClass('active');
             videoView.classList.add('cursor-crosshair');
@@ -775,11 +789,11 @@ function setupVideoMarkerHandlers() {
     $('#video-view').off('mousedown contextmenu').on({
         'mousedown': function(e) {
             if (AppState.currentMode !== 'editMarkers') return;
-            
+
             const rect = this.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
-            
+
             const existingMarker = findMarkerAtPosition(x, y);
             if (existingMarker) {
                 if (e.button === 2) {  // Right click
@@ -804,31 +818,31 @@ function setupVideoMarkerHandlers() {
 
 function startDragging(marker, startEvent) {
     let isDragging = true;
-    
+
     function onMouseMove(e) {
         if (!isDragging) return;
-        
+
         const videoElement = document.getElementById('video-view');
         const rect = videoElement.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
-        
+
         // Update normalized coordinates
         const normalized = viewToNormalizedCoords(x, y, videoElement);
         marker.normalizedX = normalized.x;
         marker.normalizedY = normalized.y;
-        
+
         // Update display position
         marker.videoMarker.style.left = x + 'px';
         marker.videoMarker.style.top = y + 'px';
     }
-    
+
     function onMouseUp() {
         isDragging = false;
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
     }
-    
+
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
 }
@@ -840,7 +854,7 @@ function setupMapMarkerHandlers() {
         marker.mapMarker.on('dragend', function(e) {
             const latlng = e.target.getLatLng();
             console.log('Map marker moved:', latlng);
-            
+
             // Store the new position
             marker.mapMarker.setLatLng(latlng);
         });
@@ -850,7 +864,7 @@ function setupMapMarkerHandlers() {
 function setupValidationHandlers() {
     $('#video-view').off('click').on('click', function(e) {
         if (AppState.currentMode !== 'validate') return;
-        
+
         const rect = this.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
@@ -860,10 +874,10 @@ function setupValidationHandlers() {
         crosshair.classList.remove('d-none');
         crosshair.style.left = x + 'px';
         crosshair.style.top = y + 'px';
-        
+
         // Get normalized coordinates
         const normalized = viewToNormalizedCoords(x, y, this);
-        
+
         // Send coordinates for validation
         var url = 'geospace?x=' + normalized.x + '&y=' + normalized.y;
         $.ajax({
@@ -875,7 +889,7 @@ function setupValidationHandlers() {
                 if(AppState.validationMarker) {
                     AppState.map.removeLayer(AppState.validationMarker);
                 }
-                
+
                 // Create new validation marker and pan to it
                 AppState.validationMarker = L.marker([response.lat, response.lon], {
                     icon: L.divIcon({className: 'validation-marker'})
@@ -892,18 +906,18 @@ function setupValidationHandlers() {
 // Helper Functions
 function getVideoAspectRatio() {
     const videoElement = document.getElementById('video');
-    
+
     // If video metadata is loaded, use actual video dimensions
     if (videoElement.videoWidth && videoElement.videoHeight) {
         return videoElement.videoWidth / videoElement.videoHeight;
     }
-    
+
     // Fallback to configured aspect ratio from AppState
     if (AppState.videoAspect) {
         const [width, height] = AppState.videoAspect.split(':').map(Number);
         return width / height;
     }
-    
+
     // Default to 16:9 if no other information is available
     return 16/9;
 }
@@ -912,16 +926,16 @@ function viewToNormalizedCoords(viewX, viewY, videoElement) {
     const rect = videoElement.getBoundingClientRect();
     const videoAspect = getVideoAspectRatio();
     const containerAspect = rect.width / rect.height;
-    
+
     let effectiveWidth = rect.width;
     let effectiveHeight = rect.height;
-    
+
     if (containerAspect > videoAspect) {
         effectiveWidth = effectiveHeight * videoAspect;
     } else {
         effectiveHeight = effectiveWidth / videoAspect;
     }
-    
+
     return {
         x: Math.round((viewX / effectiveWidth) * 1000),
         y: Math.round((viewY / effectiveHeight) * 1000)
@@ -932,11 +946,11 @@ function normalizedToViewCoords(normalizedX, normalizedY, videoElement) {
     // Get the actual video element, not the container
     const video = document.getElementById('video');
     const rect = video.getBoundingClientRect();
-    
+
     // Calculate scaling factors for both dimensions
     const scaleX = rect.width / 1000;
     const scaleY = rect.height / 1000;
-    
+
     // Apply scaling uniformly
     return {
         x: normalizedX * scaleX,
@@ -950,38 +964,38 @@ function setupResizeHandler() {
             updateAllMarkerPositions();
         }
     });
-    
+
     // Handle window zoom changes
     window.addEventListener('resize', () => {
         updateAllMarkerPositions();
     });
-    
+
     // Handle browser zoom level changes
     window.visualViewport.addEventListener('resize', () => {
         updateAllMarkerPositions();
     });
-    
+
     // Observe video container for size changes
     resizeObserver.observe(document.getElementById('video-view'));
-    
+
     // Initial position update
     updateAllMarkerPositions();
 }
 
 function updateAllMarkerPositions() {
     if (AppState.markers.size === 0) return;
-    
+
     const video = document.getElementById('video');
     if (!video) return;  // Video not ready yet
-    
+
     const markerCanvas = document.getElementById('marker-canvas');
-    
+
     // Ensure marker canvas matches video dimensions exactly
     if (markerCanvas) {
         markerCanvas.style.width = video.offsetWidth + 'px';
         markerCanvas.style.height = video.offsetHeight + 'px';
     }
-    
+
     AppState.markers.forEach(marker => {
         const viewCoords = normalizedToViewCoords(
             marker.normalizedX,
@@ -1017,18 +1031,18 @@ function findMarkerAtPosition(x, y) {
         const markerX = rect.left + rect.width/2;
         const markerY = rect.top + rect.height/2;
         const viewRect = document.getElementById('video-view').getBoundingClientRect();
-        
+
         // Convert to video-view relative coordinates
         const relativeMarkerX = markerX - viewRect.left;
         const relativeMarkerY = markerY - viewRect.top;
-        
-        return Math.abs(relativeMarkerX - x) < 10 && 
+
+        return Math.abs(relativeMarkerX - x) < 10 &&
                Math.abs(relativeMarkerY - y) < 10;
     });
 }
 
 function findMapMarker(latlng) {
-    return Array.from(AppState.markers.values()).find(marker => 
+    return Array.from(AppState.markers.values()).find(marker =>
         marker.mapMarker.getLatLng().distanceTo(latlng) < 10
     );
 }
@@ -1036,14 +1050,14 @@ function findMapMarker(latlng) {
 function updateMarkerPosition(id, viewX, viewY) {
     const marker = AppState.markers.get(id);
     if (!marker) return;
-    
+
     const videoElement = document.getElementById('video-view');
     const normalized = viewToNormalizedCoords(viewX, viewY, videoElement);
-    
+
     // Update stored normalized coordinates
     marker.normalizedX = normalized.x;
     marker.normalizedY = normalized.y;
-    
+
     // Update display position
     const viewCoords = normalizedToViewCoords(normalized.x, normalized.y, videoElement);
     marker.videoMarker.style.left = viewCoords.x + 'px';
@@ -1060,16 +1074,16 @@ function ConnectWebSocketClient() {
 	const clientID = "WS-" + App.manifest.acapPackageConf.setup.appName + "-" + App.device.serial + "-" + Math.floor(Math.random() * 10000);
 	if(MQTT_Client)
 		delete MQTT_Client;
-	
+
 	// Use WSS if page is loaded over HTTPS
-	
+
 	var tls = App.settings.tls;
 	if( location.protocol === 'https:')
 		tls = true;
 	var port = tls?App.settings.WSS_Port:App.settings.WS_Port;
 
 	MQTT_Client = new Paho.MQTT.Client(App.mqtt.address, port, clientID);
-	
+
 	MQTT_Client.onConnectionLost = onConnectionLost;
 	MQTT_Client.onMessageArrived = onMessageArrived;
 	var connectionOptions = {
@@ -1078,12 +1092,12 @@ function ConnectWebSocketClient() {
 		onSuccess: onConnect,
 		onFailure: onFailure
 	};
-	
+
 	if(App.mqtt.user && App.mqtt.user.length)
 		connectionOptions.userName = App.mqtt.user;
 	if(App.mqtt.password && App.mqtt.password.length)
 		connectionOptions.password = App.mqtt.password;
-		
+
 	MQTT_Client.connect(connectionOptions);
 }
 
@@ -1114,7 +1128,7 @@ function onConnect() {
 }
 
 function onFailure(message) {
-	updateConnectionStatus('disconnected');	
+	updateConnectionStatus('disconnected');
 	showToast( message.errorMessage + "Check WebSocket connection in MQTT Settings","warning");
 }
 
@@ -1150,7 +1164,7 @@ function onMessageArrived(message) {
 		if (detection.age > 3600)
 			age = parseInt(detection.age/3600) + "h";
 	}
-	
+
 	if( topic === "geospace" ) {
 		if( !App.settings.publish.geospace ) return;
 		if (detection.active ) {
@@ -1159,7 +1173,7 @@ function onMessageArrived(message) {
 				marker.setLatLng([detection.lat, detection.lon]);
 				marker.setIcon(L.divIcon({
 					className: 'tracker-marker',
-					html: '<div class="tracker-id">' + detection.class + " " + age + '</div>',
+                    html: '<div class="tracker-id">' + escapeHtml(detection.class || '') + ' ' + escapeHtml(age) + '</div>',
 					iconSize: [0, 0],
 					iconAnchor: [0, 0]
 				}));
@@ -1168,12 +1182,12 @@ function onMessageArrived(message) {
 				const marker = L.marker([detection.lat, detection.lon], {
 					icon: L.divIcon({
 						className: 'tracker-marker',
-						html: '<div class="tracker-id">' + detection.class + " " + age + '</div>',
+                        html: '<div class="tracker-id">' + escapeHtml(detection.class || '') + ' ' + escapeHtml(age) + '</div>',
 						iconSize: [0, 0],
 						iconAnchor: [0, 0]
 					})
 				}).addTo(AppState.map);
-				
+
 				AppState.trackers.set(detection.id, marker);
 			}
 		} else {
@@ -1191,11 +1205,11 @@ function onMessageArrived(message) {
 			detections[detection.id] = detection;
 		else
 			delete detections[detection.id];
-		
+
 		var ctx = document.getElementById('detection-canvas').getContext("2d");
 		if (!ctx)
 			return;
-			
+
 		ctx.beginPath();
 		ctx.clearRect(0, 0, 1000, 1000);
 		ctx.stroke();
@@ -1206,13 +1220,13 @@ function onMessageArrived(message) {
 		ctx.fillStyle = '#FFFF00';
 
 		// Clear existing table rows
-		
+
 		ctx.beginPath();
 		for( var id in detections) {
 			detection = detections[id];
 			// Skip invalid detections
 			if (typeof detection !== 'object' || detection === null) return;
-			
+
 			// Draw on canvas
 			ctx.moveTo(detection.bx,detection.by);
 			ctx.lineTo(detection.cx,detection.cy);
@@ -1220,7 +1234,7 @@ function onMessageArrived(message) {
 			var text = detection.class || "Undefined";
 			if (detection.hasOwnProperty("confidence"))
 				text += " " + detection.confidence;
-				
+
 			var age = "";
 			if (detection.hasOwnProperty("age")) {
 				age = detection.age.toFixed(1) + "s";
@@ -1239,15 +1253,24 @@ function onMessageArrived(message) {
 // UI Functions
 function showToast(message, type) {
     type = type || 'info';
-    
-    var toastHtml = '<div class="toast align-items-center text-white bg-' + type + ' border-0" role="alert">' +
-        '<div class="d-flex"><div class="toast-body">' + message + '</div>' +
-        '<button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>' +
-        '</div></div>';
-    
     var $container = $('.toast-container');
-    var $toast = $(toastHtml);
-    
+    var toast = document.createElement('div');
+    toast.className = 'toast align-items-center text-white bg-' + type + ' border-0';
+    toast.setAttribute('role', 'alert');
+    var flex = document.createElement('div');
+    flex.className = 'd-flex';
+    var body = document.createElement('div');
+    body.className = 'toast-body';
+    body.textContent = message;
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn-close btn-close-white me-2 m-auto';
+    button.setAttribute('data-bs-dismiss', 'toast');
+    flex.appendChild(body);
+    flex.appendChild(button);
+    toast.appendChild(flex);
+    var $toast = $(toast);
+
     $container.append($toast);
     $toast.toast({ delay: 4000 }).toast('show');
     $toast.on('hidden.bs.toast', function() { $(this).remove(); });

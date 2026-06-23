@@ -300,6 +300,15 @@ For VMS (Video Mananagement Systems"), a stateful event "anomaly" will be fired 
 
 ## History
 
+### 3.3.0 Jun 23, 2026
+
+**Security and Stability Patches**
+- Hardened MQTT and certificate handling: MQTT passwords are redacted from public settings responses, JSON endpoints reject unsupported methods/content types more consistently, and certificate/private-key material is written with stricter file permissions.
+- Increased HTTP POST capacity for larger settings payloads and tightened FastCGI socket permissions/logging.
+- Updated the Detections page with polygon AOI and exclusion-zone filtering while preserving compatibility with the old rectangular AOI settings.
+- Reduced DOM injection risk in several UI pages by replacing dynamic HTML string insertion with DOM/text APIs for table rows, messages, and toast content.
+- Added stale tracker cleanup from [InSupportMH](https://github.com/InSupportMH): when VOD silently drops a track without an `active=false` frame, DataQ now publishes one terminal tracker update and removes the stale cache entry instead of republishing frozen coordinates indefinitely.
+
 ### 3.2.0 Apr 10, 2026
 
 **Multi-area Occupancy** *(occupancy_multi_area branch)*

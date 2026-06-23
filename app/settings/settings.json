@@ -26,6 +26,8 @@
 		"minHeight": 10,
 		"maxWidth": 800,
 		"maxHeight": 800,
+		"aoi_polygon": [],
+		"exclusions": [],
 		"aoi": {
 			"x1": 50,
 			"y1": 50,
