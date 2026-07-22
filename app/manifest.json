@@ -1,14 +1,15 @@
 {
-    "schemaVersion": "1.7.3",
+	"schemaVersion": "1.10.0",
     "acapPackageConf": {
         "setup": {
             "friendlyName": "DataQ",
             "appName": "DataQ",
-            "vendor": "Fred Juhlin",
-            "embeddedSdkVersion": "3.0",
+            "vendor": "fred@juhlin.me",
+			"embeddedSdkVersion": "3.0",
             "vendorUrl": "https://pandosme.github.io",
             "runMode": "respawn",
-            "version": "3.3.0"
+			"version": "3.3.0"
+
         },
         "configuration": {
 			"settingPage": "index.html",
