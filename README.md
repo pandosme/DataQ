@@ -44,6 +44,125 @@ DataQ makes integration and solution development easier by publishing purpose-bu
 
 ***
 
+## Device Data Hub migration spike
+
+The `spike/device-data-hub` branch builds a co-installable shadow package named
+**DataQ DDH**. It consumes `com.axis.scene.frame.v1` and
+`com.axis.scene.object_track.v1` through the released Device Data Hub API instead
+of requesting direct Video Object Detection D-Bus access. The spike requires
+ACAP Native SDK 12.11 and AXIS OS 12.11.72 or later on a product that supports
+Device Data Hub.
+
+The existing DataQ package can remain installed as the baseline:
+
+- DataQ publishes below `dataq/#`.
+- DataQ DDH publishes below `dataq-ddh/#` and uses separate settings, local data,
+  HTTP routes, events, and MQTT client identity.
+- Only detections are enabled by default in DataQ DDH. Tracker, path, occupancy,
+  geospace, anomaly, image, and event publishing remain disabled until explicitly
+  selected for a later comparison.
+
+Device Data Hub callbacks are copied onto DataQ's GLib main context. Live
+`frame.v1` detections own the active-object cache. Classless frames may update an
+already classified object, but cannot create one. `TrackEnded` and `Rename` frame
+events remove cached IDs immediately. Terminal `object_track.v1` summaries can
+enrich and remove matching IDs through their nested `parts`, but are never added
+to the active cache.
+
+After 500 ms without a live frame update, DataQ DDH republishes cached objects
+once per second with `"synthetic": true`. This best-effort retention maintains
+stationary detections without updating movement, distance, direction, or path
+state. Objects with no update or terminal event for 30 seconds are emitted once
+as inactive and removed. Disconnects, resets, and deleted topic instances clear
+the complete cache. The cache retains at most 256 objects and reports evictions,
+explicit endings, stale removals, frame samples, and terminal summaries at
+`/local/dataq_ddh/objectdetections`.
+
+On AXIS OS 12.11.77, classified scene records did not appear until the camera was
+rebooted. After reboot, both live frames and terminal summaries included classes.
+The adapter reports `classification_status: "receiving-classified"` after the
+first usable record and `"unclassified-only"` when only classless records arrive.
+
+Build both architectures with:
+
+```sh
+./build.sh
+```
+
+For a side-by-side MQTT capture, configure both packages for the same broker and
+run two subscribers:
+
+```sh
+mosquitto_sub -F '{"captured_at":"%I","topic":"%t","payload":%p}' \
+  -t 'dataq/detections/+' > baseline.jsonl
+mosquitto_sub -F '{"captured_at":"%I","topic":"%t","payload":%p}' \
+  -t 'dataq-ddh/detections/+' > shadow.jsonl
+```
+
+Compare the streams with:
+
+```sh
+python3 scripts/compare_detections.py --minimum-iou 0.25 baseline.jsonl shadow.jsonl
+```
+
+For live inspection, install Paho MQTT 2.x and run the monitor with its anonymous
+broker defaults (`mqtt.internal:1883`, front camera `B8A44F3024BB`):
+
+```sh
+python3 -m pip install -r scripts/requirements.txt
+python3 scripts/monitor_detections.py
+```
+
+Aligned scenes remain silent. Human-readable differences go to stdout, while
+connection, malformed-payload, stale-source, capture, and shutdown summaries go
+to stderr. Stop with Ctrl+C. Emit machine-readable JSONL and retain replayable
+raw messages with:
+
+```sh
+python3 scripts/monitor_detections.py --json --capture-dir captures/front
+python3 scripts/compare_detections.py \
+  captures/front/baseline.jsonl captures/front/shadow.jsonl
+```
+
+The monitor compares the latest fresh scene snapshots rather than MQTT message
+cadence, and reevaluates differences only when a new snapshot arrives. By
+default both snapshots must be no more than 750 ms old, a difference must occur
+in at least two distinct comparisons over one second, and persistent differences
+repeat every five seconds. Inactive terminal detections, invalid boxes, and the
+expected DDH synthetic-state flag are excluded from normal discrepancy output.
+Use `--include-inactive` or `--include-synthetic-differences` when investigating
+lifecycle details. Detection-topic silence is expected for an empty scene, so
+stale-source warnings are disabled by default; use `--stale-seconds` to enable
+them when diagnosing MQTT transport.
+
+Objects associate at IoU 0.25. Position differs when IoU is below 0.75 or center
+distance exceeds 15 points in the normalized `[0,1000]` scene. IoU-only
+differences are ignored for boxes within five points of a horizontal image edge
+or no wider than 15 points, where small rounding changes distort IoU. Tune these
+with `--window-ms`, `--hold-ms`, `--minimum-observations`, `--repeat-seconds`,
+`--match-iou`, `--position-iou`, `--center-threshold`, `--edge-margin`,
+`--narrow-width`, and `--stale-seconds`; use `--help` for broker, serial, and
+topic-prefix overrides.
+
+The shadow package uses the technical application name `dataq_ddh` because
+Device Data Hub maps it to the lowercase Linux user `acap-dataq_ddh`.
+
+The comparator aligns timestamped messages within 750 ms by default, pairs only
+the remaining untimestamped messages by position, and matches objects by
+normalized class and bounding-box intersection-over-union. It reports unpaired
+messages and detections rather than silently discarding them. Object IDs are
+intentionally not compared because direct VOD numeric IDs and DDH UUIDs are
+source-local. The live monitor may display those IDs to identify each side, but
+never uses equality between them. Confidence, age, idle time, direction,
+distance, and timestamps are also excluded from live difference reporting. Use
+`--window-ms` and `--minimum-iou` to tune offline matching.
+
+This branch does not adopt the older `libmdb` Message Broker API. Axis marks that
+API as beta and removes it in AXIS OS 13; Device Data Hub is its supported
+replacement.
+
+***
+
 ### Pre-compiled download
 
 If you are only after a pre-compiled version, [Download Latest ZIP](https://www.dropbox.com/scl/fi/03gzooytc2cakmrl7kh5r/DataQ.zip?rlkey=3zx1mhin5obw6aaqz0sv5a142&dl=1)<br>

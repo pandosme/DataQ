@@ -5,7 +5,7 @@
 	"user":"",
 	"password":"",
 	"clientID":"",
-	"preTopic":"dataq",
+	"preTopic":"dataq-ddh",
 	"tls": true,
 	"verify": true,
 	"lwt":null,

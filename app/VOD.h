@@ -15,7 +15,7 @@ typedef struct {
 } vod_attribute_t;
 
 typedef struct {
-    char id[32];        // String version of unique id
+    char id[64];        // String version of unique id
     float confidence;   // Maximum class score during tracking
     int type;           // Class type (id) of maximum confidence
     char class_name[64];// Class name of the type
@@ -25,8 +25,15 @@ typedef struct {
     bool active;        // True if tracked, false if deleted
 } vod_object_t;
 
+typedef enum {
+    VOD_BATCH_REAL,
+    VOD_BATCH_SYNTHETIC,
+    VOD_BATCH_RESET
+} vod_batch_origin_t;
+
 // Callback signature: called with list of current objects
-typedef void (*vod_callback_t)(const vod_object_t *objects, size_t num_objects, void *user_data);
+typedef void (*vod_callback_t)(const vod_object_t *objects, size_t num_objects,
+                               vod_batch_origin_t origin, void *user_data);
 
 /**
  * Initialize the VOD object detection wrapper.

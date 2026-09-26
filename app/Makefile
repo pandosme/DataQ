@@ -1,5 +1,5 @@
-PROG1	= DataQ
-OBJS1	= main.c ACAP.c cJSON.c MQTT.c CERTS.c ObjectDetection.c VOD.c video_object_detection.pb-c.c protobuf-c.c  GeoSpace.c  Stitch.c\
+PROG1	= dataq
+OBJS1	= main.c ACAP.c cJSON.c MQTT.c CERTS.c ObjectDetection.c VOD_DDH.c GeoSpace.c Stitch.c\
         linmatrix/src/lm_log.c \
         linmatrix/src/lm_assert.c \
         linmatrix/src/lm_err.c \
@@ -18,7 +18,7 @@ OBJS1	= main.c ACAP.c cJSON.c MQTT.c CERTS.c ObjectDetection.c VOD.c video_objec
         linmatrix/src/lm_symm_eigen.c
 PROGS	= $(PROG1) 
 
-PKGS = glib-2.0 gio-2.0 fcgi axevent axparameter libcurl video-object-detection-subscriber vdo
+PKGS = glib-2.0 gio-2.0 fcgi axevent axparameter libcurl device-data-hub-client-c vdo
 
 CFLAGS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --cflags $(PKGS))
 LDLIBS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs $(PKGS))

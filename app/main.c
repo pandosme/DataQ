@@ -34,7 +34,7 @@
 #include "Stitch.h"
 // VOD.h removed - label list sourced from ObjectDetection_Labels()
 
-#define APP_PACKAGE "DataQ"
+#define APP_PACKAGE "dataq"
 
 #define LOG(fmt, args...)      { syslog(LOG_INFO, fmt, ## args); printf(fmt, ## args); }
 #define LOG_WARN(fmt, args...) { syslog(LOG_WARNING, fmt, ## args); printf(fmt, ## args); }
@@ -1491,6 +1491,7 @@ static void HTTP_ObjectDetections(const ACAP_HTTP_Response response, const ACAP_
     cJSON *object_detection_status = ACAP_STATUS_Group("objectdetection");
     cJSON *detections_status = ACAP_STATUS_Group("detections");
     cJSON *labels = ObjectDetection_Labels();
+    cJSON *source_status = ObjectDetection_Source_Status();
 
     if (object_detection_status)
         cJSON_AddItemToObject(result, "objectdetection", cJSON_Duplicate(object_detection_status, 1));
@@ -1498,6 +1499,8 @@ static void HTTP_ObjectDetections(const ACAP_HTTP_Response response, const ACAP_
         cJSON_AddItemToObject(result, "detections", cJSON_Duplicate(detections_status, 1));
     if (labels)
         cJSON_AddItemToObject(result, "labels", labels);
+    if (source_status)
+        cJSON_AddItemToObject(result, "source", source_status);
 
     ACAP_HTTP_Respond_JSON(response, result);
     cJSON_Delete(result);
@@ -1675,8 +1678,10 @@ int main(void) {
 
     LOG("Terminating and cleaning up %s\n", APP_PACKAGE);
     Main_MQTT_Status(MQTT_DISCONNECTING);
+    ObjectDetection_Shutdown();
+    LOG("Object detection cleanup complete\n");
     MQTT_Cleanup();
-    ACAP_Cleanup();
+    LOG("MQTT cleanup complete\n");
     closelog();
     return 0;
 }

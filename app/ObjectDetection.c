@@ -77,7 +77,7 @@ static const NameMapEntry name_map[] = {
 #define NAME_MAP_SIZE (sizeof(name_map) / sizeof(name_map[0]))
 
 typedef struct {
-    char id[32];
+    char id[64];
     char class_name[64];
     int confidence;
     int x, y, w, h;
@@ -105,6 +105,7 @@ typedef struct {
     od_attribute_t *attributes; // Dynamically allocated array
     size_t num_attributes;      // Number of attributes
     bool active;
+    bool synthetic;
 } detection_cache_entry_t;
 
 // ---- THREAD SAFETY ----
@@ -484,6 +485,8 @@ static cJSON* build_detections_json(GHashTable *cache, GList **tracker_list) {
         cJSON_AddNumberToObject(obj, "timestamp", entry->timestamp);
         cJSON_AddNumberToObject(obj, "idle", entry->idle_duration);
         cJSON_AddStringToObject(obj, "id", entry->id);
+        if (entry->synthetic)
+            cJSON_AddBoolToObject(obj, "synthetic", true);
         if( config_max_idle && entry->idle_duration > config_max_idle && entry->active ) {
             cJSON_AddBoolToObject(obj, "active", 0);
             entry->sleep = true;
@@ -632,7 +635,13 @@ void distinct_direction_change(detection_cache_entry_t *entry, int cx, int cy) {
     entry->prev_angle = cur_angle;
 }
 
-static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user_data) {
+static void VOD_Data(const vod_object_t *objects, size_t num_objects,
+                     vod_batch_origin_t origin, void *user_data) {
+    if (origin == VOD_BATCH_RESET) {
+        ObjectDetection_Reset();
+        return;
+    }
+    bool synthetic = origin == VOD_BATCH_SYNTHETIC;
     g_mutex_lock(&detection_mutex);
     if (!detectionCache) {
         detectionCache = g_hash_table_new_full(g_str_hash, g_str_equal, free, free_detection_cache_entry);
@@ -746,13 +755,14 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
             entry->idle_start_time = now;
             entry->attributes = clone_attributes(obj->attributes, obj->num_attributes, &entry->num_attributes);
             entry->active = obj->active;
+            entry->synthetic = synthetic;
             char *keycopy = strdup(entry->id);
             if (!keycopy) {
                 free_detection_cache_entry(entry);
                 continue;
             }
 			Adjust_For_VehicleType(entry);
-			if (valid) {
+            if (valid && !synthetic) {
                 bool should_publish = false;
                 cJSON *tracker_json = build_tracker_json(entry, 0, &should_publish);
                 if (should_publish && tracker_json) {
@@ -849,6 +859,27 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
                     continue;  // Skip normal update processing
                 }
             }
+            if (synthetic) {
+                if (!entry->idle) {
+                    entry->idle = true;
+                    entry->idle_start_time = now;
+                }
+                entry->idle_duration = (now - entry->idle_start_time) / 1000.0f;
+                if (entry->idle_duration > entry->max_idle_duration)
+                    entry->max_idle_duration = floor((entry->idle_duration * 10) + 0.5) / 10.0;
+                entry->timestamp = now;
+                entry->age = round(10.0 * ((now - entry->birthTime) / 1000.0)) / 10.0;
+                entry->active = obj->active;
+                entry->synthetic = true;
+                if (entry->attributes) {
+                    free(entry->attributes);
+                    entry->attributes = NULL;
+                    entry->num_attributes = 0;
+                }
+                entry->attributes = clone_attributes(obj->attributes, obj->num_attributes,
+                                                     &entry->num_attributes);
+                continue;
+            }
             float dist = calc_distance(entry->prev_cx, entry->prev_cy, cx, cy);
             if (dist < IDLE_THRESHOLD_PCT) {
                 if (!entry->idle) {
@@ -917,6 +948,7 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects, void *user
             }
             entry->attributes = clone_attributes(obj->attributes, obj->num_attributes, &entry->num_attributes);
             entry->active = obj->active;
+			entry->synthetic = false;
 			Adjust_For_VehicleType(entry);
         }
     }
@@ -977,25 +1009,6 @@ void ObjectDetection_Reset() {
                 entry->active = false;
                 // Insert into validCache for publishing
                 g_hash_table_insert(validCache, key, entry);
-            }
-        }
-
-        // Build trackers for valid objects
-        GHashTableIter validIter;
-        gpointer vkey, vvalue;
-        g_hash_table_iter_init(&validIter, validCache);
-        while (g_hash_table_iter_next(&validIter, &vkey, &vvalue)) {
-            detection_cache_entry_t *entry = (detection_cache_entry_t*)vvalue;
-            bool should_publish = false;
-            cJSON *tracker_json = build_tracker_json(entry, 0, &should_publish);
-            if (should_publish && tracker_json) {
-                tracker_callback_data_t *cb_data = malloc(sizeof(tracker_callback_data_t));
-                if (cb_data) {
-                    cb_data->payload = cJSON_Duplicate(tracker_json, 1);
-                    cb_data->timer = 0;
-                    pending_tracker_callbacks = g_list_prepend(pending_tracker_callbacks, cb_data);
-                }
-                cJSON_Delete(tracker_json);
             }
         }
 
@@ -1064,7 +1077,8 @@ gboolean update_trackers(gpointer user_data) {
             g_hash_table_iter_remove(&iter);
             continue;
         }
-        if( entry->active == true && now - entry->last_published_tracker > 1500 ) {
+        if( entry->active == true && !entry->synthetic &&
+            now - entry->last_published_tracker > 1500 ) {
             bool should_publish = false;
             cJSON *tracker_json = build_tracker_json(entry, 1, &should_publish);
             if (should_publish && tracker_json) {
@@ -1154,4 +1168,20 @@ cJSON* ObjectDetection_Labels(void) {
         return NULL;
     }
     return cJSON_Duplicate(labels, 1);
+}
+
+cJSON* ObjectDetection_Source_Status(void) {
+    return VOD_Detector_Information();
+}
+
+void ObjectDetection_Shutdown(void) {
+    VOD_Shutdown();
+    g_mutex_lock(&detection_mutex);
+    if (detectionCache) {
+        g_hash_table_destroy(detectionCache);
+        detectionCache = NULL;
+    }
+    detectionsCallback = NULL;
+    trackerCallback = NULL;
+    g_mutex_unlock(&detection_mutex);
 }
