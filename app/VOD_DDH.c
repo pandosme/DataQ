@@ -38,6 +38,9 @@ static vod_callback_t object_callback = NULL;
 static void *object_callback_data = NULL;
 static GHashTable *object_cache = NULL;
 static GHashTable *observed_labels = NULL;
+static GHashTable *advertised_labels = NULL;
+static GHashTable *advertised_properties = NULL;
+static cJSON *topic_definitions = NULL;
 static guint replay_timer_id = 0;
 static guint reconnect_timer_id = 0;
 static int ddh_channel_id = 1;
@@ -100,6 +103,74 @@ static void log_ddh_error(DHError **error, const char *context) {
     *error = NULL;
 }
 
+static void collect_definition_metadata(cJSON *node, const char *property_name) {
+    if (cJSON_IsObject(node)) {
+        cJSON *properties = cJSON_GetObjectItemCaseSensitive(node, "properties");
+        if (cJSON_IsObject(properties)) {
+            cJSON *property = NULL;
+            cJSON_ArrayForEach(property, properties) {
+                if (advertised_properties && property->string)
+                    g_hash_table_add(advertised_properties, g_strdup(property->string));
+                collect_definition_metadata(property, property->string);
+            }
+        }
+
+        cJSON *enum_values = cJSON_GetObjectItemCaseSensitive(node, "enum");
+        if (property_name && strcmp(property_name, "type") == 0 && cJSON_IsArray(enum_values)) {
+            cJSON *value = NULL;
+            cJSON_ArrayForEach(value, enum_values) {
+                if (cJSON_IsString(value) && value->valuestring && advertised_labels)
+                    g_hash_table_add(advertised_labels, g_strdup(value->valuestring));
+            }
+        }
+
+        cJSON *child = NULL;
+        cJSON_ArrayForEach(child, node) {
+            if (child == properties || child == enum_values) continue;
+            collect_definition_metadata(child, child->string);
+        }
+    } else if (cJSON_IsArray(node)) {
+        cJSON *item = NULL;
+        cJSON_ArrayForEach(item, node)
+            collect_definition_metadata(item, property_name);
+    }
+}
+
+static void refresh_definition_metadata(void) {
+    if (advertised_labels) g_hash_table_remove_all(advertised_labels);
+    if (advertised_properties) g_hash_table_remove_all(advertised_properties);
+    if (!topic_definitions) return;
+
+    cJSON *definition = NULL;
+    cJSON_ArrayForEach(definition, topic_definitions)
+        collect_definition_metadata(definition, NULL);
+}
+
+static void cache_topic_definition(const char *topic_name, const char *definition_json) {
+    if (!topic_definitions || !topic_name || !definition_json) return;
+    cJSON *definition = cJSON_Parse(definition_json);
+    if (!definition) {
+        LOG_WARN("%s: Invalid definition for %s\n", __func__, topic_name);
+        return;
+    }
+    if (cJSON_GetObjectItemCaseSensitive(topic_definitions, topic_name))
+        cJSON_ReplaceItemInObjectCaseSensitive(topic_definitions, topic_name, definition);
+    else
+        cJSON_AddItemToObject(topic_definitions, topic_name, definition);
+    refresh_definition_metadata();
+}
+
+static cJSON *string_set_to_json(GHashTable *set) {
+    cJSON *list = cJSON_CreateArray();
+    if (!list || !set) return list;
+    GHashTableIter iterator;
+    gpointer value = NULL;
+    g_hash_table_iter_init(&iterator, set);
+    while (g_hash_table_iter_next(&iterator, &value, NULL))
+        cJSON_AddItemToArray(list, cJSON_CreateString(value));
+    return list;
+}
+
 static void log_topic_inventory(void) {
     DHError *error = NULL;
     DHTopicList *topics = dh_client_get_topic_list(ddh_client, &error);
@@ -121,6 +192,8 @@ static void log_topic_inventory(void) {
             const char *definition = dh_topic_get_json_definition(topic, &error);
             if (definition) {
                 LOG("%s: DDH scene topic definition: %.4096s\n", __func__, definition);
+                if (strcmp(topic_name, DDH_FRAME_TOPIC) == 0 || strcmp(topic_name, DDH_TOPIC) == 0)
+                    cache_topic_definition(topic_name, definition);
             } else {
                 log_ddh_error(&error, "DDH scene topic definition failed");
             }
@@ -714,7 +787,11 @@ int VOD_Init(int channel, vod_callback_t callback, void *user_data, int predicti
     g_atomic_int_set(&ddh_shutting_down, 0);
     object_cache = g_hash_table_new_full(g_str_hash, g_str_equal, free, free);
     observed_labels = g_hash_table_new_full(g_str_hash, g_str_equal, free, NULL);
-    if (!object_cache || !observed_labels) {
+    advertised_labels = g_hash_table_new_full(g_str_hash, g_str_equal, free, NULL);
+    advertised_properties = g_hash_table_new_full(g_str_hash, g_str_equal, free, NULL);
+    topic_definitions = cJSON_CreateObject();
+    if (!object_cache || !observed_labels || !advertised_labels ||
+        !advertised_properties || !topic_definitions) {
         VOD_Shutdown();
         return -1;
     }
@@ -739,6 +816,10 @@ cJSON *VOD_Detector_Information(void) {
     cJSON_AddNumberToObject(information, "channel_id", ddh_channel_id);
     cJSON_AddBoolToObject(information, "connected", g_atomic_int_get(&ddh_connected));
     cJSON_AddNumberToObject(information, "active_objects", g_atomic_int_get(&active_object_count));
+    cJSON_AddItemToObject(information, "advertised_labels", string_set_to_json(advertised_labels));
+    cJSON_AddItemToObject(information, "advertised_properties", string_set_to_json(advertised_properties));
+    if (topic_definitions)
+        cJSON_AddItemToObject(information, "topic_definitions", cJSON_Duplicate(topic_definitions, 1));
     g_mutex_lock(&metrics_mutex);
     const char *classification_status = real_sample_count > 0
         ? "receiving-classified"
@@ -761,17 +842,24 @@ cJSON *VOD_Detector_Information(void) {
 cJSON *VOD_Label_List(void) {
     cJSON *list = cJSON_CreateArray();
     if (!list) return NULL;
-    if (!observed_labels) return list;
-
-    GHashTableIter iterator;
-    gpointer label_name = NULL;
-    g_hash_table_iter_init(&iterator, observed_labels);
-    while (g_hash_table_iter_next(&iterator, &label_name, NULL)) {
-        cJSON *label = cJSON_CreateObject();
-        if (!label) continue;
-        cJSON_AddStringToObject(label, "id", label_name);
-        cJSON_AddItemToArray(list, label);
+    GHashTable *label_sets[] = { advertised_labels, observed_labels };
+    GHashTable *added = g_hash_table_new_full(g_str_hash, g_str_equal, free, NULL);
+    for (size_t index = 0; index < sizeof(label_sets) / sizeof(label_sets[0]); ++index) {
+        GHashTable *set = label_sets[index];
+        if (!set) continue;
+        GHashTableIter iterator;
+        gpointer label_name = NULL;
+        g_hash_table_iter_init(&iterator, set);
+        while (g_hash_table_iter_next(&iterator, &label_name, NULL)) {
+            if (g_hash_table_contains(added, label_name)) continue;
+            cJSON *label = cJSON_CreateObject();
+            if (!label) continue;
+            cJSON_AddStringToObject(label, "id", label_name);
+            cJSON_AddItemToArray(list, label);
+            g_hash_table_add(added, g_strdup(label_name));
+        }
     }
+    g_hash_table_destroy(added);
     return list;
 }
 
@@ -803,6 +891,18 @@ void VOD_Shutdown(void) {
     if (observed_labels) {
         g_hash_table_destroy(observed_labels);
         observed_labels = NULL;
+    }
+    if (advertised_labels) {
+        g_hash_table_destroy(advertised_labels);
+        advertised_labels = NULL;
+    }
+    if (advertised_properties) {
+        g_hash_table_destroy(advertised_properties);
+        advertised_properties = NULL;
+    }
+    if (topic_definitions) {
+        cJSON_Delete(topic_definitions);
+        topic_definitions = NULL;
     }
     g_atomic_int_set(&active_object_count, 0);
     object_callback = NULL;

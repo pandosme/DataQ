@@ -134,6 +134,13 @@ static void refresh_detection_labels(void) {
     cJSON_Delete(source_labels);
 }
 
+static void refresh_detection_source_status(void) {
+    cJSON *source = VOD_Detector_Information();
+    if (!source) return;
+    ACAP_STATUS_SetObject("detections", "source", source);
+    cJSON_Delete(source);
+}
+
 static int config_tracker_confidence = 1;
 static int config_min_confidence = 50;
 static int config_cog = 0;
@@ -1152,6 +1159,7 @@ int ObjectDetection_Init(ObjectDetection_Callback detections, TrackerDetection_C
     }
 
     refresh_detection_labels();
+    refresh_detection_source_status();
     g_timeout_add_seconds(1, update_trackers, NULL);	
     LOG_TRACE("%s: Exit\n",__func__);
     g_mutex_unlock(&detection_mutex);

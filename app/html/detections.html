@@ -159,6 +159,16 @@
                                     </div>
                                 </div>
 
+                                <div class="card mb-3" id="dataHubCapabilities" style="display:none;">
+                                    <div class="card-header"><h5 class="card-title mb-0">Data Hub Capabilities</h5></div>
+                                    <div class="card-body py-2">
+                                        <div class="small text-muted mb-1">Advertised labels</div>
+                                        <div id="dataHubLabels" class="d-flex flex-wrap gap-1 mb-3"></div>
+                                        <div class="small text-muted mb-1">Advertised properties</div>
+                                        <div id="dataHubProperties" class="d-flex flex-wrap gap-1"></div>
+                                    </div>
+                                </div>
+
                                 <div class="card">
                                     <div class="card-header"><h5 class="card-title mb-0">Label Filter</h5></div>
                                     <div id="labelSelector" class="card-body"></div>
@@ -233,6 +243,10 @@ $(document).ready(function () {
                 ? app.status.detections.labels : []
             );
 
+            $.ajax({ type: 'GET', url: 'objectdetections', dataType: 'json', cache: false,
+                success: function (data) { renderDataHubCapabilities(data && data.source); }
+            });
+
             if (app.status.mqtt.connected) {
                 ConnectWebSocketClient();
             } else {
@@ -254,6 +268,27 @@ function setPublishToolsVisible(enabled) {
     settings.classList.toggle('col-xl-4', enabled);
     settings.classList.toggle('col-xl-6', !enabled);
     if (enabled && polyEditor) polyEditor.redraw(drawDetections);
+}
+
+function renderDataHubCapabilities(source) {
+    if (!source || source.transport !== 'device-data-hub') return;
+    const labels = Array.isArray(source.advertised_labels) ? source.advertised_labels.slice().sort() : [];
+    const properties = Array.isArray(source.advertised_properties) ? source.advertised_properties.slice().sort() : [];
+    if (!labels.length && !properties.length) return;
+
+    const renderBadges = function (elementId, values) {
+        const target = document.getElementById(elementId);
+        target.replaceChildren();
+        values.forEach(function (value) {
+            const badge = document.createElement('span');
+            badge.className = 'badge text-bg-light border text-dark fw-normal';
+            badge.textContent = value;
+            target.appendChild(badge);
+        });
+    };
+    renderBadges('dataHubLabels', labels);
+    renderBadges('dataHubProperties', properties);
+    document.getElementById('dataHubCapabilities').style.display = '';
 }
 
 /* ── Polygon editor ──────────────────────────────────────────────── */
