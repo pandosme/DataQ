@@ -49,8 +49,9 @@ DataQ makes integration and solution development easier by publishing purpose-bu
 DataQ 4.0.0 consumes `com.axis.scene.frame.v1` and
 `com.axis.scene.object_track.v1` through the released Device Data Hub API instead
 of requesting direct Video Object Detection D-Bus access. It requires
-ACAP Native SDK 12.11 and AXIS OS 12.11.72 or later on a product that supports
-Device Data Hub.
+ACAP Native SDK 12.11 and AXIS OS 13 on a product that supports Device Data Hub.
+AXIS OS 12 is not supported because its Device Data Hub does not provide
+detections for stationary objects.
 
 This release replaces the 3.3.0 DataQ package and retains the technical package
 name `dataq`, its `dataq/#` MQTT prefix, settings, local data, HTTP routes,
@@ -412,6 +413,15 @@ For VMS (Video Management Systems), a stateful event "anomaly" will be fired and
 ***
 
 ## History
+
+### 4.0.0 Sep 26, 2026
+
+**AXIS OS 13 and Device Data Hub**
+- DataQ 4.0.0 requires AXIS OS 13. Version 3.3.0 remains the last release that supports AXIS OS 12.
+- Replaced direct Video Object Detection D-Bus access with the released Device Data Hub `com.axis.scene.frame.v1` and `com.axis.scene.object_track.v1` APIs.
+- AXIS OS 12 is intentionally unsupported because its Device Data Hub does not provide detections for stationary objects.
+- Retained the `dataq` package name, `dataq/#` MQTT topic prefix, settings, local data, HTTP routes, events, and MQTT client identity for upgrades from 3.3.0.
+- Detection publishing is enabled by default. Tracker, path, occupancy, geospace, anomaly, image, and event publishing remain opt-in while the new source is evaluated.
 
 ### 3.3.0 Jun 23, 2026
 
