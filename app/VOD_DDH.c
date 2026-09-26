@@ -37,6 +37,7 @@ static DHSubscriber *ddh_subscriber = NULL;
 static vod_callback_t object_callback = NULL;
 static void *object_callback_data = NULL;
 static GHashTable *object_cache = NULL;
+static GHashTable *observed_labels = NULL;
 static guint replay_timer_id = 0;
 static guint reconnect_timer_id = 0;
 static int ddh_channel_id = 1;
@@ -310,6 +311,8 @@ static int update_classification(ddh_cached_object_t *cached, cJSON *classificat
     if (!cached || !cJSON_IsString(type) || !type->valuestring || !cJSON_IsNumber(score)) return 0;
 
     snprintf(cached->object.class_name, sizeof(cached->object.class_name), "%s", type->valuestring);
+    if (observed_labels)
+        g_hash_table_add(observed_labels, g_strdup(type->valuestring));
     cached->object.confidence = (float)(clamp_unit(score->valuedouble) * 100.0);
     cached->object.attributes = NULL;
     cached->object.num_attributes = 0;
@@ -346,8 +349,13 @@ static int end_cached_object(const char *id, cJSON *classification, cJSON *bbox)
 static void process_frame(cJSON *root) {
     increment_metric(&frame_sample_count);
     cJSON *detections = cJSON_GetObjectItemCaseSensitive(root, "detections");
+    if (!cJSON_IsArray(detections)) {
+        increment_metric(&malformed_sample_count);
+        return;
+    }
     int detection_count = cJSON_IsArray(detections) ? cJSON_GetArraySize(detections) : 0;
     vod_object_t *updates = detection_count > 0 ? calloc(detection_count, sizeof(vod_object_t)) : NULL;
+    GHashTable *seen_ids = g_hash_table_new(g_str_hash, g_str_equal);
     size_t update_count = 0;
 
     cJSON *detection = NULL;
@@ -359,6 +367,8 @@ static void process_frame(cJSON *root) {
             increment_metric(&ignored_sample_count);
             continue;
         }
+
+        g_hash_table_add(seen_ids, id->valuestring);
 
         vod_object_t geometry = {0};
         if (!update_bbox(&geometry, bbox)) {
@@ -397,6 +407,22 @@ static void process_frame(cJSON *root) {
         record_real_sample();
     }
     free(updates);
+
+    /* A frame is a complete active-object snapshot. Remove tracks omitted by it. */
+    GHashTableIter cache_iterator;
+    gpointer cache_key = NULL;
+    gpointer cache_value = NULL;
+    g_hash_table_iter_init(&cache_iterator, object_cache);
+    while (g_hash_table_iter_next(&cache_iterator, &cache_key, &cache_value)) {
+        if (g_hash_table_contains(seen_ids, cache_key)) continue;
+        ddh_cached_object_t *cached = cache_value;
+        cached->object.active = false;
+        if (object_callback)
+            object_callback(&cached->object, 1, VOD_BATCH_REAL, object_callback_data);
+        g_hash_table_iter_remove(&cache_iterator);
+        increment_metric(&ended_object_count);
+    }
+    g_hash_table_destroy(seen_ids);
 
     cJSON *events = cJSON_GetObjectItemCaseSensitive(root, "track_events");
     cJSON *event = NULL;
@@ -687,7 +713,11 @@ int VOD_Init(int channel, vod_callback_t callback, void *user_data, int predicti
     ddh_channel_id = channel + 1;
     g_atomic_int_set(&ddh_shutting_down, 0);
     object_cache = g_hash_table_new_full(g_str_hash, g_str_equal, free, free);
-    if (!object_cache) return -1;
+    observed_labels = g_hash_table_new_full(g_str_hash, g_str_equal, free, NULL);
+    if (!object_cache || !observed_labels) {
+        VOD_Shutdown();
+        return -1;
+    }
 
     if (!initialize_connection()) {
         VOD_Shutdown();
@@ -729,15 +759,17 @@ cJSON *VOD_Detector_Information(void) {
 }
 
 cJSON *VOD_Label_List(void) {
-    static const char *labels[] = {
-        "Human", "Vehicle", "Car", "Truck", "Bus", "Bike", "VehicleOther", "Animal"
-    };
     cJSON *list = cJSON_CreateArray();
     if (!list) return NULL;
-    for (size_t index = 0; index < sizeof(labels) / sizeof(labels[0]); ++index) {
+    if (!observed_labels) return list;
+
+    GHashTableIter iterator;
+    gpointer label_name = NULL;
+    g_hash_table_iter_init(&iterator, observed_labels);
+    while (g_hash_table_iter_next(&iterator, &label_name, NULL)) {
         cJSON *label = cJSON_CreateObject();
         if (!label) continue;
-        cJSON_AddStringToObject(label, "id", labels[index]);
+        cJSON_AddStringToObject(label, "id", label_name);
         cJSON_AddItemToArray(list, label);
     }
     return list;
@@ -767,6 +799,10 @@ void VOD_Shutdown(void) {
     if (object_cache) {
         g_hash_table_destroy(object_cache);
         object_cache = NULL;
+    }
+    if (observed_labels) {
+        g_hash_table_destroy(observed_labels);
+        observed_labels = NULL;
     }
     g_atomic_int_set(&active_object_count, 0);
     object_callback = NULL;

@@ -113,6 +113,27 @@ static GMutex detection_mutex;
 
 static GHashTable *detectionCache = NULL;
 
+const char *NiceName(const char *input);
+
+static void refresh_detection_labels(void) {
+    cJSON *source_labels = VOD_Label_List();
+    cJSON *labels = cJSON_CreateArray();
+    if (!labels) {
+        cJSON_Delete(source_labels);
+        return;
+    }
+
+    cJSON *item = NULL;
+    cJSON_ArrayForEach(item, source_labels) {
+        cJSON *id = cJSON_GetObjectItemCaseSensitive(item, "id");
+        const char *label = cJSON_IsString(id) ? NiceName(id->valuestring) : NULL;
+        if (label && label[0]) cJSON_AddItemToArray(labels, cJSON_CreateString(label));
+    }
+    ACAP_STATUS_SetObject("detections", "labels", labels);
+    cJSON_Delete(labels);
+    cJSON_Delete(source_labels);
+}
+
 static int config_tracker_confidence = 1;
 static int config_min_confidence = 50;
 static int config_cog = 0;
@@ -974,6 +995,8 @@ static void VOD_Data(const vod_object_t *objects, size_t num_objects,
 
     g_mutex_unlock(&detection_mutex);
 
+    if (!synthetic) refresh_detection_labels();
+
     // Now call callbacks WITHOUT holding the mutex
     if (detectionsCallback && detections_payload) {
         detectionsCallback(detections_payload);
@@ -1128,27 +1151,7 @@ int ObjectDetection_Init(ObjectDetection_Callback detections, TrackerDetection_C
         return 0;
     }
 
-    cJSON* list = VOD_Label_List();
-    cJSON* labels = cJSON_CreateArray();
-    if (list) {
-        LOG_TRACE("%s: VOD label list has %d entries\n", __func__, cJSON_GetArraySize(list));
-        cJSON* item = list->child;
-        while(item) {
-            cJSON* idItem = cJSON_GetObjectItem(item, "id");
-            const char* raw = idItem ? idItem->valuestring : NULL;
-            const char* label = NiceName(raw);
-            LOG("%s: VOD label id='%s' -> NiceName='%s'\n", __func__, raw ? raw : "(null)", label ? label : "(null)");
-            if( label && label[0] )
-                cJSON_AddItemToArray(labels, cJSON_CreateString(label));
-            item = item->next;
-        }
-        cJSON_Delete(list);
-    } else {
-        LOG_WARN("%s: VOD_Label_List() returned NULL\n", __func__);
-    }
-    LOG_TRACE("%s: Storing %d labels in status\n", __func__, cJSON_GetArraySize(labels));
-    ACAP_STATUS_SetObject("detections", "labels", labels);
-    cJSON_Delete(labels);
+    refresh_detection_labels();
     g_timeout_add_seconds(1, update_trackers, NULL);	
     LOG_TRACE("%s: Exit\n",__func__);
     g_mutex_unlock(&detection_mutex);
