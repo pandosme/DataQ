@@ -4,4 +4,7 @@ deploy.py
 device_control.md
 devices.txt
 install.sh
+captures/
+scripts/__pycache__/
+scripts/result.dat
 

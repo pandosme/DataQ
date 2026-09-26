@@ -44,21 +44,18 @@ DataQ makes integration and solution development easier by publishing purpose-bu
 
 ***
 
-## Device Data Hub migration spike
+## Device Data Hub and AXIS OS 13
 
-The `spike/device-data-hub` branch builds a co-installable shadow package named
-**DataQ DDH**. It consumes `com.axis.scene.frame.v1` and
+DataQ 4.0.0 consumes `com.axis.scene.frame.v1` and
 `com.axis.scene.object_track.v1` through the released Device Data Hub API instead
-of requesting direct Video Object Detection D-Bus access. The spike requires
+of requesting direct Video Object Detection D-Bus access. It requires
 ACAP Native SDK 12.11 and AXIS OS 12.11.72 or later on a product that supports
 Device Data Hub.
 
-The existing DataQ package can remain installed as the baseline:
-
-- DataQ publishes below `dataq/#`.
-- DataQ DDH publishes below `dataq-ddh/#` and uses separate settings, local data,
-  HTTP routes, events, and MQTT client identity.
-- Only detections are enabled by default in DataQ DDH. Tracker, path, occupancy,
+This release replaces the 3.3.0 DataQ package and retains the technical package
+name `dataq`, its `dataq/#` MQTT prefix, settings, local data, HTTP routes,
+events, and MQTT client identity. Only detections are enabled by default.
+Tracker, path, occupancy,
   geospace, anomaly, image, and event publishing remain disabled until explicitly
   selected for a later comparison.
 
@@ -69,44 +66,30 @@ events remove cached IDs immediately. Terminal `object_track.v1` summaries can
 enrich and remove matching IDs through their nested `parts`, but are never added
 to the active cache.
 
-After 500 ms without a live frame update, DataQ DDH republishes cached objects
+After 500 ms without a live frame update, DataQ republishes cached objects
 once per second with `"synthetic": true`. This best-effort retention maintains
 stationary detections without updating movement, distance, direction, or path
 state. Objects with no update or terminal event for 30 seconds are emitted once
 as inactive and removed. Disconnects, resets, and deleted topic instances clear
 the complete cache. The cache retains at most 256 objects and reports evictions,
 explicit endings, stale removals, frame samples, and terminal summaries at
-`/local/dataq_ddh/objectdetections`.
+`/local/dataq/objectdetections`.
 
 On AXIS OS 12.11.77, classified scene records did not appear until the camera was
 rebooted. After reboot, both live frames and terminal summaries included classes.
 The adapter reports `classification_status: "receiving-classified"` after the
 first usable record and `"unclassified-only"` when only classless records arrive.
 
-Build both architectures with:
+Build both target architectures with:
 
 ```sh
 ./build.sh
 ```
 
-For a side-by-side MQTT capture, configure both packages for the same broker and
-run two subscribers:
-
-```sh
-mosquitto_sub -F '{"captured_at":"%I","topic":"%t","payload":%p}' \
-  -t 'dataq/detections/+' > baseline.jsonl
-mosquitto_sub -F '{"captured_at":"%I","topic":"%t","payload":%p}' \
-  -t 'dataq-ddh/detections/+' > shadow.jsonl
-```
-
-Compare the streams with:
-
-```sh
-python3 scripts/compare_detections.py --minimum-iou 0.25 baseline.jsonl shadow.jsonl
-```
-
-For live inspection, install Paho MQTT 2.x and run the monitor with its anonymous
-broker defaults (`mqtt.internal:1883`, front camera `B8A44F3024BB`):
+The comparison tools in `scripts/` can compare capture files from a 3.3.0 device
+and a 4.0.0 device, or monitor two configured MQTT sources. For live inspection,
+install Paho MQTT 2.x and run the monitor with its anonymous broker defaults
+(`mqtt.internal:1883`, front camera `B8A44F3024BB`):
 
 ```sh
 python3 -m pip install -r scripts/requirements.txt
@@ -143,9 +126,6 @@ with `--window-ms`, `--hold-ms`, `--minimum-observations`, `--repeat-seconds`,
 `--match-iou`, `--position-iou`, `--center-threshold`, `--edge-margin`,
 `--narrow-width`, and `--stale-seconds`; use `--help` for broker, serial, and
 topic-prefix overrides.
-
-The shadow package uses the technical application name `dataq_ddh` because
-Device Data Hub maps it to the lowercase Linux user `acap-dataq_ddh`.
 
 The comparator aligns timestamped messages within 750 ms by default, pairs only
 the remaining untimestamped messages by position, and matches objects by
