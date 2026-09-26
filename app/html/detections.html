@@ -520,7 +520,7 @@ function drawDetections(ctx) {
     ctx.fillStyle = '#facc15';
     ctx.beginPath();
     latestDetections.forEach(function (d) {
-        if (!d) return;
+        if (!d || d.active === false) return;
         ctx.rect(d.x, d.y, d.w, d.h);
         var text = (d.class || 'Unknown') + (d.confidence != null ? ' ' + d.confidence + '%' : '');
         ctx.fillText(text, d.x, d.y > 30 ? d.y - 8 : d.y + d.h + 26);
