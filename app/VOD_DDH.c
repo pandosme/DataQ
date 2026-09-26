@@ -56,6 +56,9 @@ static GMutex metrics_mutex;
 static guint64 real_sample_count = 0;
 static guint64 frame_sample_count = 0;
 static guint64 track_summary_count = 0;
+static guint64 received_sample_count = 0;
+static guint64 historical_sample_count = 0;
+static guint64 channel_mismatch_count = 0;
 static guint64 ended_object_count = 0;
 static guint64 stale_object_count = 0;
 static guint64 malformed_sample_count = 0;
@@ -592,6 +595,7 @@ static gboolean process_sample_on_main(gpointer user_data) {
     cJSON *channel = cJSON_GetObjectItemCaseSensitive(root, "channel_id");
     if (!cJSON_IsNumber(channel) || channel->valueint != ddh_channel_id) {
         increment_metric(cJSON_IsNumber(channel) ? &ignored_sample_count : &malformed_sample_count);
+        if (cJSON_IsNumber(channel)) increment_metric(&channel_mismatch_count);
     } else if (strcmp(sample->topic, DDH_FRAME_TOPIC) == 0) {
         process_frame(root);
     } else {
@@ -608,10 +612,14 @@ static void on_data_received(const DHTopicSample *topic_sample, void *user_data)
     (void)user_data;
     if (!topic_sample || g_atomic_int_get(&ddh_shutting_down)) return;
     gint generation = g_atomic_int_get(&stream_generation);
+    increment_metric(&received_sample_count);
 
     const char *topic = dh_topic_sample_get_topic_name(topic_sample);
-    if (!topic || (strcmp(topic, DDH_FRAME_TOPIC) != 0 && strcmp(topic, DDH_TOPIC) != 0) ||
-        dh_topic_sample_is_historical(topic_sample)) return;
+    if (!topic || (strcmp(topic, DDH_FRAME_TOPIC) != 0 && strcmp(topic, DDH_TOPIC) != 0)) return;
+    if (dh_topic_sample_is_historical(topic_sample)) {
+        increment_metric(&historical_sample_count);
+        return;
+    }
 
     const DHTopicData *topic_data = dh_topic_sample_get_data(topic_sample);
     const char *json = topic_data ? dh_topic_data_get_json_data(topic_data) : NULL;
@@ -825,6 +833,9 @@ cJSON *VOD_Detector_Information(void) {
         ? "receiving-classified"
         : ignored_sample_count > 0 ? "unclassified-only" : "waiting";
     cJSON_AddStringToObject(information, "classification_status", classification_status);
+    cJSON_AddNumberToObject(information, "received_samples", (double)received_sample_count);
+    cJSON_AddNumberToObject(information, "historical_samples", (double)historical_sample_count);
+    cJSON_AddNumberToObject(information, "channel_mismatch_samples", (double)channel_mismatch_count);
     cJSON_AddNumberToObject(information, "real_samples", (double)real_sample_count);
     cJSON_AddNumberToObject(information, "frame_samples", (double)frame_sample_count);
     cJSON_AddNumberToObject(information, "track_summaries", (double)track_summary_count);

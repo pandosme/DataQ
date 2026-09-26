@@ -1076,6 +1076,7 @@ void ObjectDetection_Reset() {
 }
 
 gboolean update_trackers(gpointer user_data) {
+    refresh_detection_source_status();
     g_mutex_lock(&detection_mutex);
     if( !detectionCache ) {
         g_mutex_unlock(&detection_mutex);
