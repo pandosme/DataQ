@@ -332,10 +332,7 @@ For VMS (Video Management Systems), a stateful event "anomaly" will be fired and
 **Detection label inventory**
 - Fetch VOD detector labels before starting the detection subscription, so a
   subscription failure no longer hides the available label filter choices.
-- Preserve detection-service error reporting; this fix does not repair a failed
-  VOD subscription or fabricate labels when detector metadata is unavailable.
-- Add a native initialization regression test covering successful and failed
-  subscriptions and unavailable detector metadata.
+
 
 ### 3.3.0 Jun 23, 2026
 
