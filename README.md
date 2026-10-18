@@ -142,6 +142,19 @@ MQTT Heartbeat published every 15 minutes
 
 ## Integration Specifications
 
+### Detection label inventory
+
+The Label Filter lists the primary classes and vehicle subclasses advertised by
+VOD detector information, not just classes currently observed in the image.
+DataQ reads this inventory independently of starting the detection subscription,
+so a subscription failure does not hide an otherwise available label list.
+An unavailable detection stream is still reported as an error; displaying labels
+does not mean detections are working. If detector information itself is
+unavailable, DataQ logs the failure rather than inventing supported labels.
+
+Run the initialization regression test with
+`node --test scripts/test_detection_labels.js` (Node.js 18+ and a C compiler).
+
 ### Coordinate System
 - Relative coordinates [0...1000][0...1000] (Aspect ratio independent)
 - Origin: Top-left corner
@@ -313,6 +326,16 @@ For VMS (Video Management Systems), a stateful event "anomaly" will be fired and
 ***
 
 ## History
+
+### 3.3.1 Oct 18, 2026
+
+**Detection label inventory**
+- Fetch VOD detector labels before starting the detection subscription, so a
+  subscription failure no longer hides the available label filter choices.
+- Preserve detection-service error reporting; this fix does not repair a failed
+  VOD subscription or fabricate labels when detector metadata is unavailable.
+- Add a native initialization regression test covering successful and failed
+  subscriptions and unavailable detector metadata.
 
 ### 3.3.0 Jun 23, 2026
 

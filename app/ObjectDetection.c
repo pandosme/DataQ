@@ -1107,13 +1107,6 @@ int ObjectDetection_Init(ObjectDetection_Callback detections, TrackerDetection_C
 	if( tracker_confidence && tracker_confidence->type==cJSON_False)
 		allow_predictions = 1;
 
-    if (VOD_Init(0, VOD_Data, NULL, allow_predictions) != 0) {
-        LOG_WARN("%s: Object detection service failed\n", __func__);
-        LOG_TRACE("%s: Exit\n",__func__);
-        g_mutex_unlock(&detection_mutex);
-        return 0;
-    }
-
     cJSON* list = VOD_Label_List();
     cJSON* labels = cJSON_CreateArray();
     if (list) {
@@ -1135,6 +1128,14 @@ int ObjectDetection_Init(ObjectDetection_Callback detections, TrackerDetection_C
     LOG_TRACE("%s: Storing %d labels in status\n", __func__, cJSON_GetArraySize(labels));
     ACAP_STATUS_SetObject("detections", "labels", labels);
     cJSON_Delete(labels);
+
+    if (VOD_Init(0, VOD_Data, NULL, allow_predictions) != 0) {
+        LOG_WARN("%s: Object detection service failed\n", __func__);
+        LOG_TRACE("%s: Exit\n",__func__);
+        g_mutex_unlock(&detection_mutex);
+        return 0;
+    }
+
     g_timeout_add_seconds(1, update_trackers, NULL);	
     LOG_TRACE("%s: Exit\n",__func__);
     g_mutex_unlock(&detection_mutex);
