@@ -676,10 +676,12 @@ int VOD_Init(int channel, vod_callback_t cb, void *user_data, int predictions) {
 
 
 
-    int major,minor;
-    if (video_object_detection_subscriber_get_version(&major,&minor) != VIDEO_OBJECT_DETECTION_SUBSCRIBER_SUCCESS) {
-        LOG_WARN("%s: No version detected", __func__);
+    int major = 0, minor = 0;
+    int ret = video_object_detection_subscriber_get_version(&major, &minor);
+    if (ret != VIDEO_OBJECT_DETECTION_SUBSCRIBER_SUCCESS) {
+        LOG_WARN("%s: Failed to get VOD version (error %d)\n", __func__, ret);
         pthread_mutex_unlock(&vod_mutex);
+        return ret;
     }
     LOG("%s: Version = %d.%d\n",__func__,major,minor);
 
@@ -690,55 +692,59 @@ int VOD_Init(int channel, vod_callback_t cb, void *user_data, int predictions) {
     
     g_ctx.num_classes = video_object_detection_subscriber_det_classes_get(&g_ctx.det_classes);
     if (g_ctx.num_classes <= 0) {
-        LOG_WARN("%s: No detection classes found", __func__);
-        pthread_mutex_unlock(&vod_mutex);
-        return -2;
+        LOG_WARN("%s: No detection classes found (result %d)\n", __func__, g_ctx.num_classes);
+        ret = g_ctx.num_classes < 0 ? g_ctx.num_classes : VIDEO_OBJECT_DETECTION_SUBSCRIBER_ERROR_NO_VALID_VOD;
+        goto fail;
     }
 
 
     uint8_t *buffer = NULL;
     size_t size = 0;
-    if (video_object_detection_subscriber_get_detector_information(&buffer, &size) != 0) {
-        LOG_WARN("%s: Failed to get detector information", __func__);
-        pthread_mutex_unlock(&vod_mutex);
-        return -3;
+    ret = video_object_detection_subscriber_get_detector_information(&buffer, &size);
+    if (ret != VIDEO_OBJECT_DETECTION_SUBSCRIBER_SUCCESS) {
+        LOG_WARN("%s: Failed to get detector information (error %d)\n", __func__, ret);
+        free(buffer);
+        goto fail;
     }
     g_ctx.det_info = vod__detector_information__unpack(NULL, size, buffer);
     free(buffer);
     if (!g_ctx.det_info) {
         LOG_WARN("%s: Failed to unpack detector information", __func__);
-        pthread_mutex_unlock(&vod_mutex);
-        return -4;
+        ret = VIDEO_OBJECT_DETECTION_SUBSCRIBER_ERROR_INVALID_CONFIG;
+        goto fail;
     }
 
 
 
-    if (video_object_detection_subscriber_create(&subscriber, NULL, channel) != 0) {
-        LOG_WARN("%s: Failed to create subscriber", __func__);
-        pthread_mutex_unlock(&vod_mutex);
-        return -5;
+    ret = video_object_detection_subscriber_create(&subscriber, NULL, channel);
+    if (ret != VIDEO_OBJECT_DETECTION_SUBSCRIBER_SUCCESS) {
+        LOG_WARN("%s: Failed to create subscriber on channel %d (error %d)\n", __func__, channel, ret);
+        if (ret == VIDEO_OBJECT_DETECTION_SUBSCRIBER_ERROR_VOD_DISABLED) {
+            LOG_WARN("%s: VOD service is disabled; check deep-learning processor allocation\n", __func__);
+        }
+        goto fail;
     }
 
 
-    if (video_object_detection_subscriber_set_get_detection_callback(subscriber, detection_callback) != 0) {
-        LOG_WARN("%s: Failed to set detection callback", __func__);
-        pthread_mutex_unlock(&vod_mutex);
-        return -6;
+    ret = video_object_detection_subscriber_set_get_detection_callback(subscriber, detection_callback);
+    if (ret != VIDEO_OBJECT_DETECTION_SUBSCRIBER_SUCCESS) {
+        LOG_WARN("%s: Failed to set detection callback (error %d)\n", __func__, ret);
+        goto fail;
     }
 
 
-    if (video_object_detection_subscriber_set_receive_empty_hits(subscriber, detection_callback) != 0) {
-        LOG_WARN("%s: Failed to set empty hits", __func__);
-        pthread_mutex_unlock(&vod_mutex);
-        return -7;
+    ret = video_object_detection_subscriber_set_receive_empty_hits(subscriber, true);
+    if (ret != VIDEO_OBJECT_DETECTION_SUBSCRIBER_SUCCESS) {
+        LOG_WARN("%s: Failed to set empty hits (error %d)\n", __func__, ret);
+        goto fail;
     }
 
 
     
-    if (video_object_detection_subscriber_subscribe(subscriber) != 0) {
-        LOG_WARN("%s: Failed to subscribe to detection service", __func__);
-        pthread_mutex_unlock(&vod_mutex);
-        return -8;
+    ret = video_object_detection_subscriber_subscribe(subscriber);
+    if (ret != VIDEO_OBJECT_DETECTION_SUBSCRIBER_SUCCESS) {
+        LOG_WARN("%s: Failed to subscribe to detection service (error %d)\n", __func__, ret);
+        goto fail;
     }
     
     // Initialize watchdog
@@ -755,6 +761,20 @@ int VOD_Init(int channel, vod_callback_t cb, void *user_data, int predictions) {
     LOG("Object detection successful on channel %d", channel);
     pthread_mutex_unlock(&vod_mutex);
     return 0;
+
+fail:
+    if (subscriber) {
+        video_object_detection_subscriber_delete(&subscriber);
+    }
+    if (g_ctx.det_classes) {
+        video_object_detection_subscriber_det_classes_free(g_ctx.det_classes, g_ctx.num_classes);
+    }
+    if (g_ctx.det_info) {
+        vod__detector_information__free_unpacked(g_ctx.det_info, NULL);
+    }
+    memset(&g_ctx, 0, sizeof(g_ctx));
+    pthread_mutex_unlock(&vod_mutex);
+    return ret;
 }
 
 

@@ -50,6 +50,8 @@
 /**< Internal error in subscriber library */
 #define VIDEO_OBJECT_DETECTION_SUBSCRIBER_ERROR_NO_POWER                (-8)
 /**< Not enough power available for Video Object Detection service */
+#define VIDEO_OBJECT_DETECTION_SUBSCRIBER_ERROR_VOD_DISABLED            (-9)
+/**< Video Object Detection service is disabled */
 
 #define VIDEO_OBJECT_DETECTION_SUBSCRIBER_DEFAULT_RECEIVE_EMPTY_HITS false
 /**< Default value for receive_empty_hits, @see video_object_detection_subscriber_set_receive_empty_hits() */
